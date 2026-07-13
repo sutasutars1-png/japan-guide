@@ -462,7 +462,23 @@
           "zh": "最佳季節：空氣最乾淨、幾乎天天看得到富士山，露天溫泉也最有氣氛。明信片級照片都出自12～2月。"
         }
       },
-      "photos": []
+      "photos": [
+        {
+          "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/View_of_Mount_Fuji_from_Lake_Ashi.jpg/3840px-View_of_Mount_Fuji_from_Lake_Ashi.jpg",
+          "credit": "Photo: Wikimedia Commons",
+          "file_page": "https://en.wikipedia.org/wiki/Hakone"
+        },
+        {
+          "url": "https://commons.wikimedia.org/wiki/Special:FilePath/161223_Owakudani_Station_Hakone_Japan03s3.jpg?width=1200",
+          "credit": "Photo: Wikimedia Commons — 161223 Owakudani Station Hakone Japan03s3.jpg",
+          "file_page": "https://commons.wikimedia.org/wiki/File:161223_Owakudani_Station_Hakone_Japan03s3.jpg"
+        },
+        {
+          "url": "https://commons.wikimedia.org/wiki/Special:FilePath/Hakone%2C_hand-colored_print_1860-1900.jpg?width=1200",
+          "credit": "Photo: Wikimedia Commons — Hakone, hand-colored print 1860-1900.jpg",
+          "file_page": "https://commons.wikimedia.org/wiki/File:Hakone%2C_hand-colored_print_1860-1900.jpg"
+        }
+      ]
     },
     {
       "id": "hiroshima",
@@ -636,7 +652,13 @@
           "zh": "最金澤的季節：雪吊松樹覆上白雪、近江町市場熱騰騰的海鮮丼，寒鰤與松葉蟹正值巔峰。"
         }
       },
-      "photos": []
+      "photos": [
+        {
+          "url": "https://commons.wikimedia.org/wiki/Special:FilePath/2002_kenrokuen_hanami_0029.jpg?width=1200",
+          "credit": "Photo: Wikimedia Commons — 2002 kenrokuen hanami 0029.jpg",
+          "file_page": "https://commons.wikimedia.org/wiki/File:2002_kenrokuen_hanami_0029.jpg"
+        }
+      ]
     },
     {
       "id": "sapporo-hokkaido",
