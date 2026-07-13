@@ -1,0 +1,112 @@
+{
+  "guides": [
+    {
+      "id": "7-day-japan-itinerary",
+      "emoji": "🗾",
+      "title": {
+        "en": "The Perfect 7-Day Japan Itinerary for First-Timers",
+        "ko": "일본 첫 여행을 위한 완벽한 7일 일정",
+        "zh": "日本初訪者的完美7天行程"
+      },
+      "description": {
+        "en": "Tokyo, Hakone, Kyoto, Nara and Osaka in one smooth week — the classic Golden Route, with exact train moves and where to sleep each night.",
+        "ko": "도쿄·하코네·교토·나라·오사카를 일주일에 — 정석 골든루트와 매일의 이동·숙박 가이드.",
+        "zh": "一週玩遍東京、箱根、京都、奈良、大阪——經典黃金路線，含每日交通與住宿建議。"
+      },
+      "sections": [
+        {
+          "h": {"en": "Days 1–3: Tokyo", "ko": "1–3일차: 도쿄", "zh": "第1–3天：東京"},
+          "body": {
+            "en": ["Land, get an IC card (Suica/Pasmo on your phone works for foreigners) and base yourself near the Yamanote Line — Shinjuku, Shibuya or Ueno all work. Day 1: recover with an easy evening in Shibuya and dinner at a department-store food hall. Day 2: Asakusa's Senso-ji in the morning, Ueno Park, then Akihabara or teamLab (book ahead). Day 3: Meiji Shrine, Harajuku, Shibuya Sky at sunset, and a night out in Shinjuku's Omoide Yokocho alleys."],
+            "ko": ["도착 후 IC카드(외국인도 아이폰 Suica 사용 가능)를 만들고 야마노테선 근처(신주쿠·시부야·우에노)에 숙소를 잡으세요. 1일차는 시부야 저녁 산책으로 가볍게, 2일차는 아사쿠사 센소지→우에노→아키하바라 또는 팀랩(예약 필수), 3일차는 메이지 신궁→하라주쿠→해질녘 시부야 스카이→신주쿠 오모이데요코초로 마무리."],
+            "zh": ["抵達後先辦IC卡（外國人也能在手機上用Suica），住在山手線沿線——新宿、澀谷或上野都好。第1天在澀谷輕鬆晚餐調時差；第2天早上淺草寺、上野公園，下午秋葉原或teamLab（需預約）；第3天明治神宮、原宿、黃昏上Shibuya Sky，晚上到新宿回憶橫丁小酌。"]
+          }
+        },
+        {
+          "h": {"en": "Day 4: Hakone onsen night", "ko": "4일차: 하코네 온천 1박", "zh": "第4天：箱根溫泉一夜"},
+          "body": {
+            "en": ["Send your big luggage ahead to Kyoto with takkyubin (ask your hotel; ~¥2,500 per bag) and travel light. Take the Odakyu Romancecar from Shinjuku, do the Hakone loop — railway, ropeway over Owakudani, pirate ship across Lake Ashi — and check into an onsen ryokan for a kaiseki dinner. This is the night most travelers remember longest."],
+            "ko": ["큰 짐은 탓큐빈(호텔 프런트에서 접수, 가방당 약 2,500엔)으로 교토에 먼저 보내고 가볍게 이동하세요. 신주쿠에서 로망스카를 타고 하코네 순환 코스(등산열차→오와쿠다니 로프웨이→아시노코 해적선)를 즐긴 뒤, 온천 료칸에 체크인해 가이세키 저녁을. 대부분의 여행자가 가장 오래 기억하는 하룻밤입니다."],
+            "zh": ["大行李用宅急便寄到京都（請飯店櫃台代辦，每件約¥2,500），輕裝上路。從新宿搭浪漫特快進箱根，玩環狀路線——登山電車、大涌谷纜車、蘆之湖海賊船——傍晚入住溫泉旅館享用懷石晚餐。這一晚，通常是旅人記得最久的一晚。"]
+          }
+        },
+        {
+          "h": {"en": "Days 5–6: Kyoto (+ half-day Nara)", "ko": "5–6일차: 교토 (+나라 반나절)", "zh": "第5–6天：京都（＋奈良半日）"},
+          "body": {
+            "en": ["Shinkansen from Odawara to Kyoto (~2h). Day 5: Fushimi Inari as early as you can wake, Kiyomizu-dera, then Gion at dusk. Day 6 morning: Kintetsu train to Nara (35 min) for the Great Buddha and bowing deer; return for Arashiyama's bamboo grove in the late afternoon, when tour groups thin out."],
+            "ko": ["오다와라에서 신칸센으로 교토까지 약 2시간. 5일차는 최대한 이른 아침의 후시미 이나리→기요미즈데라→해질녘 기온. 6일차 오전은 긴테츠로 35분 거리 나라(대불과 사슴), 오후 늦게 인파가 빠진 아라시야마 대나무숲으로."],
+            "zh": ["從小田原搭新幹線到京都約2小時。第5天：盡量早起去伏見稻荷，接著清水寺，黃昏逛祇園。第6天上午搭近鐵35分鐘到奈良看大佛和鞠躬鹿，傍晚回京都，趁旅行團散去時走嵐山竹林。"]
+          }
+        },
+        {
+          "h": {"en": "Day 7: Osaka", "ko": "7일차: 오사카", "zh": "第7天：大阪"},
+          "body": {
+            "en": ["Thirty minutes by train from Kyoto. Spend your last day eating: Kuromon Market for lunch, Osaka Castle in the afternoon, Dotonbori's neon for a takoyaki-and-kushikatsu dinner. Fly out of Kansai Airport (KIX), 40 minutes from Namba — flying into Tokyo and out of Osaka saves a half day of backtracking."],
+            "ko": ["교토에서 전철 30분. 마지막 날은 먹는 날입니다: 구로몬 시장 점심→오사카성→도톤보리에서 타코야키·쿠시카츠 저녁. 난바에서 40분인 간사이공항(KIX)으로 출국하세요. 도쿄 IN·오사카 OUT이면 반나절을 아낍니다."],
+            "zh": ["從京都搭車30分鐘。最後一天就是吃：黑門市場午餐、下午大阪城、晚上道頓堀吃章魚燒和串炸。從難波40分鐘可達的關西機場（KIX）出境——東京進、大阪出，能省下半天回頭路。"]
+          }
+        }
+      ],
+      "faq": [
+        {
+          "q": {"en": "Do I need a JR Pass for this itinerary?", "ko": "이 일정에 JR패스가 필요한가요?", "zh": "這個行程需要JR Pass嗎？"},
+          "a": {"en": "Usually no. After the 2023 price increase, individual tickets (Tokyo→Kyoto→Osaka one-way) are cheaper than a 7-day pass for this route. Buy Shinkansen tickets individually or via SmartEX.", "ko": "대부분 불필요합니다. 2023년 가격 인상 이후 이 경로는 편도 개별 티켓이 7일권보다 저렴합니다. 신칸센은 개별 구매 또는 SmartEX 앱을 이용하세요.", "zh": "通常不需要。2023年漲價後，此路線單程分開買票比7日券便宜。新幹線可單獨購票或用SmartEX App。"}
+        },
+        {
+          "q": {"en": "How much cash should I carry?", "ko": "현금은 얼마나 챙겨야 하나요?", "zh": "該帶多少現金？"},
+          "a": {"en": "Cards and IC payments now work almost everywhere in cities, but keep ¥10,000–20,000 for shrines, small ramen shops and rural buses. 7-Eleven ATMs accept foreign cards.", "ko": "도시에선 카드·IC 결제가 거의 다 되지만, 신사·작은 라멘집·시골 버스용으로 1–2만엔은 현금으로. 세븐일레븐 ATM에서 해외카드 출금 가능합니다.", "zh": "城市裡刷卡和IC支付幾乎通行，但神社、小拉麵店和鄉下巴士請備1–2萬日圓現金。7-Eleven的ATM可用海外卡提款。"}
+        }
+      ]
+    },
+    {
+      "id": "getting-around-japan",
+      "emoji": "🚄",
+      "title": {
+        "en": "Getting Around Japan: Trains, IC Cards & When a JR Pass Is Worth It",
+        "ko": "일본 교통 완전정복: 전철·IC카드·JR패스가 이득인 경우",
+        "zh": "日本交通全攻略：電車、IC卡與JR Pass划算時機"
+      },
+      "description": {
+        "en": "The 10-minute guide to Japanese trains: Suica on your phone, booking Shinkansen seats, luggage rules, and the honest math on rail passes.",
+        "ko": "10분 만에 끝내는 일본 교통: 폰 속 Suica, 신칸센 좌석 예약, 수하물 규정, 그리고 솔직한 JR패스 계산법.",
+        "zh": "10分鐘搞懂日本電車：手機Suica、新幹線訂位、行李規定，以及JR Pass的誠實算法。"
+      },
+      "sections": [
+        {
+          "h": {"en": "Step 1: put Suica on your phone", "ko": "1단계: 폰에 Suica 넣기", "zh": "第一步：把Suica裝進手機"},
+          "body": {
+            "en": ["Before you land, add a Suica or Pasmo card to Apple Wallet (iPhone) — it takes two minutes, needs no Japanese app, and tops up from your credit card. Tap in and out of every subway, JR line, bus and convenience store nationwide. Android users with non-Japanese phones should buy a physical Welcome Suica at the airport instead."],
+            "ko": ["출발 전 아이폰 Apple Wallet에 Suica를 추가하세요. 2분이면 되고 일본 앱도 필요 없으며 신용카드로 충전됩니다. 전국의 지하철·JR·버스·편의점에서 터치 한 번으로 결제됩니다. 해외판 안드로이드는 공항에서 실물 Welcome Suica를 구매하세요."],
+            "zh": ["出發前先在iPhone的Apple Wallet加入Suica——兩分鐘搞定，不需日本App，可用信用卡儲值。全國地鐵、JR、巴士、便利商店都能一嗶通行。海外版Android手機請改在機場買實體Welcome Suica。"]
+          }
+        },
+        {
+          "h": {"en": "The honest JR Pass math", "ko": "솔직한 JR패스 계산법", "zh": "JR Pass的誠實算法"},
+          "body": {
+            "en": ["The nationwide 7-day pass costs about the same as Tokyo→Kyoto→Hiroshima→Tokyo. Rule of thumb: one-way Golden Route trips (Tokyo in, Osaka out) — skip the pass. Round trips that include Hiroshima or Kanazawa, or fast-paced multi-city loops — the pass wins. Regional passes (JR West Kansai, JR East Tohoku) are often the smarter buy."],
+            "ko": ["전국 7일권 가격은 대략 '도쿄→교토→히로시마→도쿄' 왕복과 비슷합니다. 요령: 도쿄 IN·오사카 OUT 같은 편도 골든루트는 패스 불필요. 히로시마·가나자와를 포함한 왕복이나 여러 도시 순환이면 패스가 이득. JR서일본 간사이패스 등 지역 패스가 더 현명한 선택인 경우도 많습니다."],
+            "zh": ["全國7日券的價格約等於「東京→京都→廣島→東京」來回。原則：東京進、大阪出的單向黃金路線——不用買；包含廣島或金澤的來回、或快節奏多城市環遊——買了划算。JR西日本關西券等地區型周遊券往往是更聰明的選擇。"]
+          }
+        },
+        {
+          "h": {"en": "Shinkansen seats & luggage", "ko": "신칸센 좌석과 수하물", "zh": "新幹線座位與行李"},
+          "body": {
+            "en": ["Non-reserved cars are fine outside holidays; book reserved seats for Golden Week, Obon and New Year. Bags over 160cm total dimensions on the Tokaido line require a (free) oversized-luggage seat reservation. Better strategy: ship suitcases between hotels with takkyubin and ride with a daypack."],
+            "ko": ["연휴가 아니면 자유석으로 충분하고, 골든위크·오봉·연말연시는 지정석 예약을. 도카이도 신칸센에서 삼변 합 160cm 초과 짐은 특대형 수하물석(무료) 예약이 필수입니다. 가장 좋은 전략은 탓큐빈으로 캐리어를 다음 호텔로 보내고 백팩만 들고 타는 것."],
+            "zh": ["非連假期間自由席就夠用；黃金週、盂蘭盆節和新年請訂指定席。東海道新幹線上三邊合計超過160cm的行李，必須預約（免費的）特大行李座位。最佳策略：用宅急便把行李箱寄到下一間飯店，輕裝搭車。"]
+          }
+        }
+      ],
+      "faq": [
+        {
+          "q": {"en": "Can I use Google Maps for trains in Japan?", "ko": "일본에서 구글맵으로 전철을 이용할 수 있나요?", "zh": "在日本可以用Google Maps查電車嗎？"},
+          "a": {"en": "Yes — train routing in Google Maps is excellent in Japan, including platform numbers and fares. Locals also use the Japan Transit Planner (Jorudan) and NAVITIME apps.", "ko": "네, 일본의 구글맵 전철 안내는 플랫폼 번호와 요금까지 매우 정확합니다. 현지인은 Jorudan·NAVITIME 앱도 함께 씁니다.", "zh": "可以——Google Maps在日本的電車導航非常精準，連月台號碼和票價都有。在地人也常用Jorudan和NAVITIME。"}
+        },
+        {
+          "q": {"en": "Do trains really stop at midnight?", "ko": "전철이 정말 자정에 끊기나요?", "zh": "電車真的午夜就停駛嗎？"},
+          "a": {"en": "Mostly yes — last trains leave city centers around 00:00–00:30 and restart near 5:00. Miss it and your options are a taxi, a capsule hotel, or karaoke until dawn.", "ko": "대체로 그렇습니다. 막차는 0시~0시 30분경, 첫차는 5시경입니다. 놓치면 택시, 캡슐호텔, 아니면 새벽까지 노래방입니다.", "zh": "大致上是——末班車約在00:00–00:30發車，清晨5點左右恢復。錯過的話，選項是計程車、膠囊旅館，或唱KTV到天亮。"}
+        }
+      ]
+    }
+  ]
+}

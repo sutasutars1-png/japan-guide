@@ -1,0 +1,21 @@
+# TABIJI
+
+> Japan travel guides written for real trips
+
+Independent multilingual (EN/KO/ZH-Hant) travel guides for visitors to Japan.
+
+## Destinations
+- [Tokyo](https://YOUR-USERNAME.github.io/YOUR-REPO/destinations/tokyo.html): Neon canyons, quiet shrines and the best food city on Earth
+- [Kyoto](https://YOUR-USERNAME.github.io/YOUR-REPO/destinations/kyoto.html): A thousand years of temples, tea houses and lantern-lit lanes
+- [Osaka](https://YOUR-USERNAME.github.io/YOUR-REPO/destinations/osaka.html): Japan's kitchen — loud, friendly and outrageously delicious
+- [Nara](https://YOUR-USERNAME.github.io/YOUR-REPO/destinations/nara.html): Bowing deer, a giant Buddha, and Japan's first capital
+- [Hakone & Mt. Fuji](https://YOUR-USERNAME.github.io/YOUR-REPO/destinations/hakone-fuji.html): Hot springs, ropeways and the perfect Fuji view
+- [Hiroshima & Miyajima](https://YOUR-USERNAME.github.io/YOUR-REPO/destinations/hiroshima.html): A moving peace memorial and a floating torii gate
+- [Kanazawa](https://YOUR-USERNAME.github.io/YOUR-REPO/destinations/kanazawa.html): Kyoto's beauty without Kyoto's crowds
+- [Sapporo & Hokkaido](https://YOUR-USERNAME.github.io/YOUR-REPO/destinations/sapporo-hokkaido.html): Powder snow, miso ramen and wide-open wilderness
+- [Fukuoka](https://YOUR-USERNAME.github.io/YOUR-REPO/destinations/fukuoka.html): Yatai street stalls, tonkotsu ramen and easygoing Kyushu charm
+- [Okinawa](https://YOUR-USERNAME.github.io/YOUR-REPO/destinations/okinawa.html): Coral seas, island time and a culture all its own
+
+## Guides
+- [The Perfect 7-Day Japan Itinerary for First-Timers](https://YOUR-USERNAME.github.io/YOUR-REPO/guides/7-day-japan-itinerary.html): Tokyo, Hakone, Kyoto, Nara and Osaka in one smooth week — the classic Golden Route, with exact train moves and where to sleep each night.
+- [Getting Around Japan: Trains, IC Cards & When a JR Pass Is Worth It](https://YOUR-USERNAME.github.io/YOUR-REPO/guides/getting-around-japan.html): The 10-minute guide to Japanese trains: Suica on your phone, booking Shinkansen seats, luggage rules, and the honest math on rail passes.

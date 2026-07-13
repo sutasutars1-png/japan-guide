@@ -1,0 +1,922 @@
+{
+  "destinations": [
+    {
+      "id": "tokyo",
+      "kanji": "東",
+      "region": "Kanto",
+      "lat": 35.6812,
+      "lon": 139.7671,
+      "name": {
+        "en": "Tokyo",
+        "ko": "도쿄",
+        "zh": "東京"
+      },
+      "tagline": {
+        "en": "Neon canyons, quiet shrines and the best food city on Earth",
+        "ko": "네온 빌딩숲과 고요한 신사, 세계 최고의 미식 도시",
+        "zh": "霓虹峽谷、寧靜神社，以及地表最強美食之都"
+      },
+      "best_season": {
+        "en": "Mar–May, Oct–Nov",
+        "ko": "3–5월, 10–11월",
+        "zh": "3–5月、10–11月"
+      },
+      "intro": {
+        "en": "Tokyo is less a single city than a constellation of villages stitched together by the world's most punctual trains. In one afternoon you can watch the crossing at Shibuya, drink hand-poured coffee in a backstreet kissaten, and stand in near silence at Meiji Shrine's forested grounds. The city rewards walkers: neighborhoods like Yanaka, Shimokitazawa and Kagurazaka feel decades and worlds apart from the skyscrapers of Shinjuku.\n\nFood is the real headline. Tokyo has more Michelin stars than any city on the planet, but its genius lives in ¥1,000 bowls of ramen, standing sushi bars, and department-store food halls. Base yourself near the Yamanote Line loop and the whole city opens up.",
+        "ko": "도쿄는 하나의 도시라기보다, 세계에서 가장 정확한 전철로 연결된 수많은 '동네'들의 집합입니다. 시부야 스크램블 교차로, 골목 킷사텐의 핸드드립 커피, 메이지 신궁의 숲속 정적을 하루에 모두 경험할 수 있습니다. 미슐랭 스타 수는 세계 1위지만, 진짜 매력은 1,000엔짜리 라멘과 서서 먹는 스시, 백화점 지하 식품관에 있습니다. 야마노테선 근처에 숙소를 잡으면 도시 전체가 가까워집니다.",
+        "zh": "東京與其說是一座城市，不如說是由全球最準時的電車串起的無數個「小鎮」。一個下午就能看澀谷十字路口的人潮、在巷弄喫茶店喝手沖咖啡、再走進明治神宮的森林感受寂靜。米其林星星數世界第一，但真正的精髓藏在千円拉麵、立食壽司與百貨地下美食街。住在山手線沿線，整座城市都觸手可及。"
+      },
+      "highlights": [
+        {
+          "en": "Shibuya Crossing & Shibuya Sky observation deck",
+          "ko": "시부야 스크램블 교차로 & 시부야 스카이 전망대",
+          "zh": "澀谷十字路口與 Shibuya Sky 展望台"
+        },
+        {
+          "en": "Senso-ji Temple and old-town Asakusa",
+          "ko": "센소지와 옛 정취의 아사쿠사",
+          "zh": "淺草寺與老街風情的淺草"
+        },
+        {
+          "en": "Meiji Shrine's forest and Harajuku's Takeshita Street",
+          "ko": "메이지 신궁의 숲과 하라주쿠 다케시타 거리",
+          "zh": "明治神宮森林與原宿竹下通"
+        },
+        {
+          "en": "Tsukiji Outer Market breakfast crawl",
+          "ko": "쓰키지 장외시장 아침 미식 투어",
+          "zh": "築地場外市場的早餐巡禮"
+        },
+        {
+          "en": "Day trip to teamLab Planets or Ghibli Museum (book ahead)",
+          "ko": "팀랩 플래닛·지브리 미술관 (사전 예약 필수)",
+          "zh": "teamLab Planets 或吉卜力美術館（需提前預約）"
+        }
+      ],
+      "access": {
+        "en": "From Narita Airport: Skyliner or Narita Express, ~40–60 min. From Haneda: monorail or Keikyu line, ~20–30 min to central Tokyo.",
+        "ko": "나리타공항에서 스카이라이너/나리타 익스프레스로 40–60분, 하네다공항에서 모노레일/게이큐선으로 도심까지 20–30분.",
+        "zh": "成田機場搭 Skyliner 或 N'EX 約40–60分鐘；羽田機場搭單軌電車或京急線約20–30分鐘到市中心。"
+      },
+      "image": null,
+      "image_credit": null,
+      "seasons": {
+        "spring": {
+          "en": "Cherry blossoms turn Ueno Park, Meguro River and Chidorigafuchi into pink tunnels late March–early April; picnic (hanami) under the trees like locals.",
+          "ko": "3월 말~4월 초 우에노 공원·메구로강·치도리가후치가 벚꽃 터널로 변합니다. 현지인처럼 나무 아래에서 하나미 피크닉을 즐겨보세요.",
+          "zh": "3月底至4月初，上野公園、目黑川與千鳥淵化身粉紅隧道。學當地人在樹下野餐賞花（花見）吧。"
+        },
+        "summer": {
+          "en": "Hot and humid, but festival season: Sumida River fireworks in July, rooftop beer gardens, and day trips to breezy Enoshima or Okutama.",
+          "ko": "덥고 습하지만 축제의 계절. 7월 스미다강 불꽃놀이, 옥상 비어가든, 에노시마·오쿠타마 당일치기가 제철입니다.",
+          "zh": "炎熱潮濕卻是祭典旺季：7月隅田川花火大會、頂樓啤酒花園，或到江之島、奧多摩避暑一日遊。"
+        },
+        "autumn": {
+          "en": "Late November ginkgo avenues glow gold at Meiji Jingu Gaien and Icho Namiki; crisp skies make it the best season for Shibuya Sky views.",
+          "ko": "11월 하순 메이지진구 가이엔의 은행나무길이 황금빛으로 물듭니다. 맑은 하늘 덕에 시부야 스카이 전망도 최고의 계절.",
+          "zh": "11月下旬明治神宮外苑銀杏大道染成金黃；秋高氣爽，是上Shibuya Sky看夜景的最佳季節。"
+        },
+        "winter": {
+          "en": "Dry, sunny and crowd-light. Illuminations at Marunouchi and Yebisu Garden Place, New Year shrine visits, and the year's clearest Mt. Fuji views from observation decks.",
+          "ko": "건조하고 맑으며 인파가 적은 계절. 마루노우치 일루미네이션, 새해 신사 참배, 전망대에서 가장 선명한 후지산을 볼 수 있습니다.",
+          "zh": "乾燥晴朗、遊客較少。丸之內燈飾、新年參拜，還能從展望台看到全年最清晰的富士山。"
+        }
+      },
+      "photos": [
+        {
+          "url": "https://upload.wikimedia.org/wikipedia/commons/b/b2/Skyscrapers_of_Shinjuku_2009_January.jpg",
+          "credit": "Photo: Wikimedia Commons",
+          "file_page": "https://en.wikipedia.org/wiki/Tokyo"
+        },
+        {
+          "url": "https://commons.wikimedia.org/wiki/Special:FilePath/024_Seimon_Ishibashi_2.jpg?width=1200",
+          "credit": "Photo: Wikimedia Commons — 024 Seimon Ishibashi 2.jpg",
+          "file_page": "https://commons.wikimedia.org/wiki/File:024_Seimon_Ishibashi_2.jpg"
+        },
+        {
+          "url": "https://commons.wikimedia.org/wiki/Special:FilePath/2018_National_Art_Center%2C_Tokyo_2.jpg?width=1200",
+          "credit": "Photo: Wikimedia Commons — 2018 National Art Center, Tokyo 2.jpg",
+          "file_page": "https://commons.wikimedia.org/wiki/File:2018_National_Art_Center%2C_Tokyo_2.jpg"
+        }
+      ]
+    },
+    {
+      "id": "kyoto",
+      "kanji": "京",
+      "region": "Kansai",
+      "lat": 35.0116,
+      "lon": 135.7681,
+      "name": {
+        "en": "Kyoto",
+        "ko": "교토",
+        "zh": "京都"
+      },
+      "tagline": {
+        "en": "A thousand years of temples, tea houses and lantern-lit lanes",
+        "ko": "천 년의 사찰과 찻집, 등불 골목의 도시",
+        "zh": "千年古寺、茶屋與燈籠小徑之城"
+      },
+      "best_season": {
+        "en": "Mar–Apr (sakura), Nov (autumn leaves)",
+        "ko": "3–4월 벚꽃, 11월 단풍",
+        "zh": "3–4月櫻花、11月紅葉"
+      },
+      "intro": {
+        "en": "Japan's imperial capital for over a millennium, Kyoto holds seventeen UNESCO World Heritage sites and roughly two thousand temples and shrines. The famous ones — Fushimi Inari's vermilion gates, Kinkaku-ji's golden pavilion, the bamboo grove of Arashiyama — earn their crowds, but Kyoto's magic is strongest at 7 a.m., before the tour buses arrive, or in lesser-known temples where you may sit alone with a garden.\n\nStay one night in a machiya townhouse or ryokan, eat a kaiseki dinner or a humble obanzai set, and walk the Gion district at dusk when lanterns come on. Rent a bicycle: the city is flat and compact.",
+        "ko": "천 년 넘게 일본의 수도였던 교토에는 유네스코 세계유산 17곳과 약 2천 개의 사찰·신사가 있습니다. 후시미 이나리의 붉은 도리이, 금각사, 아라시야마 대나무숲도 좋지만, 진짜 교토는 관광버스가 오기 전 아침 7시, 혹은 정원을 홀로 마주하는 작은 사찰에 있습니다. 마치야 고민가나 료칸에서 하룻밤, 해질녘 기온 거리 산책을 추천합니다. 도시가 평탄해서 자전거 여행도 최고입니다.",
+        "zh": "作為日本千年古都，京都擁有17處世界遺產與約兩千座寺社。伏見稻荷的千本鳥居、金閣寺、嵐山竹林固然名不虛傳，但京都真正的魔力在清晨7點遊覽車尚未抵達之前，或在能獨自面對庭園的小寺院裡。建議在町家或旅館住一晚，黃昏時分漫步祇園燈籠亮起的街道。市區平坦，租台腳踏車最舒服。"
+      },
+      "highlights": [
+        {
+          "en": "Fushimi Inari Shrine at sunrise (free, open 24h)",
+          "ko": "새벽의 후시미 이나리 신사 (무료, 24시간)",
+          "zh": "日出時分的伏見稻荷大社（免費、24小時開放）"
+        },
+        {
+          "en": "Kinkaku-ji (Golden Pavilion) and Ryoan-ji rock garden",
+          "ko": "금각사와 료안지 돌정원",
+          "zh": "金閣寺與龍安寺石庭"
+        },
+        {
+          "en": "Arashiyama bamboo grove + Tenryu-ji temple",
+          "ko": "아라시야마 대나무숲 + 텐류지",
+          "zh": "嵐山竹林與天龍寺"
+        },
+        {
+          "en": "Gion at dusk and the Philosopher's Path",
+          "ko": "해질녘 기온과 철학의 길",
+          "zh": "黃昏的祇園與哲學之道"
+        },
+        {
+          "en": "Nishiki Market food street",
+          "ko": "니시키 시장 먹거리 골목",
+          "zh": "錦市場美食街"
+        }
+      ],
+      "access": {
+        "en": "From Tokyo: Tokaido Shinkansen, ~2h15m. From Kansai Airport: JR Haruka express, ~75 min.",
+        "ko": "도쿄에서 신칸센 약 2시간 15분, 간사이공항에서 JR 하루카 특급 약 75분.",
+        "zh": "從東京搭新幹線約2小時15分；從關西機場搭 JR Haruka 特急約75分鐘。"
+      },
+      "image": null,
+      "image_credit": null,
+      "seasons": {
+        "spring": {
+          "en": "Sakura along the Philosopher's Path and Maruyama Park's weeping cherry are iconic — book lodging months ahead and start sightseeing by 7 a.m.",
+          "ko": "철학의 길과 마루야마 공원의 수양벚나무가 절정. 숙소는 몇 달 전 예약, 관광은 아침 7시 시작이 정답입니다.",
+          "zh": "哲學之道的櫻花與圓山公園的垂枝櫻最經典——住宿請提前數月預訂，早上7點就開始遊覽。"
+        },
+        "summer": {
+          "en": "Humid, but July's month-long Gion Matsuri (grand processions July 17 & 24) and riverside kawadoko dining on the Kamo River make it worth sweating.",
+          "ko": "습하지만 7월 한 달간 이어지는 기온 마츠리(17·24일 대행렬)와 가모강 카와도코(강변 평상) 식사가 그 값을 합니다.",
+          "zh": "悶熱，但長達一個月的祇園祭（7月17、24日大遊行）與鴨川納涼床晚餐，讓流汗也值得。"
+        },
+        "autumn": {
+          "en": "Mid-to-late November is peak koyo: Tofuku-ji and Eikando maples are spectacular, and several temples open for evening illuminations.",
+          "ko": "11월 중하순이 단풍 절정. 도후쿠지·에이칸도의 단풍이 압권이며, 여러 사찰이 야간 라이트업을 엽니다.",
+          "zh": "11月中下旬是紅葉高峰：東福寺與永觀堂的楓紅最壯觀，多間寺院還有夜間點燈。"
+        },
+        "winter": {
+          "en": "The secret season — Kinkaku-ji under fresh snow is a once-in-a-trip photo, temples are quiet, and yudofu (tofu hot pot) tastes best in the cold.",
+          "ko": "아는 사람만 아는 계절. 눈 덮인 금각사는 일생일대의 사진이 되고, 사찰은 고요하며, 추위 속 유도후(두부전골)가 제맛입니다.",
+          "zh": "行家才懂的季節——雪中金閣寺是一生一次的畫面，寺院清幽，寒冬裡的湯豆腐最對味。"
+        }
+      },
+      "photos": [
+        {
+          "url": "https://upload.wikimedia.org/wikipedia/commons/3/3c/Kiyomizu.jpg",
+          "credit": "Photo: Wikimedia Commons",
+          "file_page": "https://en.wikipedia.org/wiki/Kyoto"
+        },
+        {
+          "url": "https://commons.wikimedia.org/wiki/Special:FilePath/150124_Gion_Kyoto_Japan01s3.jpg?width=1200",
+          "credit": "Photo: Wikimedia Commons — 150124 Gion Kyoto Japan01s3.jpg",
+          "file_page": "https://commons.wikimedia.org/wiki/File:150124_Gion_Kyoto_Japan01s3.jpg"
+        },
+        {
+          "url": "https://commons.wikimedia.org/wiki/Special:FilePath/Aoi_Matsuri.jpg?width=1200",
+          "credit": "Photo: Wikimedia Commons — Aoi Matsuri.jpg",
+          "file_page": "https://commons.wikimedia.org/wiki/File:Aoi_Matsuri.jpg"
+        }
+      ]
+    },
+    {
+      "id": "osaka",
+      "kanji": "阪",
+      "region": "Kansai",
+      "lat": 34.6937,
+      "lon": 135.5023,
+      "name": {
+        "en": "Osaka",
+        "ko": "오사카",
+        "zh": "大阪"
+      },
+      "tagline": {
+        "en": "Japan's kitchen — loud, friendly and outrageously delicious",
+        "ko": "일본의 부엌 — 시끌벅적하고 다정하며 엄청나게 맛있는 도시",
+        "zh": "日本的廚房——熱鬧、親切、好吃到犯規"
+      },
+      "best_season": {
+        "en": "Mar–May, Sep–Nov",
+        "ko": "3–5월, 9–11월",
+        "zh": "3–5月、9–11月"
+      },
+      "intro": {
+        "en": "Osakans have a word — kuidaore — that means 'to eat yourself into ruin', and the city takes it seriously. Dotonbori's neon riverfront is the postcard, but the eating is best in Tenma's alley izakaya, Kuromon Market, and the takoyaki stands of Shinsekai. People here talk to strangers, haggle, and laugh loudly; after reserved Tokyo, Osaka feels like a warm bath.\n\nIt is also the most convenient base in Kansai: Kyoto, Nara and Kobe are each under 45 minutes away, and Universal Studios Japan (with Super Nintendo World) anchors the bay area.",
+        "ko": "오사카에는 '쿠이다오레(먹다가 망한다)'라는 말이 있을 만큼 먹는 것에 진심인 도시입니다. 도톤보리 네온 강변이 대표 이미지지만, 진짜 맛은 텐마의 골목 이자카야, 구로몬 시장, 신세카이 타코야키에 있습니다. 사람들이 먼저 말을 걸고 크게 웃는, 도쿄와는 전혀 다른 온기가 있습니다. 교토·나라·고베가 모두 45분 이내라 간사이 여행의 최적 거점이며, 슈퍼 닌텐도 월드가 있는 USJ도 이곳에 있습니다.",
+        "zh": "大阪有句話叫「食い倒れ」——吃到破產也甘願，這座城市是認真的。道頓堀霓虹河岸是明信片風景，但真正好吃的在天滿的巷弄居酒屋、黑門市場與新世界的章魚燒攤。大阪人熱情健談、笑聲豪爽，與內斂的東京截然不同。京都、奈良、神戶都在45分鐘內，還有超級任天堂世界所在的日本環球影城，是關西旅行的最佳據點。"
+      },
+      "highlights": [
+        {
+          "en": "Dotonbori neon river walk and the Glico sign",
+          "ko": "도톤보리 네온 강변과 글리코상",
+          "zh": "道頓堀霓虹河岸與固力果跑跑人"
+        },
+        {
+          "en": "Kuromon Ichiba Market street food",
+          "ko": "구로몬 시장 길거리 음식",
+          "zh": "黑門市場街頭小吃"
+        },
+        {
+          "en": "Osaka Castle and its park",
+          "ko": "오사카성과 공원",
+          "zh": "大阪城與城公園"
+        },
+        {
+          "en": "Universal Studios Japan & Super Nintendo World",
+          "ko": "유니버설 스튜디오 재팬 & 슈퍼 닌텐도 월드",
+          "zh": "日本環球影城與超級任天堂世界"
+        },
+        {
+          "en": "Retro Shinsekai district and Tsutenkaku Tower",
+          "ko": "레트로한 신세카이와 츠텐카쿠",
+          "zh": "懷舊新世界與通天閣"
+        }
+      ],
+      "access": {
+        "en": "From Kansai Airport: Nankai Rapi:t or JR, ~40–50 min. From Tokyo: Shinkansen to Shin-Osaka, ~2h30m.",
+        "ko": "간사이공항에서 난카이 라피트/JR로 40–50분, 도쿄에서 신칸센으로 약 2시간 30분.",
+        "zh": "關西機場搭南海 Rapi:t 或 JR 約40–50分鐘；東京搭新幹線至新大阪約2.5小時。"
+      },
+      "image": null,
+      "image_credit": null,
+      "seasons": {
+        "spring": {
+          "en": "Osaka Castle Park's 3,000 cherry trees and the Kema Sakuranomiya riverside are prime hanami; the Mint Bureau opens its rare late-blooming avenue in mid-April.",
+          "ko": "오사카성 공원의 벚나무 3천 그루와 케마 사쿠라노미야 강변이 하나미 명소. 4월 중순엔 조폐국의 늦벚꽃 길이 특별 개방됩니다.",
+          "zh": "大阪城公園三千株櫻花與毛馬櫻之宮河畔是賞櫻首選；4月中旬造幣局的晚開櫻花通道限期開放。"
+        },
+        "summer": {
+          "en": "Tenjin Matsuri (July 24–25), one of Japan's three great festivals, ends with a river procession and fireworks; beat the heat in USJ's night sessions.",
+          "ko": "일본 3대 축제인 텐진 마츠리(7/24–25)가 배 행렬과 불꽃놀이로 절정을 이룹니다. 더위는 USJ 야간 입장으로 피하세요.",
+          "zh": "日本三大祭之一的天神祭（7/24–25）以船渡御與花火收尾；怕熱就選環球影城的夜場。"
+        },
+        "autumn": {
+          "en": "Comfortable eating weather — Minoo Park's waterfall maples are a 30-minute train ride, with fried maple-leaf tempura as the local snack.",
+          "ko": "먹기 좋은 날씨의 계절. 전철 30분 거리 미노오 공원의 폭포 단풍과 명물 '단풍잎 튀김'을 놓치지 마세요.",
+          "zh": "最適合大吃的天氣——搭車30分鐘到箕面公園看瀑布楓紅，再嚐名物炸楓葉。"
+        },
+        "winter": {
+          "en": "Kushikatsu and kitsune udon weather. The Festival of the Lights turns Midosuji Boulevard into a 4-km illumination, and crowds at USJ hit their yearly low.",
+          "ko": "쿠시카츠와 우동이 맛있어지는 계절. 미도스지 대로 4km가 일루미네이션으로 빛나고, USJ는 연중 가장 한산합니다.",
+          "zh": "最適合吃串炸和烏龍麵的季節。御堂筋4公里燈海點亮整條大道，環球影城人潮全年最少。"
+        }
+      },
+      "photos": [
+        {
+          "url": "https://commons.wikimedia.org/wiki/Special:FilePath/Aerial_photo_of_Umeda_14-Aug-2019.jpg?width=1200",
+          "credit": "Photo: Wikimedia Commons — Aerial photo of Umeda 14-Aug-2019.jpg",
+          "file_page": "https://commons.wikimedia.org/wiki/File:Aerial_photo_of_Umeda_14-Aug-2019.jpg"
+        }
+      ]
+    },
+    {
+      "id": "nara",
+      "kanji": "鹿",
+      "region": "Kansai",
+      "lat": 34.6851,
+      "lon": 135.8048,
+      "name": {
+        "en": "Nara",
+        "ko": "나라",
+        "zh": "奈良"
+      },
+      "tagline": {
+        "en": "Bowing deer, a giant Buddha, and Japan's first capital",
+        "ko": "인사하는 사슴과 대불, 일본 최초의 수도",
+        "zh": "會鞠躬的鹿、巨大佛像與日本第一個首都"
+      },
+      "best_season": {
+        "en": "Mar–May, Oct–Nov",
+        "ko": "3–5월, 10–11월",
+        "zh": "3–5月、10–11月"
+      },
+      "intro": {
+        "en": "Before Kyoto, there was Nara — Japan's capital in the 8th century and home to some of its oldest and largest wooden buildings. Todai-ji's Great Buddha Hall houses a 15-meter bronze Buddha that still stops first-time visitors mid-step. Around it, 1,200 wild sika deer roam Nara Park and famously bow for shika senbei crackers.\n\nMost people do Nara as a half-day trip from Kyoto or Osaka, but staying until evening — when the deer settle and lanterns light Kasuga Taisha's stone paths — is one of Kansai's best-kept secrets.",
+        "ko": "교토 이전, 8세기 일본의 수도였던 나라에는 일본에서 가장 오래되고 큰 목조 건축들이 남아 있습니다. 도다이지의 15m 청동 대불은 처음 보는 사람의 발걸음을 멈추게 하고, 나라 공원에는 사슴 과자에 고개 숙여 인사하는 야생 사슴 1,200여 마리가 삽니다. 대부분 교토·오사카에서 반나절 여행으로 오지만, 사슴이 잠들고 가스가타이샤 석등에 불이 켜지는 저녁까지 머무는 것이 간사이 최고의 숨은 팁입니다.",
+        "zh": "在京都之前，奈良是8世紀日本的首都，保存著日本最古老、最大的木造建築群。東大寺大佛殿內15公尺高的青銅大佛，至今仍讓初訪者驚嘆駐足。奈良公園裡有約1,200頭野生梅花鹿，會為了鹿仙貝向你鞠躬。多數人從京都或大阪安排半日遊，但留到傍晚——鹿群安靜下來、春日大社石燈籠亮起時——才是關西最美的隱藏版風景。"
+      },
+      "highlights": [
+        {
+          "en": "Todai-ji Temple and the Great Buddha",
+          "ko": "도다이지와 대불",
+          "zh": "東大寺與奈良大佛"
+        },
+        {
+          "en": "Feeding (and bowing with) deer in Nara Park",
+          "ko": "나라 공원에서 사슴에게 먹이 주기",
+          "zh": "在奈良公園餵鹿、看鹿鞠躬"
+        },
+        {
+          "en": "Kasuga Taisha's 3,000 lanterns",
+          "ko": "가스가타이샤의 석등 3,000개",
+          "zh": "春日大社的三千座燈籠"
+        },
+        {
+          "en": "Naramachi old merchant quarter",
+          "ko": "옛 상인 거리 나라마치",
+          "zh": "奈良町老商家街區"
+        },
+        {
+          "en": "Mochi-pounding show at Nakatanidou",
+          "ko": "나카타니도 떡메치기 공연",
+          "zh": "中谷堂高速搗麻糬表演"
+        }
+      ],
+      "access": {
+        "en": "From Kyoto: Kintetsu express, ~35 min. From Osaka-Namba: Kintetsu, ~40 min.",
+        "ko": "교토에서 긴테츠 특급 약 35분, 오사카 난바에서 긴테츠 약 40분.",
+        "zh": "京都搭近鐵特急約35分鐘；大阪難波搭近鐵約40分鐘。"
+      },
+      "image": null,
+      "image_credit": null,
+      "seasons": {
+        "spring": {
+          "en": "Deer graze under blossoms in Nara Park, and Mt. Yoshino — Japan's most famous sakura mountain with 30,000 trees — is a doable side trip.",
+          "ko": "나라 공원에선 벚꽃 아래 사슴이 노닐고, 벚나무 3만 그루의 일본 최고 벚꽃 명산 요시노산도 함께 다녀올 수 있습니다.",
+          "zh": "奈良公園裡鹿群在櫻花下漫步；擁有三萬株櫻花的日本第一賞櫻名山吉野山也能順道一遊。"
+        },
+        "summer": {
+          "en": "Early August's Nara Tokae fills the park with 20,000 candle lanterns at dusk — magical, and cooler than daytime sightseeing.",
+          "ko": "8월 초 '나라 토카에'에서는 해질녘 공원에 2만 개의 촛불 등롱이 켜집니다. 낮 관광보다 시원하고 환상적입니다.",
+          "zh": "8月上旬的「奈良燈花會」，兩萬盞燭燈在黃昏點亮公園——夢幻又比白天涼爽。"
+        },
+        "autumn": {
+          "en": "Deer 'calling' ceremonies resume, ginkgo carpets Todai-ji's lawns gold, and late November maples at Tanzan Shrine reward a short excursion.",
+          "ko": "사슴 나팔 부르기 행사가 재개되고, 도다이지 잔디밭은 은행잎으로 금빛이 됩니다. 11월 말 단잔 신사의 단풍도 훌륭합니다.",
+          "zh": "「呼鹿」活動重啟，東大寺草坪鋪滿金黃銀杏；11月底談山神社的楓紅值得小遠足。"
+        },
+        "winter": {
+          "en": "Yamayaki in late January sets Mt. Wakakusa's dead grass ablaze after fireworks — one of Japan's strangest, most photogenic festivals.",
+          "ko": "1월 말 '야마야키'에서는 불꽃놀이 후 와카쿠사산 전체에 불을 놓습니다. 일본에서 가장 기이하고 사진발 좋은 축제 중 하나.",
+          "zh": "1月底的「山燒」在煙火後點燃整座若草山枯草——日本最奇特、最好拍的祭典之一。"
+        }
+      },
+      "photos": [
+        {
+          "url": "https://commons.wikimedia.org/wiki/Special:FilePath/CG_Gosashi_Kofun_1_7p.jpg?width=1200",
+          "credit": "Photo: Wikimedia Commons — CG Gosashi Kofun 1 7p.jpg",
+          "file_page": "https://commons.wikimedia.org/wiki/File:CG_Gosashi_Kofun_1_7p.jpg"
+        }
+      ]
+    },
+    {
+      "id": "hakone-fuji",
+      "kanji": "富",
+      "region": "Kanto",
+      "lat": 35.2324,
+      "lon": 139.1069,
+      "name": {
+        "en": "Hakone & Mt. Fuji",
+        "ko": "하코네 & 후지산",
+        "zh": "箱根與富士山"
+      },
+      "tagline": {
+        "en": "Hot springs, ropeways and the perfect Fuji view",
+        "ko": "온천과 로프웨이, 완벽한 후지산 뷰",
+        "zh": "溫泉、纜車與最完美的富士山視角"
+      },
+      "best_season": {
+        "en": "Oct–Feb for clearest Fuji views",
+        "ko": "후지산이 가장 잘 보이는 10–2월",
+        "zh": "10–2月富士山能見度最高"
+      },
+      "intro": {
+        "en": "Hakone is Tokyo's classic overnight escape: a volcanic caldera of hot-spring ryokan, forest shrines and open-air art, 90 minutes from Shinjuku. The looping course — mountain railway, cable car, ropeway over the steaming Owakudani valley, then a 'pirate ship' across Lake Ashi — is a full day of fun and, on clear days, delivers postcard views of Mt. Fuji.\n\nStay one night in a ryokan with an onsen bath and kaiseki dinner; it is many travelers' single favorite night in Japan. For closer Fuji views, the Kawaguchiko lake area and the Chureito Pagoda are a separate, equally rewarding trip.",
+        "ko": "하코네는 도쿄에서 90분, 온천 료칸과 숲속 신사, 야외 미술관이 모인 화산 칼데라 마을입니다. 등산열차→케이블카→오와쿠다니 로프웨이→아시노코 해적선으로 이어지는 순환 코스는 하루 종일 즐겁고, 맑은 날엔 그림 같은 후지산이 보입니다. 온천과 가이세키 저녁이 있는 료칸 1박은 많은 여행자가 '일본 최고의 하룻밤'으로 꼽습니다. 후지산을 더 가까이 보려면 가와구치코와 추레이토 전망대를 추천합니다.",
+        "zh": "箱根是東京人的經典小旅行：距新宿90分鐘，火山口地形裡聚集了溫泉旅館、森林神社與露天美術館。登山電車→纜車→大涌谷空中纜車→蘆之湖海賊船的環狀路線玩上一整天，晴天時還能看到明信片等級的富士山。入住附溫泉與懷石晚餐的旅館一晚，是許多旅人心中「日本最棒的一夜」。想更近距離看富士山，河口湖與新倉山淺間公園五重塔是另一趟同樣值得的行程。"
+      },
+      "highlights": [
+        {
+          "en": "The Hakone loop: railway, ropeway and Lake Ashi cruise",
+          "ko": "하코네 순환 코스: 등산열차·로프웨이·아시노코 유람선",
+          "zh": "箱根環狀路線：登山電車、空中纜車與蘆之湖遊船"
+        },
+        {
+          "en": "Black eggs at steaming Owakudani valley",
+          "ko": "오와쿠다니의 명물 검은 달걀",
+          "zh": "大涌谷名物黑玉子"
+        },
+        {
+          "en": "Hakone Open-Air Museum",
+          "ko": "하코네 조각의 숲 미술관",
+          "zh": "箱根雕刻之森美術館"
+        },
+        {
+          "en": "An onsen ryokan night with kaiseki dinner",
+          "ko": "가이세키 저녁이 있는 온천 료칸 1박",
+          "zh": "附懷石晚餐的溫泉旅館一晚"
+        },
+        {
+          "en": "Chureito Pagoda & Lake Kawaguchiko for Fuji photos",
+          "ko": "후지산 사진 명소 추레이토·가와구치코",
+          "zh": "拍富士山的新倉山五重塔與河口湖"
+        }
+      ],
+      "access": {
+        "en": "From Shinjuku: Odakyu Romancecar to Hakone-Yumoto, ~85 min. Hakone Free Pass covers the whole loop.",
+        "ko": "신주쿠에서 오다큐 로망스카로 하코네유모토까지 약 85분. 하코네 프리패스로 순환 코스 전부 이용 가능.",
+        "zh": "新宿搭小田急浪漫特快至箱根湯本約85分鐘，箱根周遊券可搭乘整條環狀路線。"
+      },
+      "image": null,
+      "image_credit": null,
+      "seasons": {
+        "spring": {
+          "en": "Late-blooming mountain sakura frame Fuji into early May; the Fuji Shibazakura Festival carpets the lakes area pink from mid-April.",
+          "ko": "산악지대라 5월 초까지 벚꽃과 후지산을 함께 담을 수 있고, 4월 중순부터는 후지 시바자쿠라(잔디벚꽃) 축제가 열립니다.",
+          "zh": "山區櫻花開得晚，5月初前都能拍到櫻花配富士山；4月中起富士芝櫻祭把湖區鋪成粉紅地毯。"
+        },
+        "summer": {
+          "en": "Official Mt. Fuji climbing season (July–early Sept) and hydrangeas along the Hakone Tozan Railway; expect clouds hiding Fuji by midday.",
+          "ko": "후지산 공식 등산 시즌(7월~9월 초)이자 하코네 등산열차의 수국 시즌. 한낮엔 구름이 후지산을 가리는 날이 많습니다.",
+          "zh": "富士山官方登山季（7月～9月初），箱根登山電車沿線繡球花盛開；中午後富士山常被雲遮住。"
+        },
+        "autumn": {
+          "en": "Silver pampas grass turns the Sengokuhara hills to gold in November, and clear post-typhoon days deliver the year's first snow-capped Fuji photos.",
+          "ko": "11월 센고쿠하라 억새 언덕이 금빛으로 물들고, 태풍이 지나간 맑은 날엔 첫 눈 덮인 후지산을 만날 수 있습니다.",
+          "zh": "11月仙石原芒草原轉為金色；颱風過後的晴天，能拍到當年第一場雪的富士山。"
+        },
+        "winter": {
+          "en": "Prime season: the driest air, near-daily visible Fuji, and outdoor onsen (rotenburo) at their steamy best. December–February is when the postcard shots happen.",
+          "ko": "최고의 계절. 공기가 가장 맑아 후지산이 거의 매일 보이고, 노천 온천의 계절감도 절정. 엽서 같은 사진은 12~2월에 나옵니다.",
+          "zh": "最佳季節：空氣最乾淨、幾乎天天看得到富士山，露天溫泉也最有氣氛。明信片級照片都出自12～2月。"
+        }
+      },
+      "photos": []
+    },
+    {
+      "id": "hiroshima",
+      "kanji": "広",
+      "region": "Chugoku",
+      "lat": 34.3853,
+      "lon": 132.4553,
+      "name": {
+        "en": "Hiroshima & Miyajima",
+        "ko": "히로시마 & 미야지마",
+        "zh": "廣島與宮島"
+      },
+      "tagline": {
+        "en": "A moving peace memorial and a floating torii gate",
+        "ko": "가슴 뭉클한 평화기념관과 바다 위의 도리이",
+        "zh": "撼動人心的和平紀念館與海上大鳥居"
+      },
+      "best_season": {
+        "en": "Mar–May, Oct–Nov",
+        "ko": "3–5월, 10–11월",
+        "zh": "3–5月、10–11月"
+      },
+      "intro": {
+        "en": "Hiroshima pairs two of Japan's most powerful experiences in a single trip. The Peace Memorial Park and Museum tell the story of August 6, 1945 with restraint and humanity; nearly every visitor calls it the most affecting museum they have ever entered. The city around it is lively and forward-looking, famous for okonomiyaki layered with noodles.\n\nA 40-minute tram-and-ferry ride away, Miyajima island's Itsukushima Shrine appears to float on the sea at high tide, its great vermilion torii one of Japan's defining images. Stay for sunset after the day-trippers leave.",
+        "ko": "히로시마 여행은 일본에서 가장 강렬한 두 경험을 하나로 묶어줍니다. 평화기념공원과 자료관은 1945년 8월 6일의 이야기를 절제된 방식으로 전하며, 많은 여행자가 '인생에서 가장 마음이 움직인 박물관'으로 꼽습니다. 도시 자체는 활기차고, 면이 들어간 히로시마식 오코노미야키가 유명합니다. 트램과 페리로 40분이면 닿는 미야지마의 이쓰쿠시마 신사는 만조 때 바다 위에 떠 있는 듯 보입니다. 당일 관광객이 떠난 후의 석양이 최고입니다.",
+        "zh": "廣島之旅將日本最震撼的兩種體驗合而為一。和平紀念公園與資料館以克制而人性的方式訴說1945年8月6日的故事，幾乎每位旅人都說這是此生最觸動內心的博物館。城市本身充滿活力，加了麵條的廣島燒遠近馳名。搭路面電車加渡輪約40分鐘即達宮島，嚴島神社在漲潮時宛如漂浮海上，朱紅大鳥居是日本最具代表性的畫面之一。等一日遊旅客離開後留下來看夕陽，最美。"
+      },
+      "highlights": [
+        {
+          "en": "Peace Memorial Park, Museum and the A-Bomb Dome",
+          "ko": "평화기념공원·자료관·원폭 돔",
+          "zh": "和平紀念公園、資料館與原爆圓頂"
+        },
+        {
+          "en": "Itsukushima Shrine's floating torii at high tide",
+          "ko": "만조 때 물 위에 뜬 이쓰쿠시마 신사 도리이",
+          "zh": "漲潮時的嚴島神社海上鳥居"
+        },
+        {
+          "en": "Hiroshima-style okonomiyaki at Okonomimura",
+          "ko": "오코노미무라에서 히로시마식 오코노미야키",
+          "zh": "在御好村吃廣島燒"
+        },
+        {
+          "en": "Mt. Misen ropeway and wild deer on Miyajima",
+          "ko": "미야지마 미센산 로프웨이와 사슴",
+          "zh": "宮島彌山纜車與野生鹿"
+        },
+        {
+          "en": "Oyster shacks along Miyajima's shopping street",
+          "ko": "미야지마 상점가의 굴 요리",
+          "zh": "宮島商店街的烤牡蠣"
+        }
+      ],
+      "access": {
+        "en": "From Osaka: Sanyo Shinkansen, ~80–90 min. Miyajima: tram/JR to Miyajimaguchi + 10-min ferry.",
+        "ko": "오사카에서 산요 신칸센 80–90분. 미야지마는 미야지마구치까지 이동 후 페리 10분.",
+        "zh": "大阪搭山陽新幹線約80–90分鐘；宮島從宮島口搭渡輪10分鐘。"
+      },
+      "image": null,
+      "image_credit": null,
+      "seasons": {
+        "spring": {
+          "en": "Peace Memorial Park's riverbanks bloom with cherry trees, and Miyajima's blossoms frame the floating torii — a gentle, moving season to visit.",
+          "ko": "평화기념공원 강변에 벚꽃이 피고, 미야지마의 벚꽃이 바다 위 도리이를 감쌉니다. 잔잔하고 뭉클한 계절입니다.",
+          "zh": "和平紀念公園河畔櫻花盛開，宮島的櫻花映著海上鳥居——溫柔而動人的造訪時節。"
+        },
+        "summer": {
+          "en": "August 6 memorial ceremonies and evening lantern floating on the rivers are profound; Miyajima's Kangensai boat festival brings court music to the bay.",
+          "ko": "8월 6일 평화기념식과 강 위의 등롱 띄우기는 깊은 울림을 주고, 미야지마 칸겐사이 뱃놀이 축제에선 궁중음악이 울려 퍼집니다.",
+          "zh": "8月6日的紀念儀式與河上放水燈莊嚴深刻；宮島管絃祭的雅樂船隊在海灣巡遊。"
+        },
+        "autumn": {
+          "en": "Momijidani ('Maple Valley') on Miyajima earns its name in mid-late November; maple-leaf momiji manju cakes taste best fresh off the griddle.",
+          "ko": "미야지마 모미지다니(단풍 계곡)는 11월 중하순 이름값을 합니다. 갓 구운 단풍 모양 화과자 '모미지만주'도 놓치지 마세요.",
+          "zh": "宮島紅葉谷在11月中下旬名不虛傳；現烤的紅葉饅頭最好吃。"
+        },
+        "winter": {
+          "en": "Oyster season peaks — Miyajima's grilled-oyster stalls and Hiroshima's kaki-nabe hot pots are the draw; sights are blissfully uncrowded.",
+          "ko": "굴이 가장 맛있는 계절. 미야지마 구운 굴 노점과 히로시마 굴전골이 주인공이고, 관광지는 한산해 여유롭습니다.",
+          "zh": "牡蠣正肥——宮島烤牡蠣攤與廣島牡蠣鍋是主角，景點清靜無人擠。"
+        }
+      },
+      "photos": [
+        {
+          "url": "https://commons.wikimedia.org/wiki/Special:FilePath/Atomic_Bomb_Dome_and_Motoyaso_River%2C_Hiroshima%2C_Northwest_view_20190417_1.jpg?width=1200",
+          "credit": "Photo: Wikimedia Commons — Atomic Bomb Dome and Motoyaso River, Hiroshima, Northwest view 20190417 1.jpg",
+          "file_page": "https://commons.wikimedia.org/wiki/File:Atomic_Bomb_Dome_and_Motoyaso_River%2C_Hiroshima%2C_Northwest_view_20190417_1.jpg"
+        }
+      ]
+    },
+    {
+      "id": "kanazawa",
+      "kanji": "金",
+      "region": "Hokuriku",
+      "lat": 36.5613,
+      "lon": 136.6562,
+      "name": {
+        "en": "Kanazawa",
+        "ko": "가나자와",
+        "zh": "金澤"
+      },
+      "tagline": {
+        "en": "Kyoto's beauty without Kyoto's crowds",
+        "ko": "교토의 아름다움, 교토의 인파는 없이",
+        "zh": "有京都之美，卻沒有京都的人潮"
+      },
+      "best_season": {
+        "en": "Apr–May, Nov; snowy Jan gardens",
+        "ko": "4–5월, 11월, 설경의 1월",
+        "zh": "4–5月、11月，1月雪景庭園"
+      },
+      "intro": {
+        "en": "Spared by war, Kanazawa preserves samurai lanes, geisha districts and one of Japan's three great gardens — Kenroku-en — with a fraction of Kyoto's visitor numbers. The Higashi Chaya teahouse district glows gold at dusk (fittingly: the city produces 99% of Japan's gold leaf, which locals put on everything from crafts to ice cream).\n\nOmicho Market serves some of the country's best seafood bowls thanks to the cold Sea of Japan, and the 21st Century Museum of Contemporary Art gives the old town a modern pulse. The Hokuriku Shinkansen makes it an easy 2.5-hour hop from Tokyo.",
+        "ko": "전쟁의 피해를 입지 않은 가나자와에는 사무라이 거리, 게이샤 거리, 그리고 일본 3대 정원 겐로쿠엔이 교토보다 훨씬 적은 인파 속에 남아 있습니다. 히가시차야 거리는 해질녘 금빛으로 물드는데, 실제로 일본 금박의 99%가 이곳에서 생산되어 금박 아이스크림까지 있습니다. 오미초 시장의 카이센동은 일본 최고 수준이고, 21세기 미술관이 옛 도시에 현대적 감각을 더합니다. 도쿄에서 신칸센으로 2시간 30분.",
+        "zh": "未受戰火波及的金澤，保留了武士老街、藝妓茶屋街，以及日本三大名園之一的兼六園——遊客卻只有京都的零頭。東茶屋街在黃昏時泛著金光，名符其實：日本99%的金箔產自金澤，連冰淇淋都貼金箔。近江町市場的海鮮丼因日本海冷冽海水而格外鮮美，21世紀美術館則為古城注入現代脈動。從東京搭北陸新幹線只要2.5小時。"
+      },
+      "highlights": [
+        {
+          "en": "Kenroku-en, one of Japan's three great gardens",
+          "ko": "일본 3대 정원 겐로쿠엔",
+          "zh": "日本三大名園之一的兼六園"
+        },
+        {
+          "en": "Higashi Chaya geisha district at dusk",
+          "ko": "해질녘 히가시차야 거리",
+          "zh": "黃昏的東茶屋街"
+        },
+        {
+          "en": "Seafood bowls at Omicho Market",
+          "ko": "오미초 시장 카이센동",
+          "zh": "近江町市場海鮮丼"
+        },
+        {
+          "en": "Gold-leaf everything, including ice cream",
+          "ko": "금박 공예와 금박 아이스크림",
+          "zh": "金箔工藝與金箔冰淇淋"
+        },
+        {
+          "en": "21st Century Museum's 'Swimming Pool'",
+          "ko": "21세기 미술관의 '수영장'",
+          "zh": "21世紀美術館的《泳池》"
+        }
+      ],
+      "access": {
+        "en": "From Tokyo: Hokuriku Shinkansen, ~2h30m. From Kyoto/Osaka: Thunderbird + Shinkansen via Tsuruga, ~2h.",
+        "ko": "도쿄에서 호쿠리쿠 신칸센 약 2시간 30분, 교토·오사카에서 약 2시간.",
+        "zh": "東京搭北陸新幹線約2.5小時；京都/大阪經敦賀轉乘約2小時。"
+      },
+      "image": null,
+      "image_credit": null,
+      "seasons": {
+        "spring": {
+          "en": "Kenroku-en's plum and cherry seasons run February–April, and the garden opens free with evening illuminations during peak sakura week.",
+          "ko": "겐로쿠엔의 매화·벚꽃 시즌은 2~4월. 벚꽃 절정 주간에는 무료 개방과 야간 라이트업이 열립니다.",
+          "zh": "兼六園梅花與櫻花季從2月延續到4月，櫻花滿開週免費開放並有夜間點燈。"
+        },
+        "summer": {
+          "en": "Green season: moss and maples shade the samurai district, and the Hyakumangoku Festival (early June) parades lords and lion dances through town.",
+          "ko": "신록의 계절. 이끼와 단풍나무가 사무라이 거리에 그늘을 드리우고, 6월 초 햐쿠만고쿠 축제 행렬이 도시를 가로지릅니다.",
+          "zh": "新綠季節：苔蘚與楓樹為武士老街灑下綠蔭；6月初百萬石祭的大名遊行與獅子舞穿越全城。"
+        },
+        "autumn": {
+          "en": "Snow-hanging yukitsuri ropes go up in Kenroku-en from November — a photogenic craft in itself — while crab season opens November 6 with fanfare.",
+          "ko": "11월부터 겐로쿠엔에 설해 방지용 '유키츠리' 밧줄이 설치되는데 그 자체가 장관입니다. 11월 6일엔 대게 어획이 화려하게 개막합니다.",
+          "zh": "11月起兼六園架起防雪吊繩「雪吊」，本身就是絕美工藝；11月6日螃蟹季盛大開漁。"
+        },
+        "winter": {
+          "en": "The definitive Kanazawa: snow on yukitsuri pines, steaming kaisendon at Omicho Market, and kanburi (winter yellowtail) and snow crab at their absolute peak.",
+          "ko": "가장 가나자와다운 계절. 유키츠리 소나무 위 눈, 오미초 시장의 김 나는 카이센동, 그리고 절정의 겨울 방어와 대게.",
+          "zh": "最金澤的季節：雪吊松樹覆上白雪、近江町市場熱騰騰的海鮮丼，寒鰤與松葉蟹正值巔峰。"
+        }
+      },
+      "photos": []
+    },
+    {
+      "id": "sapporo-hokkaido",
+      "kanji": "雪",
+      "region": "Hokkaido",
+      "lat": 43.0618,
+      "lon": 141.3545,
+      "name": {
+        "en": "Sapporo & Hokkaido",
+        "ko": "삿포로 & 홋카이도",
+        "zh": "札幌與北海道"
+      },
+      "tagline": {
+        "en": "Powder snow, miso ramen and wide-open wilderness",
+        "ko": "파우더 스노우, 미소 라멘, 광활한 대자연",
+        "zh": "粉雪、味噌拉麵與遼闊荒野"
+      },
+      "best_season": {
+        "en": "Dec–Feb (snow), Jun–Aug (lavender, cool summers)",
+        "ko": "12–2월 설경, 6–8월 라벤더와 시원한 여름",
+        "zh": "12–2月雪季、6–8月薰衣草與涼夏"
+      },
+      "intro": {
+        "en": "Hokkaido is Japan at a different scale: dairy farms, volcanic lakes, and ski resorts like Niseko whose 'Japow' powder snow draws skiers from around the world. Sapporo, the island's easygoing capital, is the gateway — famous for miso ramen, soup curry, the February Snow Festival's giant ice sculptures, and beer that carries the city's name.\n\nIn summer the island flips: lavender fields in Furano, flower carpets in Biei, and temperatures a merciful 10°C cooler than Tokyo. Fresh uni, crab and scallops are reason enough for the flight north.",
+        "ko": "홋카이도는 스케일이 다른 일본입니다. 목장과 화산 호수, 그리고 전 세계 스키어를 불러모으는 니세코의 '재팬 파우더'가 있습니다. 관문 도시 삿포로는 미소 라멘, 수프카레, 2월 눈축제의 거대한 눈조각, 그리고 도시 이름을 딴 맥주로 유명합니다. 여름엔 후라노 라벤더밭과 비에이 꽃언덕이 펼쳐지고 도쿄보다 10도나 시원합니다. 성게·게·가리비만으로도 북쪽으로 날아갈 이유가 충분합니다.",
+        "zh": "北海道是另一種尺度的日本：牧場、火山湖，以及以「Japow」粉雪聞名全球的二世谷滑雪場。門戶城市札幌悠閒自在，以味噌拉麵、湯咖哩、2月雪祭的巨型雪雕，和以城市命名的啤酒聞名。夏天則換上另一張臉：富良野薰衣草田、美瑛花海，氣溫比東京涼爽10度。光是海膽、螃蟹和干貝，就值得專程北上。"
+      },
+      "highlights": [
+        {
+          "en": "Sapporo Snow Festival (early February)",
+          "ko": "삿포로 눈축제 (2월 초)",
+          "zh": "札幌雪祭（2月上旬）"
+        },
+        {
+          "en": "Miso ramen in Susukino's Ramen Alley",
+          "ko": "스스키노 라멘요코초의 미소 라멘",
+          "zh": "薄野拉麵橫丁的味噌拉麵"
+        },
+        {
+          "en": "Skiing Niseko's world-famous powder",
+          "ko": "니세코 파우더 스키",
+          "zh": "二世谷世界級粉雪滑雪"
+        },
+        {
+          "en": "Otaru canal town day trip",
+          "ko": "오타루 운하 당일치기",
+          "zh": "小樽運河一日遊"
+        },
+        {
+          "en": "Furano lavender & Biei hills in summer",
+          "ko": "여름의 후라노 라벤더와 비에이 언덕",
+          "zh": "夏季富良野薰衣草與美瑛丘陵"
+        }
+      ],
+      "access": {
+        "en": "Fly Tokyo→New Chitose, ~95 min, then rapid train to Sapporo, 40 min. Winter travelers: book flights and Niseko lodging early.",
+        "ko": "도쿄→신치토세 항공 95분 + 쾌속열차 40분. 겨울엔 항공권·니세코 숙소 조기 예약 필수.",
+        "zh": "東京飛新千歲約95分鐘，再搭快速列車40分鐘到札幌。冬季機票與二世谷住宿務必提早訂。"
+      },
+      "image": null,
+      "image_credit": null,
+      "seasons": {
+        "spring": {
+          "en": "Sakura arrives late (early May) — Hokkaido's bloom coincides with Golden Week — and Shibazakura pink moss carpets Higashimokoto from mid-May.",
+          "ko": "벚꽃이 5월 초에야 피어 골든위크와 겹칩니다. 5월 중순부터는 히가시모코토의 시바자쿠라 언덕이 분홍빛으로 물듭니다.",
+          "zh": "櫻花5月初才開，正好碰上黃金週；5月中起東藻琴芝櫻公園鋪滿粉紅地毯。"
+        },
+        "summer": {
+          "en": "The escape season: 25°C days, Furano lavender peaking mid-July, Biei's patchwork hills, and beer gardens filling Odori Park all August.",
+          "ko": "피서의 계절. 낮 기온 25도, 7월 중순 절정의 후라노 라벤더, 비에이 패치워크 언덕, 8월 내내 오도리 공원을 채우는 비어가든.",
+          "zh": "避暑首選：白天約25度，富良野薰衣草7月中最盛，美瑛拼布之丘如畫，8月大通公園整月都是啤酒花園。"
+        },
+        "autumn": {
+          "en": "Japan's earliest koyo — Daisetsuzan peaks turn crimson mid-September; the Autumn Fest (Sept) turns Odori Park into a giant Hokkaido food fair.",
+          "ko": "일본에서 가장 이른 단풍. 다이세츠산은 9월 중순부터 붉게 물들고, 9월 오도리 공원 '가을 축제'는 거대한 홋카이도 먹거리 장터가 됩니다.",
+          "zh": "全日本最早的紅葉——大雪山9月中旬染紅；9月的秋季祭典讓大通公園變成巨型北海道美食市集。"
+        },
+        "winter": {
+          "en": "The main event: Sapporo Snow Festival's giant sculptures (early Feb), Otaru's candlelit Snow Light Path, and Niseko powder that skiers cross oceans for.",
+          "ko": "홋카이도의 하이라이트. 2월 초 삿포로 눈축제의 거대 눈조각, 오타루 '눈빛 거리'의 촛불, 그리고 전 세계 스키어를 부르는 니세코 파우더.",
+          "zh": "重頭戲登場：2月上旬札幌雪祭巨型雪雕、小樽雪燈之路的燭光，以及讓全球滑雪客飄洋過海的二世谷粉雪。"
+        }
+      },
+      "photos": [
+        {
+          "url": "https://upload.wikimedia.org/wikipedia/commons/5/54/SapporoCity_Skylines2020.jpg",
+          "credit": "Photo: Wikimedia Commons",
+          "file_page": "https://en.wikipedia.org/wiki/Sapporo"
+        },
+        {
+          "url": "https://commons.wikimedia.org/wiki/Special:FilePath/Odori_Park_Sapporo_Snow_Festival_2007.JPG?width=1200",
+          "credit": "Photo: Wikimedia Commons — Odori Park Sapporo Snow Festival 2007.JPG",
+          "file_page": "https://commons.wikimedia.org/wiki/File:Odori_Park_Sapporo_Snow_Festival_2007.JPG"
+        },
+        {
+          "url": "https://commons.wikimedia.org/wiki/Special:FilePath/Odori_Park_in_Sapporo_1936.jpg?width=1200",
+          "credit": "Photo: Wikimedia Commons — Odori Park in Sapporo 1936.jpg",
+          "file_page": "https://commons.wikimedia.org/wiki/File:Odori_Park_in_Sapporo_1936.jpg"
+        }
+      ]
+    },
+    {
+      "id": "fukuoka",
+      "kanji": "福",
+      "region": "Kyushu",
+      "lat": 33.5904,
+      "lon": 130.4017,
+      "name": {
+        "en": "Fukuoka",
+        "ko": "후쿠오카",
+        "zh": "福岡"
+      },
+      "tagline": {
+        "en": "Yatai street stalls, tonkotsu ramen and easygoing Kyushu charm",
+        "ko": "야타이 포장마차, 돈코츠 라멘, 느긋한 규슈의 매력",
+        "zh": "屋台路邊攤、豚骨拉麵與悠哉的九州魅力"
+      },
+      "best_season": {
+        "en": "Mar–May, Oct–Nov",
+        "ko": "3–5월, 10–11월",
+        "zh": "3–5月、10–11月"
+      },
+      "intro": {
+        "en": "Fukuoka is the closest major Japanese city to Korea and Taiwan, and it shows in its open, unhurried character. The city's signature is the yatai: around a hundred open-air food stalls that appear at dusk along the Nakasu and Tenjin riversides, serving tonkotsu ramen, yakitori and cold beer shoulder-to-shoulder with locals.\n\nBy day, browse Kushida Shrine and Canal City, or take easy side trips to the torii-lined shrine of Dazaifu, the hells of Beppu, or Kumamoto Castle. Fukuoka's airport is famously 11 minutes by subway from downtown — no city in Japan is easier to arrive in.",
+        "ko": "후쿠오카는 한국에서 가장 가까운 일본 대도시답게 개방적이고 느긋한 분위기입니다. 해질녘 나카스·텐진 강변에 백여 개의 야타이(포장마차)가 문을 열고, 현지인과 어깨를 맞대고 돈코츠 라멘과 야키토리, 시원한 맥주를 즐길 수 있습니다. 낮에는 쿠시다 신사와 캐널시티, 다자이후 텐만구, 벳푸 온천, 구마모토성으로의 근교 여행도 좋습니다. 공항에서 시내까지 지하철로 단 11분, 일본에서 가장 도착하기 쉬운 도시입니다.",
+        "zh": "福岡是離台灣最近的日本大城市之一，性格開放悠哉。城市的招牌是「屋台」：黃昏時分，中洲與天神河畔亮起上百攤露天小吃攤，與在地人並肩吃豚骨拉麵、烤雞串、喝冰啤酒。白天可逛櫛田神社與運河城，或輕鬆前往太宰府天滿宮、別府地獄溫泉、熊本城小旅行。機場到市中心搭地鐵只要11分鐘，是全日本最容易抵達的城市。"
+      },
+      "highlights": [
+        {
+          "en": "Yatai stall-hopping along the Nakasu river",
+          "ko": "나카스 강변 야타이 호핑",
+          "zh": "中洲河畔屋台巡禮"
+        },
+        {
+          "en": "Original tonkotsu ramen (Ichiran & Ippudo were born here)",
+          "ko": "돈코츠 라멘의 본고장 (이치란·잇푸도 발상지)",
+          "zh": "豚骨拉麵發源地（一蘭、一風堂誕生於此）"
+        },
+        {
+          "en": "Dazaifu Tenmangu Shrine day trip",
+          "ko": "다자이후 텐만구 당일 여행",
+          "zh": "太宰府天滿宮一日遊"
+        },
+        {
+          "en": "Ohori Park and Fukuoka Castle ruins",
+          "ko": "오호리 공원과 후쿠오카성터",
+          "zh": "大濠公園與福岡城跡"
+        },
+        {
+          "en": "Mentaiko (spicy cod roe) in every form",
+          "ko": "온갖 형태의 멘타이코 요리",
+          "zh": "各種形式的明太子料理"
+        }
+      ],
+      "access": {
+        "en": "Fukuoka Airport → Hakata Station: subway, 11 min. From Osaka: Sanyo Shinkansen, ~2h30m. Ferries connect to Busan, Korea.",
+        "ko": "후쿠오카공항→하카타역 지하철 11분. 부산에서 고속선·페리 직항, 오사카에서 신칸센 약 2시간 30분.",
+        "zh": "福岡機場→博多站地鐵11分鐘；大阪搭山陽新幹線約2.5小時；另有渡輪連接韓國釜山。"
+      },
+      "image": null,
+      "image_credit": null,
+      "seasons": {
+        "spring": {
+          "en": "Maizuru Park's castle-ruin sakura peak late March with night illuminations, and Dazaifu's 6,000 plum trees bloom even earlier (February).",
+          "ko": "3월 말 마이즈루 공원 성터 벚꽃이 야간 라이트업과 함께 절정을 맞고, 다자이후의 매화 6천 그루는 그보다 이른 2월에 핍니다.",
+          "zh": "3月底舞鶴公園城跡櫻花滿開並有夜間點燈；太宰府六千株梅花更早在2月綻放。"
+        },
+        "summer": {
+          "en": "Hakata Gion Yamakasa (July 1–15) climaxes with one-ton floats raced through dawn streets — Fukuoka's soul on full display; yatai stalls stay lively all night.",
+          "ko": "하카타 기온 야마카사(7/1–15)는 1톤 가마를 메고 새벽 거리를 질주하는 축제로 후쿠오카의 혼 그 자체입니다. 야타이는 밤새 활기찹니다.",
+          "zh": "博多祇園山笠（7/1–15）壓軸是清晨扛著一噸重山車狂奔的「追山」——福岡的靈魂盡在於此；屋台徹夜熱鬧。"
+        },
+        "autumn": {
+          "en": "Perfect yatai weather returns; November's grand sumo tournament comes to town, and Dazaifu's ginkgo and maples color the shrine approach.",
+          "ko": "야타이에 딱 좋은 날씨가 돌아오고, 11월엔 스모 규슈 대회가 열립니다. 다자이후 참배길은 은행과 단풍으로 물듭니다.",
+          "zh": "最適合逛屋台的天氣回歸；11月大相撲九州場所開打，太宰府參道銀杏楓葉齊染色。"
+        },
+        "winter": {
+          "en": "Motsunabe and mizutaki hot pot season — Fukuoka's soul food shines. Mild winters make it Japan's easiest big city for December–February travel.",
+          "ko": "모츠나베와 미즈타키 전골의 계절, 후쿠오카 소울푸드의 진가가 드러납니다. 겨울이 온화해 12~2월 여행이 가장 편한 대도시입니다.",
+          "zh": "牛腸鍋與水炊鍋的季節——福岡靈魂美食大放異彩。冬季溫和，是12～2月最好旅行的日本大城市。"
+        }
+      },
+      "photos": [
+        {
+          "url": "https://upload.wikimedia.org/wikipedia/commons/b/bd/Fukuoka_Skyline_of_Seaside_Momochi.jpg",
+          "credit": "Photo: Wikimedia Commons",
+          "file_page": "https://en.wikipedia.org/wiki/Fukuoka"
+        }
+      ]
+    },
+    {
+      "id": "okinawa",
+      "kanji": "海",
+      "region": "Okinawa",
+      "lat": 26.2124,
+      "lon": 127.6809,
+      "name": {
+        "en": "Okinawa",
+        "ko": "오키나와",
+        "zh": "沖繩"
+      },
+      "tagline": {
+        "en": "Coral seas, island time and a culture all its own",
+        "ko": "산호빛 바다, 섬의 시간, 오직 이곳만의 문화",
+        "zh": "珊瑚之海、島嶼時光與獨一無二的文化"
+      },
+      "best_season": {
+        "en": "Apr–Jun, Oct–Nov (avoid Aug–Sep typhoons)",
+        "ko": "4–6월, 10–11월 (8–9월 태풍 주의)",
+        "zh": "4–6月、10–11月（避開8–9月颱風）"
+      },
+      "intro": {
+        "en": "Okinawa was the independent Ryukyu Kingdom for 450 years, and it still feels like a different country: its own cuisine (goya champuru, Okinawa soba, taco rice), its own music, and some of the clearest water in Asia. Naha's Kokusai Street and the restored Shuri Castle anchor the main island, while Churaumi Aquarium's whale sharks are a family favorite.\n\nThe real magic lies offshore. The Kerama Islands — 35 minutes by ferry — have beaches that rival the Maldives, and Ishigaki and Miyako, a short flight south, offer world-class snorkeling and diving over living coral.",
+        "ko": "450년간 독립 왕국이었던 류큐의 땅 오키나와는 지금도 '다른 나라' 같습니다. 고야참프루·오키나와 소바·타코라이스 같은 고유 음식, 독자적인 음악, 그리고 아시아에서 가장 투명한 바다가 있습니다. 나하 국제거리와 슈리성, 고래상어가 있는 츄라우미 수족관이 본섬의 하이라이트입니다. 페리 35분 거리의 케라마 제도는 몰디브급 해변, 비행기로 조금 더 가는 이시가키·미야코는 세계적인 스노클링·다이빙 성지입니다.",
+        "zh": "沖繩曾是獨立450年的琉球王國，至今仍像另一個國度：獨有的料理（苦瓜炒什錦、沖繩麵、塔可飯）、獨特的音樂，以及亞洲數一數二清澈的海水。那霸國際通與修復後的首里城是本島重心，美麗海水族館的鯨鯊則是親子最愛。真正的魔法在離島：搭渡輪35分鐘的慶良間群島擁有媲美馬爾地夫的海灘；再搭短程飛機南下，石垣島與宮古島是世界級的浮潛與潛水天堂。"
+      },
+      "highlights": [
+        {
+          "en": "Churaumi Aquarium's giant whale shark tank",
+          "ko": "츄라우미 수족관의 고래상어 수조",
+          "zh": "美麗海水族館鯨鯊大水槽"
+        },
+        {
+          "en": "Kerama Islands snorkeling day trip",
+          "ko": "케라마 제도 스노클링 당일 투어",
+          "zh": "慶良間群島浮潛一日遊"
+        },
+        {
+          "en": "Shuri Castle and Naha's Kokusai Street",
+          "ko": "슈리성과 나하 국제거리",
+          "zh": "首里城與那霸國際通"
+        },
+        {
+          "en": "Okinawa soba and goya champuru at local shokudo",
+          "ko": "현지 식당의 오키나와 소바와 고야참프루",
+          "zh": "在地食堂的沖繩麵與苦瓜炒什錦"
+        },
+        {
+          "en": "Ishigaki's Kabira Bay and star-sand beaches",
+          "ko": "이시가키 카비라만과 별모래 해변",
+          "zh": "石垣島川平灣與星砂海灘"
+        }
+      ],
+      "access": {
+        "en": "Fly Tokyo→Naha, ~2h45m; direct flights from Seoul, Taipei and Hong Kong. A rental car is near-essential outside Naha.",
+        "ko": "도쿄→나하 약 2시간 45분, 서울에서 직항 다수. 나하 외 지역은 렌터카가 사실상 필수.",
+        "zh": "東京飛那霸約2小時45分，台北、香港皆有直飛。那霸以外地區幾乎必須租車。"
+      },
+      "image": null,
+      "image_credit": null,
+      "seasons": {
+        "spring": {
+          "en": "Japan's earliest sakura (late January!) and calm seas from April; Golden Week aside, spring beats summer for beach weather without typhoon risk.",
+          "ko": "일본에서 가장 이른 1월 말 벚꽃이 피고, 4월부터 바다가 잔잔해집니다. 태풍 걱정 없는 봄이 여름보다 해변 여행엔 오히려 좋습니다.",
+          "zh": "全日本最早的櫻花1月底就開；4月起海況平穩。避開黃金週的話，春天玩海比夏天更好——不用賭颱風。"
+        },
+        "summer": {
+          "en": "Peak beach and diving season with 30°C water; Eisa drum dance festivals roll through towns in August. Book everything early and watch typhoon forecasts.",
+          "ko": "수온 30도의 해수욕·다이빙 성수기. 8월엔 에이사 북춤 축제가 곳곳에서 열립니다. 예약은 서두르고 태풍 예보는 꼭 확인하세요.",
+          "zh": "海水30度的玩水潛水旺季；8月各地輪番上演EISA太鼓舞祭。訂房訂票要趁早，並隨時留意颱風動態。"
+        },
+        "autumn": {
+          "en": "Sea stays swimmable into November, crowds thin after October, and the great tug-of-war festival in Naha (October) pulls a 40-ton rope through downtown.",
+          "ko": "11월까지 수영이 가능하고 10월 이후 한산해집니다. 10월 나하 대줄다리기 축제에서는 40톤 밧줄을 시내에서 당깁니다.",
+          "zh": "11月前海水都能游，10月後人潮漸散；10月那霸大綱挽祭在市中心拉動40噸巨繩。"
+        },
+        "winter": {
+          "en": "20°C 'winter' — whale-watching season (Jan–Mar) off the Kerama Islands, and the illumination-lit Churaumi area stays open late. No beach, but no crowds either.",
+          "ko": "기온 20도의 '겨울'. 1~3월 케라마 제도 앞바다에선 고래 관찰 시즌이 열립니다. 해수욕은 어렵지만 인파도 없습니다.",
+          "zh": "20度的「冬天」——1～3月慶良間海域是賞鯨季，美麗海一帶夜間點燈延長開放。不能玩水，但也沒人潮。"
+        }
+      },
+      "photos": [
+        {
+          "url": "https://upload.wikimedia.org/wikipedia/commons/3/3d/Okinawa_Island-ISS042.jpg",
+          "credit": "Photo: Wikimedia Commons",
+          "file_page": "https://en.wikipedia.org/wiki/Okinawa_Island"
+        }
+      ]
+    }
+  ]
+}
