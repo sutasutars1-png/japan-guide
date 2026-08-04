@@ -1,0 +1,31 @@
+---
+import Base from '../layouts/Base.astro';
+import spots from '../../data/spots.json';
+// 徒歩圏候補を軽量化してクライアントへ（APIに渡す）
+const candidates = spots.filter(s=>s.feats.length>0 || s.cat==="飲食" || s.cat==="公園").slice(0,40)
+  .map(s=>({id:s.id,name:s.name,cat:s.cat,feats:s.feats}));
+---
+<Base title="AI旅程を組む｜海浜幕張の子連れ" desc="条件を選ぶと、検証済みデータだけで子連れの一日を提案します。">
+  <div class="crumb">海浜幕張 › 一日を組む</div><h1>一日を組む</h1>
+  <p class="lead">候補データのみから提案し、各設備に出典を併記。わからないことは正直に示します。</p>
+  <div class="sec">
+    <label>お子さまの年齢 <select id="age"><option value="0-1">0〜1歳</option><option value="2-3">2〜3歳</option><option value="4-6">4〜6歳</option></select></label><br/><br/>
+    <label><input type="checkbox" id="allergy" checked/> アレルギーに配慮</label><br/><br/>
+    <button class="cta" id="go">一日を組む →</button>
+  </div>
+  <div id="out" style="margin-top:20px"></div>
+  <footer class="policy">生成はサーバ関数(/api/plan)がClaude APIを呼び、候補データのみから構成します。DB外の事実は述べません。</footer>
+  <script define:vars={{ candidates }}>
+    document.getElementById("go").onclick=async()=>{
+      const out=document.getElementById("out"); out.innerHTML="組み立て中…";
+      const body={age:document.getElementById("age").value, allergy:document.getElementById("allergy").checked, candidates};
+      try{
+        const r=await fetch("/api/plan",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+        const p=await r.json();
+        out.innerHTML=`<div class="sec"><h2>${p.summary||"提案"}</h2>`+ (p.stops||[]).map(s=>
+          `<div class="feat"><div><b>${s.time||""} ${s.name}</b><div style="font-size:13px;color:#425b64">${s.why||""}</div>${(s.caveats||[]).map(c=>`<div class="gap">⚠ ${c}</div>`).join("")}</div></div>`).join("")
+          + (p.data_gaps&&p.data_gaps.length?`<div class="gaps"><b>まだ確かめられていないこと</b>${p.data_gaps.map(g=>`<div class="gap">・${g}</div>`).join("")}</div>`:"") + `</div>`;
+      }catch(e){ out.innerHTML=`<div class="gaps">提案を取得できませんでした。時間をおいて再度お試しください。</div>`; }
+    };
+  </script>
+</Base>

@@ -1,0 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Roboto+Mono:wght@500&display=swap');
+:root{--ink:#12303A;--sea:#2E6E7E;--mist:#E9F0F1;--card:#FBFAF7;--line:#D6E0E1;--verified:#1E8A6B;--report:#2E6E7E;--check:#B4732E;--check-bg:#FAEEDC}
+*{box-sizing:border-box;margin:0;padding:0}body{background:var(--mist);color:var(--ink);font-family:'Zen Kaku Gothic New',system-ui,sans-serif;line-height:1.6}
+.wrap{max-width:720px;margin:0 auto;padding:24px 18px 60px}a{color:var(--sea)}
+h1{font-family:'Zen Maru Gothic';font-size:26px;line-height:1.3;margin:8px 0}.lead{font-size:13.5px;color:#4a636c}
+.crumb{font-family:'Roboto Mono',monospace;font-size:11px;color:var(--sea)}
+.cta{display:inline-block;margin:14px 0;background:var(--ink);color:#fff;text-decoration:none;font-family:'Zen Maru Gothic';font-weight:700;padding:11px 18px;border-radius:12px}
+.f{font-size:12.5px;font-weight:700;color:var(--sea);background:#fff;border:1px solid var(--line);border-radius:20px;padding:6px 13px;cursor:pointer;margin:3px}.f.on{background:var(--ink);color:#fff}
+.card{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-top:11px;text-decoration:none;color:var(--ink)}
+.cn{font-family:'Zen Maru Gothic';font-weight:700;font-size:15.5px}.cm{font-size:12px;color:#7a8f96;margin:2px 0 8px}
+.fc{font-size:11.5px;padding:3px 9px;border-radius:8px;margin-right:5px;border:1px solid transparent}.unk{font-size:12px;color:#8598a0}
+.verified{background:#E7F4EE;color:var(--verified);border-color:#BEE3D2}.report{background:#E7F0F1;color:var(--report);border-color:#C3D9DB}
+.sec{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px 6px;margin-top:20px}h2{font-family:'Zen Maru Gothic';font-size:16px;margin-bottom:10px}
+.feat{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line)}.feat:last-child{border:none}
+.chip{display:inline-flex;flex-direction:column;align-items:flex-end;padding:5px 10px;border-radius:9px}.chip .m{font-family:'Roboto Mono';font-size:10px;opacity:.85}
+.gaps{background:#fff;border:1px dashed var(--line);border-radius:14px;padding:14px 16px;margin-top:18px}.gap{font-size:13px;color:#4a636c}
+.owner{background:#EAF2F2;border:1px solid #C3D9DB;border-radius:12px;padding:12px 15px;margin-top:18px;font-size:13px}
+.policy{font-size:11.5px;color:#8598a0;margin-top:26px;line-height:1.7;border-top:1px solid var(--line);padding-top:14px}

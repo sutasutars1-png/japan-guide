@@ -1,0 +1,31 @@
+---
+import Base from '../../layouts/Base.astro';
+import spots from '../../../data/spots.json';
+const LAB = {nursing_room:"授乳室",diaper_changing:"おむつ替え",step_free_entrance:"段差なし",multipurpose_restroom:"多目的トイレ",stroller_accessible:"ベビーカー可"};
+const cats = ["全て", ...new Set(spots.map(s=>s.cat))];
+---
+<Base title={`海浜幕張の子連れスポット ${spots.length}件｜授乳室・おむつ替えで絞り込み`} desc="海浜幕張の子連れスポットを設備で絞り込み。出典と確認日つき。">
+  <div class="crumb">海浜幕張 › 子連れスポットを探す</div>
+  <h1>海浜幕張の子連れスポット</h1>
+  <p class="lead">実データ {spots.length}件。設備は検証済(自治体)・報告(OSM)を出典つきで表示。未確認は「要確認」。</p>
+  <div id="cats" style="margin-top:14px">{cats.map(c=> <button class="f" data-c={c}>{c}</button>)}</div>
+  <div id="facets" style="margin-top:6px">{Object.entries(LAB).map(([k,l])=> <button class="f" data-f={k}>{l}</button>)}</div>
+  <div class="lead" id="count" style="margin-top:14px"></div>
+  <div id="list"></div>
+  <footer class="policy">● 検証済＝自治体権威ソース ／ ● 報告＝OSM等・要突合。授乳室/おむつ替えの検証済は千葉市「赤ちゃんの駅」由来。</footer>
+  <script define:vars={{ spots, LAB }}>
+    let cat="全て", facets=new Set();
+    const list=document.getElementById("list"), count=document.getElementById("count");
+    function render(){
+      const r=spots.filter(s=>(cat==="全て"||s.cat===cat)&&[...facets].every(k=>s.feats.some(x=>x.key===k)));
+      count.innerHTML=`<b style="font-family:'Zen Maru Gothic';font-size:16px">${r.length}</b> 件`;
+      list.innerHTML=r.slice(0,80).map(s=>{
+        const chips=s.feats.length? s.feats.map(a=>`<span class="fc ${a.status==='verified'?'verified':'report'}">${LAB[a.key]||a.key}・${a.status==='verified'?'検証済':'報告'}</span>`).join("") : `<span class="unk">設備は要確認</span>`;
+        return `<a class="card" href="/spots/${s.id}"><div class="cn">${s.name}</div><div class="cm">${s.cat} ／ 海浜幕張圏</div>${chips}</a>`;
+      }).join("") + (r.length>80?`<div class="lead">ほか ${r.length-80} 件</div>`:"");
+    }
+    document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{cat=b.dataset.c;document.querySelectorAll("[data-c]").forEach(x=>x.classList.toggle("on",x===b));render();});
+    document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{const k=b.dataset.f;facets.has(k)?facets.delete(k):facets.add(k);b.classList.toggle("on");render();});
+    render();
+  </script>
+</Base>

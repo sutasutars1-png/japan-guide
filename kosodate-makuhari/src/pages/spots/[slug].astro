@@ -1,0 +1,33 @@
+---
+import Base from '../../layouts/Base.astro';
+import spots from '../../../data/spots.json';
+export function getStaticPaths(){
+  return spots.map(s => ({ params: { slug: s.id }, props: { spot: s } }));
+}
+const { spot } = Astro.props;
+const LAB = {nursing_room:"授乳室",diaper_changing:"おむつ替え",step_free_entrance:"段差なし",multipurpose_restroom:"多目的トイレ",stroller_accessible:"ベビーカー可"};
+const km=(a,b)=>Math.hypot((a[0]-b[0])*111,(a[1]-b[1])*90);
+const near = spots.filter(s=>s.id!==spot.id).sort((x,y)=>km([spot.lat,spot.lng],[x.lat,x.lng])-km([spot.lat,spot.lng],[y.lat,y.lng])).slice(0,3);
+const jsonld = { "@context":"https://schema.org","@type":"Place","name":spot.name,
+  "geo":{"@type":"GeoCoordinates","latitude":spot.lat,"longitude":spot.lng},
+  "amenityFeature": spot.feats.map(f=>({"@type":"LocationFeatureSpecification","name":LAB[f.key]||f.key,"value":true})) };
+const feat = spot.feats.map(f=>LAB[f.key]).filter(Boolean).join("・");
+---
+<Base title={`${spot.name}｜海浜幕張の子連れスポット${feat?"｜"+feat:""}`} desc={`${spot.name}の子連れ設備を出典・確認日つきで掲載。`} jsonld={jsonld}>
+  <div class="crumb">海浜幕張 › 子連れスポット › {spot.cat}</div>
+  <h1>{spot.name}</h1>
+  <p class="lead">{spot.cat} ／ 海浜幕張圏</p>
+  <a class="cta" href="/plan">このスポットを含む一日を組む →</a>
+  <div class="sec"><h2>子連れ設備</h2>
+    {spot.feats.length ? spot.feats.map(f=> (
+      <div class="feat"><div><b>{LAB[f.key]||f.key}</b><div style="font-size:13px;color:#425b64">あり</div></div>
+      <span class={"chip "+(f.status==="verified"?"verified":"report")}><b>{f.status==="verified"?"検証済":"報告"}</b><span class="m">{f.cite}</span></span></div>
+    )) : <p class="lead">この施設の設備情報はまだ確認できていません（要確認）。</p>}
+  </div>
+  <div class="gaps"><h2 style="color:var(--check);font-size:14px">まだ確かめられていないこと</h2>
+    <div class="gap">上記以外の設備（多目的トイレ・エレベーター等）は未確認です。飲食提供施設のアレルゲン表示は店舗へご確認ください。</div></div>
+  <div class="owner">この施設の運営者の方へ：設備情報を自己申告いただけます（突合後に反映）。 <a href="/api/claim">情報を更新する</a></div>
+  <div class="sec"><h2>近くの子連れスポット</h2>
+    {near.map(n=> <a class="card" href={`/spots/${n.id}`}><div class="cn">{n.name}</div><div class="cm">{n.cat} ／ 徒歩圏</div></a>)}</div>
+  <footer class="policy">出典：千葉市（CC BY 4.0）／© OpenStreetMap contributors（ODbL）。安全事項は対応可否を保証しません。最新は施設へご確認ください。</footer>
+</Base>
