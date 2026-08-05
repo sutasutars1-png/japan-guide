@@ -22,7 +22,8 @@ export async function onRequestPost(context){
 条件: ${conditions}
 次のJSON形式だけで出力: {"summary":str,"stops":[{"time":str,"name":str,"why":str,"caveats":[str]}],"data_gaps":[str]}`;
 
-  const model = env.GEMINI_MODEL || "gemini-2.5-flash";
+  // 既定は常に最新のFlashを指すエイリアス。RPDを増やしたい場合は環境変数 GEMINI_MODEL=gemini-flash-lite-latest
+  const model = env.GEMINI_MODEL || "gemini-flash-latest";
 
   let res, data;
   try {
