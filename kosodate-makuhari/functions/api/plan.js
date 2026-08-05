@@ -33,13 +33,8 @@ export async function onRequestPost(context){
       body: JSON.stringify({
         system_instruction: { parts: [{ text: SYSTEM }] },
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          maxOutputTokens: 2048,
-          temperature: 0.4,
-          responseMimeType: "application/json",
-          // 思考(thinking)を無効化し、出力トークンをJSON生成に使い切らせる
-          thinkingConfig: { thinkingBudget: 0 }
-        }
+        // 思考(thinking)モデルでも本文JSONを出し切れるよう上限を大きめに確保
+        generationConfig: { maxOutputTokens: 8192, temperature: 0.4, responseMimeType: "application/json" }
       })
     });
     data = await res.json();
