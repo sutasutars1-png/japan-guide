@@ -4,7 +4,7 @@ const SYSTEM = `あなたは子連れ旅程プランナー。渡された候補�
 各stopは候補地の名称に基づき、候補データに無い設備は述べない（必要なら caveats に「要確認」）。
 個別アレルゲンの対応可否は断定せず、食事の stop には caveats に「アレルギー詳細は店舗へご確認ください」を必ず入れる。
 1歳帯の昼寝帯(12-14時)は屋外の軽移動か休憩に。訪問は最大3か所。候補が薄ければ data_gaps に正直に書く。
-出力は指定JSONのみ。`;
+出力は指定JSONのみ。前置き・説明・思考は書かず、JSONオブジェクトだけを返す。`;
 
 const json = (o) => new Response(JSON.stringify(o), { headers: { "content-type": "application/json" } });
 
@@ -33,7 +33,13 @@ export async function onRequestPost(context){
       body: JSON.stringify({
         system_instruction: { parts: [{ text: SYSTEM }] },
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 1024, temperature: 0.4, responseMimeType: "application/json" }
+        generationConfig: {
+          maxOutputTokens: 2048,
+          temperature: 0.4,
+          responseMimeType: "application/json",
+          // 思考(thinking)を無効化し、出力トークンをJSON生成に使い切らせる
+          thinkingConfig: { thinkingBudget: 0 }
+        }
       })
     });
     data = await res.json();
@@ -48,7 +54,10 @@ export async function onRequestPost(context){
       `Gemini APIエラー (model=${model}): HTTP ${res.status} ${msg}` ] });
   }
 
-  const text = (data?.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
+  // 思考パート(thought:true)は除外し、本文パートのみを連結
+  const text = (data?.candidates?.[0]?.content?.parts || [])
+    .filter(p => !p.thought)
+    .map(p => p.text || "").join("");
   let plan;
   try { const a = text.indexOf("{"), b = text.lastIndexOf("}"); plan = JSON.parse(text.slice(a, b + 1)); }
   catch(e) { plan = { summary: "提案を生成できませんでした", stops: [], data_gaps: [
