@@ -1,0 +1,7 @@
+{
+  "name": "kosodate-makuhari",
+  "type": "module",
+  "scripts": { "dev": "astro dev", "build": "astro build", "preview": "wrangler pages dev ./dist" },
+  "dependencies": { "astro": "^4.15.0" },
+  "devDependencies": { "wrangler": "^3.80.0" }
+}
