@@ -3,7 +3,9 @@ import Base from '../layouts/Base.astro';
 import spots from '../../data/spots.json';
 import { CATS, catOf, FEATURES } from '../cats.js';
 
-const HERO = "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/%E6%9D%B1%E5%B1%B1%E5%8B%95%E6%A4%8D%E7%89%A9%E5%9C%92_06%EF%BC%9A%E9%81%8A%E5%9C%92%E5%9C%B0%EF%BC%88%E3%82%B3%E3%83%BC%E3%83%92%E3%83%BC%E3%82%AB%E3%83%83%E3%83%97%E3%81%A8%E8%A6%B3%E8%A6%A7%E8%BB%8A%EF%BC%89.jpg/1024px-%E6%9D%B1%E5%B1%B1%E5%8B%95%E6%A4%8D%E7%89%A9%E5%9C%92_06%EF%BC%9A%E9%81%8A%E5%9C%92%E5%9C%B0%EF%BC%88%E3%82%B3%E3%83%BC%E3%83%92%E3%83%BC%E3%82%AB%E3%83%83%E3%83%97%E3%81%A8%E8%A6%B3%E8%A6%A7%E8%BB%8A%EF%BC%89.jpg";
+const F = "%E6%9D%B1%E5%B1%B1%E5%8B%95%E6%A4%8D%E7%89%A9%E5%9C%92_06%EF%BC%9A%E9%81%8A%E5%9C%92%E5%9C%B0%EF%BC%88%E3%82%B3%E3%83%BC%E3%83%92%E3%83%BC%E3%82%AB%E3%83%83%E3%83%97%E3%81%A8%E8%A6%B3%E8%A6%A7%E8%BB%8A%EF%BC%89.jpg";
+const HERO = `https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/${F}/1024px-${F}`; // 縮小版（軽い）
+const HERO_ORIG = `https://upload.wikimedia.org/wikipedia/commons/c/c7/${F}`;              // 原寸（確実に存在）
 const HERO_CREDIT = "https://commons.wikimedia.org/wiki/File:%E6%9D%B1%E5%B1%B1%E5%8B%95%E6%A4%8D%E7%89%A9%E5%9C%92_06%EF%BC%9A%E9%81%8A%E5%9C%92%E5%9C%B0%EF%BC%88%E3%82%B3%E3%83%BC%E3%83%92%E3%83%BC%E3%82%AB%E3%83%83%E3%83%97%E3%81%A8%E8%A6%B3%E8%A6%A7%E8%BB%8A%EF%BC%89.jpg";
 
 // カテゴリ別件数
@@ -22,18 +24,24 @@ const lite = spots.map(s => ({ id: s.id, name: s.name, cat: s.cat }));
   desc="千葉のこどもとおでかけスポットを『楽しさ』で見つけるサイト。あそび場・動物・科学館・公園・水あそびをカテゴリ／年齢／雨の日で探せます。"
   active="">
 
-  <div class="hero" style={`--hero-img:url('${HERO}')`}>
-    <h1>今日は、どこで<span class="em">あそぶ？</span></h1>
-    <p>千葉のこどもとおでかけスポットを、楽しさで見つけよう。</p>
-    <form class="search" method="get" action="/spots">
-      <input name="q" placeholder="エリア・スポット名でさがす（例：幕張・動物園）" />
-      <button type="submit">さがす</button>
-    </form>
-    <div class="quick">
-      <a class="q near" href="/spots?near=1">📍 現在地から近く</a>
-      <a class="q" href="/spots?rain=1">☔ 雨の日OK</a>
-      <a class="q" href="/spots?age=1">👶 0〜2歳OK</a>
-      <a class="q" href="/spots?cat=公園でのびのび">🌳 公園であそぶ</a>
+  <div class="hero">
+    <img class="heroimg" src={HERO} alt="" referrerpolicy="no-referrer" loading="eager"
+         data-o={HERO_ORIG}
+         onerror="if(!this.dataset.f){this.dataset.f=1;this.src=this.dataset.o}else{this.style.display='none'}" />
+    <div class="heroscrim"></div>
+    <div class="heroinner">
+      <h1>今日は、どこで<span class="em">あそぶ？</span></h1>
+      <p>千葉のこどもとおでかけスポットを、楽しさで見つけよう。</p>
+      <form class="search" method="get" action="/spots">
+        <input name="q" placeholder="エリア・スポット名でさがす（例：幕張・動物園）" />
+        <button type="submit">さがす</button>
+      </form>
+      <div class="quick">
+        <a class="q near" href="/spots?near=1">📍 現在地から近く</a>
+        <a class="q" href="/spots?rain=1">☔ 雨の日OK</a>
+        <a class="q" href="/spots?age=1">👶 0〜2歳OK</a>
+        <a class="q" href="/spots?cat=公園でのびのび">🌳 公園であそぶ</a>
+      </div>
     </div>
     <a class="credit" href={HERO_CREDIT} target="_blank" rel="noopener">📷 Kyu3 / CC BY-SA 4.0</a>
   </div>
