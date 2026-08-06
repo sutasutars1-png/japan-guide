@@ -1,31 +1,113 @@
 ---
 import Base from '../../layouts/Base.astro';
 import spots from '../../../data/spots.json';
-const LAB = {nursing_room:"授乳室",diaper_changing:"おむつ替え",step_free_entrance:"段差なし",multipurpose_restroom:"多目的トイレ",stroller_accessible:"ベビーカー可"};
-const cats = ["全て", ...new Set(spots.map(s=>s.cat))];
+import { CATS } from '../../cats.js';
+
+const catMeta = Object.fromEntries(CATS.map(c => [c.key, { e: c.emoji, grad: c.grad, tags: c.tags, ageMin: c.ageMin, indoor: c.indoor }]));
+const lite = spots.map(s => ({ id: s.id, name: s.name, cat: s.cat, lat: s.lat, lng: s.lng, am: s.amenities || [] }));
+const catKeys = CATS.map(c => c.key);
 ---
-<Base title={`海浜幕張の子連れスポット ${spots.length}件｜授乳室・おむつ替えで絞り込み`} desc="海浜幕張の子連れスポットを設備で絞り込み。出典と確認日つき。">
-  <div class="crumb">海浜幕張 › 子連れスポットを探す</div>
-  <h1>海浜幕張の子連れスポット</h1>
-  <p class="lead">実データ {spots.length}件。設備は検証済(自治体)・報告(OSM)を出典つきで表示。未確認は「要確認」。</p>
-  <div id="cats" style="margin-top:14px">{cats.map(c=> <button class="f" data-c={c}>{c}</button>)}</div>
-  <div id="facets" style="margin-top:6px">{Object.entries(LAB).map(([k,l])=> <button class="f" data-f={k}>{l}</button>)}</div>
-  <div class="lead" id="count" style="margin-top:14px"></div>
-  <div id="list"></div>
-  <footer class="policy">● 検証済＝自治体権威ソース ／ ● 報告＝OSM等・要突合。授乳室/おむつ替えの検証済は千葉市「赤ちゃんの駅」由来。</footer>
-  <script define:vars={{ spots, LAB }}>
-    let cat="全て", facets=new Set();
-    const list=document.getElementById("list"), count=document.getElementById("count");
-    function render(){
-      const r=spots.filter(s=>(cat==="全て"||s.cat===cat)&&[...facets].every(k=>s.feats.some(x=>x.key===k)));
-      count.innerHTML=`<b style="font-family:'Zen Maru Gothic';font-size:16px">${r.length}</b> 件`;
-      list.innerHTML=r.slice(0,80).map(s=>{
-        const chips=s.feats.length? s.feats.map(a=>`<span class="fc ${a.status==='verified'?'verified':'report'}">${LAB[a.key]||a.key}・${a.status==='verified'?'検証済':'報告'}</span>`).join("") : `<span class="unk">設備は要確認</span>`;
-        return `<a class="card" href="/spots/${s.id}"><div class="cn">${s.name}</div><div class="cm">${s.cat} ／ 海浜幕張圏</div>${chips}</a>`;
-      }).join("") + (r.length>80?`<div class="lead">ほか ${r.length-80} 件</div>`:"");
+<Base
+  title="スポットを探す｜こどもと、どこいく？千葉"
+  desc="千葉のこどもとおでかけスポットをカテゴリ・年齢・雨の日で絞り込み。あそび場・動物・科学館・公園・水あそび。"
+  active="spots">
+
+  <section>
+    <div class="sh"><h2>スポットを探す</h2></div>
+    <p class="lead">カテゴリ・年齢の目安・雨の日（屋内）でしぼりこめます。設備は補足の小バッジで表示します。</p>
+
+    <div class="filters" style="margin-top:14px">
+      <div class="frow" id="cats">
+        <span class="chip on" data-cat="">すべて</span>
+        {catKeys.map(k => <span class="chip" data-cat={k}>{k}</span>)}
+      </div>
+      <div class="frow" id="ages">
+        <span class="chip on" data-age="">年齢：指定なし</span>
+        {[0,1,2,3,4,5,6].map(a => <span class="chip" data-age={a}>{a}歳</span>)}
+      </div>
+      <div class="frow">
+        <span class="chip" id="rain">☔ 雨の日OK（屋内）</span>
+        <span class="chip" id="near">📍 現在地から近い順</span>
+      </div>
+    </div>
+
+    <div class="count" id="count"></div>
+    <div class="grid" id="list"></div>
+    <div style="text-align:center;margin-top:16px">
+      <button class="cta teal" id="more" style="display:none;border:none;cursor:pointer">もっと見る</button>
+    </div>
+    <p class="note" style="margin-top:16px">● 検索結果は千葉市OD（CC BY 4.0）／OpenStreetMap（ODbL）由来のスポットです。設備・料金・営業などは各施設の一次情報をご確認ください。</p>
+  </section>
+
+  <script define:vars={{ catMeta, lite }}>
+    const state = { cat:'', age:'', rain:false, near:false, q:'', page:1 };
+    const PER = 30;
+    const list = document.getElementById('list'), count = document.getElementById('count'), moreBtn = document.getElementById('more');
+    let coords = null;
+
+    // URLパラメータ初期化
+    const p = new URLSearchParams(location.search);
+    if (p.get('cat')) state.cat = p.get('cat');
+    if (p.get('age') !== null && p.get('age') !== '') state.age = +p.get('age');
+    if (p.get('rain') === '1') state.rain = true;
+    if (p.get('q')) state.q = p.get('q').trim();
+    const wantNear = p.get('near') === '1';
+
+    function dist(s){ if(!coords) return 0; const dx=(s.lat-coords.lat)*111, dy=(s.lng-coords.lng)*91; return Math.hypot(dx,dy); }
+    function match(s){
+      const m = catMeta[s.cat] || {};
+      if (state.cat && s.cat !== state.cat) return false;
+      if (state.age !== '' && (m.ageMin ?? 0) > state.age) return false;
+      if (state.rain && !m.indoor) return false;
+      if (state.q && !s.name.includes(state.q)) return false;
+      return true;
     }
-    document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{cat=b.dataset.c;document.querySelectorAll("[data-c]").forEach(x=>x.classList.toggle("on",x===b));render();});
-    document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{const k=b.dataset.f;facets.has(k)?facets.delete(k):facets.add(k);b.classList.toggle("on");render();});
+    function card(s){
+      const m = catMeta[s.cat] || { e:'📍', grad:'linear-gradient(135deg,#A99BE0,#7C6BC0)', tags:[] };
+      const tags = (m.tags||[]).map(t=>`<span class="b">${t}</span>`).join('');
+      const am = (s.am||[]).map(a=>`<span class="b amenity">${a}</span>`).join('');
+      return `<a class="spot" href="/spots/${s.id}"><div class="thumb" style="background:${m.grad}">${m.e}</div>`
+        + `<div class="sbody"><div class="stag">${s.cat}</div><div class="sname">${s.name}</div>`
+        + `<div class="badges">${tags}${am}</div></div></a>`;
+    }
+    function render(){
+      let r = lite.filter(match);
+      if (state.near && coords) r = r.slice().sort((a,b)=>dist(a)-dist(b));
+      count.innerHTML = `<b>${r.length}</b> 件`;
+      const shown = r.slice(0, state.page*PER);
+      list.innerHTML = shown.map(card).join('') || '<p class="note">条件に合うスポットがありません。条件をゆるめてみてください。</p>';
+      moreBtn.style.display = r.length > shown.length ? '' : 'none';
+    }
+    function reset(){ state.page = 1; }
+
+    document.querySelectorAll('#cats .chip').forEach(b => b.onclick = () => {
+      document.querySelectorAll('#cats .chip').forEach(x=>x.classList.toggle('on', x===b));
+      state.cat = b.dataset.cat; reset(); render();
+    });
+    document.querySelectorAll('#ages .chip').forEach(b => b.onclick = () => {
+      document.querySelectorAll('#ages .chip').forEach(x=>x.classList.toggle('on', x===b));
+      state.age = b.dataset.age === '' ? '' : +b.dataset.age; reset(); render();
+    });
+    const rainBtn = document.getElementById('rain');
+    rainBtn.onclick = () => { state.rain = !state.rain; rainBtn.classList.toggle('on', state.rain); reset(); render(); };
+    const nearBtn = document.getElementById('near');
+    function enableNear(){
+      state.near = true; nearBtn.classList.add('on');
+      if (coords) { reset(); render(); return; }
+      nearBtn.textContent = '📍 現在地を取得中…';
+      navigator.geolocation?.getCurrentPosition(
+        pos => { coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }; nearBtn.textContent='📍 現在地から近い順'; reset(); render(); },
+        () => { state.near=false; nearBtn.classList.remove('on'); nearBtn.textContent='📍 位置情報を取得できませんでした'; render(); }
+      );
+    }
+    nearBtn.onclick = () => { if (state.near) { state.near=false; nearBtn.classList.remove('on'); render(); } else enableNear(); };
+
+    // 初期状態をUIへ反映
+    if (state.cat){ document.querySelectorAll('#cats .chip').forEach(x=>x.classList.toggle('on', x.dataset.cat===state.cat)); }
+    if (state.age!==''){ document.querySelectorAll('#ages .chip').forEach(x=>x.classList.toggle('on', x.dataset.age===String(state.age))); }
+    if (state.rain){ rainBtn.classList.add('on'); }
+    moreBtn.onclick = () => { state.page++; render(); };
     render();
+    if (wantNear) enableNear();
   </script>
 </Base>

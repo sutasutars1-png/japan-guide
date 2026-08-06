@@ -1,0 +1,26 @@
+---
+import Base from '../layouts/Base.astro';
+const sections = [
+  { id: "operator",   h: "運営者情報" },
+  { id: "terms",      h: "利用規約" },
+  { id: "privacy",    h: "プライバシーポリシー" },
+  { id: "disclaimer", h: "免責事項" },
+  { id: "contact",    h: "お問い合わせ" },
+];
+---
+<Base
+  title="運営者情報・利用規約・プライバシー・免責・お問い合わせ｜こどもと、どこいく？千葉"
+  desc="運営者情報、利用規約、プライバシーポリシー、免責事項、お問い合わせ。"
+  active="">
+  <section>
+    <div class="sh"><h2>運営・法務</h2></div>
+    <p class="note">以下の各ページ文面は<strong>準備中（未記入）</strong>です。収益化・本公開の前に整備してください。</p>
+    {sections.map(s => (
+      <div class="sec2" id={s.id}>
+        <h2>{s.h}</h2>
+        <p class="note">（準備中）このセクションの文面は未記入です。</p>
+      </div>
+    ))}
+    <p class="note" style="margin-top:18px">出典：千葉市オープンデータ（CC BY 4.0）／© OpenStreetMap contributors（ODbL）。</p>
+  </section>
+</Base>

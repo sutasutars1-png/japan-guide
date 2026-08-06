@@ -1,10 +1,116 @@
 ---
 import Base from '../layouts/Base.astro';
+import spots from '../../data/spots.json';
+import { CATS, catOf, FEATURES } from '../cats.js';
+
+const HERO = "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/%E6%9D%B1%E5%B1%B1%E5%8B%95%E6%A4%8D%E7%89%A9%E5%9C%92_06%EF%BC%9A%E9%81%8A%E5%9C%92%E5%9C%B0%EF%BC%88%E3%82%B3%E3%83%BC%E3%83%92%E3%83%BC%E3%82%AB%E3%83%83%E3%83%97%E3%81%A8%E8%A6%B3%E8%A6%A7%E8%BB%8A%EF%BC%89.jpg/1024px-%E6%9D%B1%E5%B1%B1%E5%8B%95%E6%A4%8D%E7%89%A9%E5%9C%92_06%EF%BC%9A%E9%81%8A%E5%9C%92%E5%9C%B0%EF%BC%88%E3%82%B3%E3%83%BC%E3%83%92%E3%83%BC%E3%82%AB%E3%83%83%E3%83%97%E3%81%A8%E8%A6%B3%E8%A6%A7%E8%BB%8A%EF%BC%89.jpg";
+const HERO_CREDIT = "https://commons.wikimedia.org/wiki/File:%E6%9D%B1%E5%B1%B1%E5%8B%95%E6%A4%8D%E7%89%A9%E5%9C%92_06%EF%BC%9A%E9%81%8A%E5%9C%92%E5%9C%B0%EF%BC%88%E3%82%B3%E3%83%BC%E3%83%92%E3%83%BC%E3%82%AB%E3%83%83%E3%83%97%E3%81%A8%E8%A6%B3%E8%A6%A7%E8%BB%8A%EF%BC%89.jpg";
+
+// カテゴリ別件数
+const counts = Object.fromEntries(CATS.map(c => [c.key, spots.filter(s => s.cat === c.key).length]));
+
+// 編集部ピックアップ（人気データは無いので中立表現。多様なカテゴリから1件ずつ）
+const pickCats = ["あそび場・体験", "動物とふれあう", "学ぶ・科学館", "水あそび", "観光・名所"];
+const picks = pickCats.map(k => spots.find(s => s.cat === k)).filter(Boolean).slice(0, 4);
+
+// クライアント用の軽量データ（年齢別の横スクロール描画）
+const catMeta = Object.fromEntries(CATS.map(c => [c.key, { e: c.emoji, grad: c.grad, tags: c.tags, ageMin: c.ageMin }]));
+const lite = spots.map(s => ({ id: s.id, name: s.name, cat: s.cat }));
 ---
-<Base title="確かめた事実で、子連れの一日を組む｜海浜幕張" desc="海浜幕張の子連れスポットを、出典と確認日つきで。授乳室・おむつ替え・アレルゲン表示で探せる。">
-  <div class="crumb">海浜幕張 · 子連れの一日</div>
-  <h1>確かめた事実で、<br/>子連れの一日を組む。</h1>
-  <p class="lead">推測で埋めない。設備には出典と確認日を添え、わからないことは「要確認」と正直に。</p>
-  <p style="margin-top:18px"><a class="cta" href="/spots">スポットを探す →</a>　<a class="cta" href="/plan">一日を組む →</a></p>
-  <footer class="policy">出典：千葉市オープンデータ（CC BY 4.0）／© OpenStreetMap contributors（ODbL）。安全に関わる項目は対応可否を保証しません。</footer>
+<Base
+  title="こどもと、どこいく？千葉｜遊び・体験で見つける子連れおでかけ"
+  desc="千葉のこどもとおでかけスポットを『楽しさ』で見つけるサイト。あそび場・動物・科学館・公園・水あそびをカテゴリ／年齢／雨の日で探せます。"
+  active="">
+
+  <div class="hero" style={`--hero-img:url('${HERO}')`}>
+    <h1>今日は、どこで<span class="em">あそぶ？</span></h1>
+    <p>千葉のこどもとおでかけスポットを、楽しさで見つけよう。</p>
+    <form class="search" method="get" action="/spots">
+      <input name="q" placeholder="エリア・スポット名でさがす（例：幕張・動物園）" />
+      <button type="submit">さがす</button>
+    </form>
+    <div class="quick">
+      <a class="q near" href="/spots?near=1">📍 現在地から近く</a>
+      <a class="q" href="/spots?rain=1">☔ 雨の日OK</a>
+      <a class="q" href="/spots?age=1">👶 0〜2歳OK</a>
+      <a class="q" href="/spots?cat=公園でのびのび">🌳 公園であそぶ</a>
+    </div>
+    <a class="credit" href={HERO_CREDIT} target="_blank" rel="noopener">📷 Kyu3 / CC BY-SA 4.0</a>
+  </div>
+
+  <section>
+    <div class="sh"><h2>なにして遊ぶ？</h2><a href="/spots">すべて見る</a></div>
+    <div class="cats">
+      {CATS.map(c => (
+        <a class="cat" href={`/spots?cat=${encodeURIComponent(c.key)}`}>
+          <div class="ci" style={`background:${c.tile}`}>{c.emoji}</div>
+          <b>{c.key}</b><span class="cc">{counts[c.key]}件</span>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <section style="padding-top:0">
+    <div class="sh"><h2>年齢でえらぶ</h2><a href="/spots">一覧へ</a></div>
+    <div class="ages" id="ages">
+      {[0,1,2,3,4,5,6].map(a => (
+        <span class="age" class:list={[{ on: a === 1 }]} data-age={a}>{a}歳</span>
+      ))}
+    </div>
+    <div class="row" id="agerow" style="margin-top:14px"></div>
+  </section>
+
+  <section style="padding-top:0">
+    <div class="sh"><h2>編集部えらぶ 気になるスポット</h2><a href="/spots">もっと見る</a></div>
+    <div class="rank">
+      {picks.map((s, i) => (
+        <a href={`/spots/${s.id}`}>
+          <span class="num">{i + 1}</span>
+          <div><div class="rn">{s.name}</div><div class="rmeta">{s.cat} ／ {catOf(s.cat).tags.join('・')}</div></div>
+        </a>
+      ))}
+    </div>
+    <p class="note" style="margin-top:8px">※「人気順」ではなく、編集部がカテゴリの幅を考えて選んだ中立的なピックアップです。</p>
+  </section>
+
+  <section style="padding-top:0">
+    <div class="sh"><h2>特集・まとめ</h2><a href="/features">一覧へ</a></div>
+    <div class="topics">
+      {FEATURES.map(f => (
+        <a class="topic" href={`/features/${f.slug}`} style={`background:${f.grad}`}>
+          <span class="tt">{f.tag}</span><b set:html={f.title.replace(/（.*?）/, '')}></b>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <script define:vars={{ catMeta, lite }}>
+    const row = document.getElementById('agerow');
+    function cardHTML(s){
+      const m = catMeta[s.cat] || { e:'📍', grad:'linear-gradient(135deg,#A99BE0,#7C6BC0)', tags:[] };
+      const badges = (m.tags||[]).map(t => `<span class="b">${t}</span>`).join('');
+      return `<a class="spot" href="/spots/${s.id}"><div class="thumb" style="background:${m.grad}">${m.e}</div>`
+        + `<div class="sbody"><div class="stag">${s.cat}</div><div class="sname">${s.name}</div>`
+        + `<div class="badges">${badges}</div></div></a>`;
+    }
+    function render(age){
+      // 年齢の目安でフィルタ → カテゴリを一巡させて多様に最大10件
+      const ok = lite.filter(s => (catMeta[s.cat]?.ageMin ?? 0) <= age);
+      const byCat = {};
+      ok.forEach(s => { (byCat[s.cat] ||= []).push(s); });
+      const cats = Object.keys(byCat);
+      const out = [];
+      let idx = 0;
+      while (out.length < 10 && cats.some(c => byCat[c][idx])) {
+        for (const c of cats){ if (byCat[c][idx] && out.length < 10) out.push(byCat[c][idx]); }
+        idx++;
+      }
+      row.innerHTML = out.map(cardHTML).join('') || '<p class="note">該当スポットがありません。</p>';
+    }
+    document.querySelectorAll('#ages .age').forEach(b => b.onclick = () => {
+      document.querySelectorAll('#ages .age').forEach(x => x.classList.toggle('on', x === b));
+      render(+b.dataset.age);
+    });
+    render(1);
+  </script>
 </Base>

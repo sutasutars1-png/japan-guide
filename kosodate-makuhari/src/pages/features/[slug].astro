@@ -1,0 +1,57 @@
+---
+import Base from '../../layouts/Base.astro';
+import spots from '../../../data/spots.json';
+import { FEATURES, catOf } from '../../cats.js';
+
+export function getStaticPaths(){
+  return FEATURES.map(f => ({ params: { slug: f.slug }, props: { feature: f } }));
+}
+const { feature } = Astro.props;
+const list = spots.filter(s => feature.filter(s, catOf(s.cat)));
+
+const jsonld = {
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "name": feature.title,
+  "numberOfItems": list.length,
+  "itemListElement": list.slice(0, 40).map((s, i) => ({
+    "@type": "ListItem", "position": i + 1, "name": s.name, "url": `/spots/${s.id}`
+  }))
+};
+---
+<Base
+  title={`${feature.title}｜特集｜こどもと、どこいく？千葉`}
+  desc={`${feature.lead} 千葉のおでかけ先を${list.length}件まとめました。`}
+  jsonld={jsonld}
+  active="features">
+
+  <div class="dhead" style={`background:${feature.grad};height:120px;font-size:22px;font-family:'Zen Maru Gothic';font-weight:700;text-align:center;padding:0 20px;line-height:1.35`}>{feature.title}</div>
+
+  <section>
+    <div class="crumb"><a href="/features" style="color:var(--soft)">特集・まとめ</a> › {feature.tag}</div>
+    <p class="lead">{feature.lead}</p>
+    <div class="count"><b>{list.length}</b> 件</div>
+
+    <div class="grid">
+      {list.slice(0, 60).map(s => {
+        const c = catOf(s.cat);
+        return (
+          <a class="spot" href={`/spots/${s.id}`}>
+            <div class="thumb" style={`background:${c.grad}`}>{c.emoji}</div>
+            <div class="sbody">
+              <div class="stag">{s.cat}</div>
+              <div class="sname">{s.name}</div>
+              <div class="badges">{c.tags.map(t => <span class="b">{t}</span>)}</div>
+            </div>
+          </a>
+        );
+      })}
+    </div>
+    {list.length > 60 && <p class="note" style="margin-top:12px">ほか {list.length - 60} 件。<a href="/spots" style="color:var(--coral-d);font-weight:700">スポット一覧</a>で絞り込めます。</p>}
+
+    <p class="note" style="margin-top:18px">
+      このまとめはデータの自動フィルタで作成しています（人気順ではありません）。設備・料金・営業などは各施設の一次情報をご確認ください。<br />
+      出典：千葉市（CC BY 4.0）／© OpenStreetMap contributors（ODbL）。
+    </p>
+  </section>
+</Base>

@@ -1,0 +1,26 @@
+---
+import Base from '../../layouts/Base.astro';
+import spots from '../../../data/spots.json';
+import { FEATURES, catOf } from '../../cats.js';
+
+const counts = Object.fromEntries(FEATURES.map(f => [f.slug, spots.filter(s => f.filter(s, catOf(s.cat))).length]));
+---
+<Base
+  title="特集・まとめ｜こどもと、どこいく？千葉"
+  desc="雨の日の屋内スポット、0〜2歳と行けるおでかけ先、科学館めぐり、水あそびなど、テーマ別のまとめ特集。"
+  active="features">
+
+  <section>
+    <div class="sh"><h2>特集・まとめ</h2></div>
+    <p class="lead">テーマごとに、千葉のおでかけ先をまとめました。データから自動で集めています。</p>
+    <div class="topics" style="margin-top:14px">
+      {FEATURES.map(f => (
+        <a class="topic" href={`/features/${f.slug}`} style={`background:${f.grad}`}>
+          <span class="tt">{f.tag} ・ {counts[f.slug]}件</span>
+          <b>{f.title}</b>
+        </a>
+      ))}
+    </div>
+    <p class="note" style="margin-top:16px">出典：千葉市オープンデータ（CC BY 4.0）／© OpenStreetMap contributors（ODbL）。紹介文はカテゴリにもとづく一般的な説明です。</p>
+  </section>
+</Base>

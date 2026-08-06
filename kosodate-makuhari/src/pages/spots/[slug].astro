@@ -1,33 +1,94 @@
 ---
 import Base from '../../layouts/Base.astro';
 import spots from '../../../data/spots.json';
+import { catOf } from '../../cats.js';
+
 export function getStaticPaths(){
   return spots.map(s => ({ params: { slug: s.id }, props: { spot: s } }));
 }
 const { spot } = Astro.props;
-const LAB = {nursing_room:"授乳室",diaper_changing:"おむつ替え",step_free_entrance:"段差なし",multipurpose_restroom:"多目的トイレ",stroller_accessible:"ベビーカー可"};
-const km=(a,b)=>Math.hypot((a[0]-b[0])*111,(a[1]-b[1])*90);
-const near = spots.filter(s=>s.id!==spot.id).sort((x,y)=>km([spot.lat,spot.lng],[x.lat,x.lng])-km([spot.lat,spot.lng],[y.lat,y.lng])).slice(0,3);
-const jsonld = { "@context":"https://schema.org","@type":"Place","name":spot.name,
-  "geo":{"@type":"GeoCoordinates","latitude":spot.lat,"longitude":spot.lng},
-  "amenityFeature": spot.feats.map(f=>({"@type":"LocationFeatureSpecification","name":LAB[f.key]||f.key,"value":true})) };
-const feat = spot.feats.map(f=>LAB[f.key]).filter(Boolean).join("・");
+const c = catOf(spot.cat);
+
+const km = (a,b) => Math.hypot((a[0]-b[0])*111, (a[1]-b[1])*91);
+const near = spots
+  .filter(s => s.id !== spot.id)
+  .sort((x,y) => km([spot.lat,spot.lng],[x.lat,x.lng]) - km([spot.lat,spot.lng],[y.lat,y.lng]))
+  .slice(0, 3);
+
+const ageText = c.ageMin <= 0 ? "0歳ごろから楽しめます（目安）" : `${c.ageMin}歳ごろから楽しめます（目安）`;
+const jsonld = {
+  "@context": "https://schema.org",
+  "@type": "TouristAttraction",
+  "name": spot.name,
+  "description": spot.intro,
+  "geo": { "@type": "GeoCoordinates", "latitude": spot.lat, "longitude": spot.lng },
+  "isAccessibleForFree": undefined
+};
+const wpUrl = spot.wp
+  ? `https://ja.wikipedia.org/wiki/${encodeURIComponent(String(spot.wp).replace(/^ja:/, ''))}`
+  : null;
 ---
-<Base title={`${spot.name}｜海浜幕張の子連れスポット${feat?"｜"+feat:""}`} desc={`${spot.name}の子連れ設備を出典・確認日つきで掲載。`} jsonld={jsonld}>
-  <div class="crumb">海浜幕張 › 子連れスポット › {spot.cat}</div>
-  <h1>{spot.name}</h1>
-  <p class="lead">{spot.cat} ／ 海浜幕張圏</p>
-  <a class="cta" href="/plan">このスポットを含む一日を組む →</a>
-  <div class="sec"><h2>子連れ設備</h2>
-    {spot.feats.length ? spot.feats.map(f=> (
-      <div class="feat"><div><b>{LAB[f.key]||f.key}</b><div style="font-size:13px;color:#425b64">あり</div></div>
-      <span class={"chip "+(f.status==="verified"?"verified":"report")}><b>{f.status==="verified"?"検証済":"報告"}</b><span class="m">{f.cite}</span></span></div>
-    )) : <p class="lead">この施設の設備情報はまだ確認できていません（要確認）。</p>}
-  </div>
-  <div class="gaps"><h2 style="color:var(--check);font-size:14px">まだ確かめられていないこと</h2>
-    <div class="gap">上記以外の設備（多目的トイレ・エレベーター等）は未確認です。飲食提供施設のアレルゲン表示は店舗へご確認ください。</div></div>
-  <div class="owner">この施設の運営者の方へ：設備情報を自己申告いただけます（突合後に反映）。 <a href="/api/claim">情報を更新する</a></div>
-  <div class="sec"><h2>近くの子連れスポット</h2>
-    {near.map(n=> <a class="card" href={`/spots/${n.id}`}><div class="cn">{n.name}</div><div class="cm">{n.cat} ／ 徒歩圏</div></a>)}</div>
-  <footer class="policy">出典：千葉市（CC BY 4.0）／© OpenStreetMap contributors（ODbL）。安全事項は対応可否を保証しません。最新は施設へご確認ください。</footer>
+<Base
+  title={`${spot.name}｜${spot.cat}｜こどもと、どこいく？千葉`}
+  desc={`${spot.name}（${spot.cat}）の子連れおでかけ紹介。${spot.intro}`}
+  jsonld={jsonld}
+  active="spots">
+
+  <div class="dhead" style={`background:${c.grad}`}>{c.emoji}</div>
+
+  <section>
+    <div class="crumb"><a href="/spots" style="color:var(--soft)">スポットを探す</a> › {spot.cat}</div>
+    <h1 class="dt">{spot.name}</h1>
+    <div class="badges" style="margin-bottom:12px">
+      <span class="stag">{spot.cat}</span>
+      {c.tags.map(t => <span class="b">{t}</span>)}
+      {(spot.amenities || []).map(a => <span class="b amenity">{a}</span>)}
+    </div>
+
+    <div class="intro">
+      <span class="aiflag">カテゴリにもとづく紹介</span>
+      <div>{spot.intro}</div>
+    </div>
+
+    <div class="sec2">
+      <h2>こんな子におすすめ</h2>
+      <p class="note">{ageText}。小さな子とのおでかけは、無理のないスケジュールで楽しんでください。</p>
+    </div>
+
+    <div class="sec2">
+      <h2>設備・安全について（補足）</h2>
+      <p class="note">
+        {(spot.amenities && spot.amenities.length)
+          ? <>把握できている設備：{spot.amenities.join('・')}。</>
+          : <>設備情報はこのデータには含まれていません。</>}
+        授乳室・おむつ替え・トイレ、アレルギー対応などの有無や対応可否は保証しません。最新情報は必ず各施設の一次情報をご確認ください。
+      </p>
+    </div>
+
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+      <a class="cta" href="/plan">この辺で一日プランを組む →</a>
+      {wpUrl && <a class="cta teal" href={wpUrl} target="_blank" rel="noopener">Wikipediaで見る →</a>}
+    </div>
+
+    <div class="owner">
+      この施設の運営者の方へ：設備情報を自己申告いただけます（他ソースと突合後に反映。一般の方の投稿は受け付けていません）。 <a href="/api/claim">情報を更新する</a>
+    </div>
+
+    <div class="sec2" style="margin-top:22px">
+      <h2>近くのスポット</h2>
+      <div class="grid" style="margin-top:10px">
+        {near.map(n => {
+          const nc = catOf(n.cat);
+          return (
+            <a class="spot" href={`/spots/${n.id}`}>
+              <div class="thumb" style={`background:${nc.grad};height:84px;font-size:32px`}>{nc.emoji}</div>
+              <div class="sbody"><div class="stag">{n.cat}</div><div class="sname" style="font-size:13.5px">{n.name}</div></div>
+            </a>
+          );
+        })}
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:18px">出典：千葉市（CC BY 4.0）／© OpenStreetMap contributors（ODbL）。</p>
+  </section>
 </Base>

@@ -1,10 +1,33 @@
 ---
 import Base from '../layouts/Base.astro';
 ---
-<Base title="出典・鮮度ポリシー｜海浜幕張の子連れスポット" desc="データの出典・鮮度・安全事項の扱いについて。">
-  <div class="crumb">出典・鮮度ポリシー</div><h1>データの考え方</h1>
-  <div class="sec"><h2>出典</h2><p class="lead">千葉市オープンデータ（CC BY 4.0）、OpenStreetMap（ODbL）等を突合。各設備に出典名と確認日を併記します。</p></div>
-  <div class="sec"><h2>鮮度</h2><p class="lead">信頼度を時間で下げず、掲載日を併記して鮮度の判断は利用者に委ねます。定期的に再取得して掲載日を更新します。</p></div>
-  <div class="sec"><h2>安全</h2><p class="lead">アレルギー等の安全事項は「開示の有無」のみを示し、対応可否は保証しません。必ず施設へご確認ください。</p></div>
-  <footer class="policy">© OpenStreetMap contributors / 千葉市（CC BY 4.0）</footer>
+<Base
+  title="出典・データポリシー｜こどもと、どこいく？千葉"
+  desc="データの出典・鮮度・安全事項の扱い、AI紹介文の方針、投稿ポリシーについて。"
+  active="">
+  <section>
+    <div class="sh"><h2>データの考え方</h2></div>
+
+    <div class="sec2"><h2>出典</h2>
+      <p class="note">スポットは千葉市オープンデータ（CC BY 4.0）と OpenStreetMap（ODbL）由来のデータで構成しています。各設備・座標はこれらの一次データに基づきます。トップのヒーロー画像は Kyu3「東山動植物園 遊園地（コーヒーカップと観覧車）」（CC BY-SA 4.0, via Wikimedia Commons）を参照しています。</p>
+    </div>
+
+    <div class="sec2"><h2>鮮度</h2>
+      <p class="note">信頼度を時間で下げず、掲載日を併記して鮮度の判断は利用者に委ねます。定期的に再取得して掲載日を更新します。データ取込は無料・鍵不要の公開データのみを使用します（有料の地図APIは使いません）。</p>
+    </div>
+
+    <div class="sec2"><h2>安全</h2>
+      <p class="note">授乳室・おむつ替え・トイレ、アレルギー対応などの安全・設備事項は「開示の有無」を示すにとどめ、対応可否は保証しません。必ず各施設の一次情報をご確認ください。</p>
+    </div>
+
+    <div class="sec2"><h2>AIによる紹介文</h2>
+      <p class="note">スポットの紹介文は、カテゴリ（種別）にもとづく一般的な説明です。AI（Gemini）で内容を補う場合は「AIによる紹介」と明記し、確認できない固有の事実（料金・営業・設備など）は書きません。「一日プラン」も候補スポットのみから構成し、DB外の事実は述べません。</p>
+    </div>
+
+    <div class="sec2"><h2>投稿について</h2>
+      <p class="note">一般の方からの口コミ・投稿は受け付けていません。施設の運営者による自己申告のみを受け付け、他ソースと突合したうえで反映します。</p>
+    </div>
+
+    <p class="note" style="margin-top:18px">出典：千葉市オープンデータ（CC BY 4.0）／© OpenStreetMap contributors（ODbL）。</p>
+  </section>
 </Base>
