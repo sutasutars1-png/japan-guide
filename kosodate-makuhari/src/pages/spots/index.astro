@@ -3,7 +3,7 @@ import Base from '../../layouts/Base.astro';
 import spots from '../../../data/spots.json';
 import { CATS } from '../../cats.js';
 
-const catMeta = Object.fromEntries(CATS.map(c => [c.key, { e: c.emoji, grad: c.grad, tags: c.tags, ageMin: c.ageMin, indoor: c.indoor }]));
+const catMeta = Object.fromEntries(CATS.map(c => [c.key, { e: c.emoji, svg: c.svg, grad: c.grad, tags: c.tags, ageMin: c.ageMin, indoor: c.indoor }]));
 const lite = spots.map(s => ({ id: s.id, name: s.name, cat: s.cat, lat: s.lat, lng: s.lng, am: s.amenities || [] }));
 const catKeys = CATS.map(c => c.key);
 ---
@@ -66,7 +66,8 @@ const catKeys = CATS.map(c => c.key);
       const m = catMeta[s.cat] || { e:'📍', grad:'linear-gradient(135deg,#A99BE0,#7C6BC0)', tags:[] };
       const tags = (m.tags||[]).map(t=>`<span class="b">${t}</span>`).join('');
       const am = (s.am||[]).map(a=>`<span class="b amenity">${a}</span>`).join('');
-      return `<a class="spot" href="/spots/${s.id}"><div class="thumb" style="background:${m.grad}">${m.e}</div>`
+      const vis = m.svg ? `<img src="${m.svg}" alt="" loading="lazy">` : m.e;
+      return `<a class="spot" href="/spots/${s.id}"><div class="thumb" style="background:${m.grad}">${vis}</div>`
         + `<div class="sbody"><div class="stag">${s.cat}</div><div class="sname">${s.name}</div>`
         + `<div class="badges">${tags}${am}</div></div></a>`;
     }

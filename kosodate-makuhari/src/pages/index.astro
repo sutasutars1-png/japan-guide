@@ -16,7 +16,7 @@ const pickCats = ["あそび場・体験", "動物とふれあう", "学ぶ・�
 const picks = pickCats.map(k => spots.find(s => s.cat === k)).filter(Boolean).slice(0, 4);
 
 // クライアント用の軽量データ（年齢別の横スクロール描画）
-const catMeta = Object.fromEntries(CATS.map(c => [c.key, { e: c.emoji, grad: c.grad, tags: c.tags, ageMin: c.ageMin }]));
+const catMeta = Object.fromEntries(CATS.map(c => [c.key, { e: c.emoji, svg: c.svg, grad: c.grad, tags: c.tags, ageMin: c.ageMin }]));
 const lite = spots.map(s => ({ id: s.id, name: s.name, cat: s.cat }));
 ---
 <Base
@@ -97,7 +97,8 @@ const lite = spots.map(s => ({ id: s.id, name: s.name, cat: s.cat }));
     function cardHTML(s){
       const m = catMeta[s.cat] || { e:'📍', grad:'linear-gradient(135deg,#A99BE0,#7C6BC0)', tags:[] };
       const badges = (m.tags||[]).map(t => `<span class="b">${t}</span>`).join('');
-      return `<a class="spot" href="/spots/${s.id}"><div class="thumb" style="background:${m.grad}">${m.e}</div>`
+      const vis = m.svg ? `<img src="${m.svg}" alt="" loading="lazy">` : m.e;
+      return `<a class="spot" href="/spots/${s.id}"><div class="thumb" style="background:${m.grad}">${vis}</div>`
         + `<div class="sbody"><div class="stag">${s.cat}</div><div class="sname">${s.name}</div>`
         + `<div class="badges">${badges}</div></div></a>`;
     }

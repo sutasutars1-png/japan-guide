@@ -37,7 +37,7 @@ const jsonld = {
         const c = catOf(s.cat);
         return (
           <a class="spot" href={`/spots/${s.id}`}>
-            <div class="thumb" style={`background:${c.grad}`}>{c.emoji}</div>
+            <div class="thumb" style={`background:${c.grad}`}><img src={c.svg} alt="" loading="lazy" /></div>
             <div class="sbody">
               <div class="stag">{s.cat}</div>
               <div class="sname">{s.name}</div>
