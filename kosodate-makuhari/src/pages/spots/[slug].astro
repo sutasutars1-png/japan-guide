@@ -2,6 +2,7 @@
 import Base from '../../layouts/Base.astro';
 import spots from '../../../data/spots.json';
 import { catOf } from '../../cats.js';
+import { affSlots } from '../../aff.js';
 
 export function getStaticPaths(){
   return spots.map(s => ({ params: { slug: s.id }, props: { spot: s } }));
@@ -16,17 +17,38 @@ const near = spots
   .slice(0, 3);
 
 const ageText = c.ageMin <= 0 ? "0歳ごろから楽しめます（目安）" : `${c.ageMin}歳ごろから楽しめます（目安）`;
+
+// §2 施設リンク（座標・名称から生成 or フォールバック。捏造しない）
+const q = encodeURIComponent(spot.name);
+const ll = `${spot.lat},${spot.lng}`;
+const official = spot.website
+  ? { url: spot.website, label: "公式サイト →", search: false }
+  : { url: `https://www.google.com/search?q=${q}`, label: `「${spot.name}」を検索 →`, search: true };
+const gmaps = `https://www.google.com/maps/search/?api=1&query=${ll}`;
+const route = `https://www.google.com/maps/dir/?api=1&destination=${ll}`;
+const apple = `https://maps.apple.com/?q=${q}&ll=${ll}`;
+
+// §1 画像：image_commons(File:...) がある時だけ Special:FilePath を外部参照
+const imgFile = (spot.image_commons || "").replace(/^File:/, "");
+const imgUrl = imgFile ? `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(imgFile)}?width=800` : "";
+const imgCredit = imgFile ? `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(imgFile)}` : "";
+
+// §3 アフィリ枠（環境変数OFFなら空配列＝非表示）
+const ads = affSlots(spot.cat);
+
+const wpUrl = spot.wp
+  ? `https://ja.wikipedia.org/wiki/${encodeURIComponent(String(spot.wp).replace(/^ja:/, ''))}`
+  : null;
+
 const jsonld = {
   "@context": "https://schema.org",
   "@type": "TouristAttraction",
   "name": spot.name,
   "description": spot.intro,
   "geo": { "@type": "GeoCoordinates", "latitude": spot.lat, "longitude": spot.lng },
-  "isAccessibleForFree": undefined
+  ...(spot.website ? { "url": spot.website } : {}),
+  ...(spot.phone ? { "telephone": spot.phone } : {})
 };
-const wpUrl = spot.wp
-  ? `https://ja.wikipedia.org/wiki/${encodeURIComponent(String(spot.wp).replace(/^ja:/, ''))}`
-  : null;
 ---
 <Base
   title={`${spot.name}｜${spot.cat}｜こどもと、どこいく？千葉`}
@@ -34,7 +56,7 @@ const wpUrl = spot.wp
   jsonld={jsonld}
   active="spots">
 
-  <div class="dhead" style={`background:${c.grad}`}>{c.emoji}</div>
+  {!imgUrl && <div class="dhead" style={`background:${c.grad}`}>{c.emoji}</div>}
 
   <section>
     <div class="crumb"><a href="/spots" style="color:var(--soft)">スポットを探す</a> › {spot.cat}</div>
@@ -42,38 +64,73 @@ const wpUrl = spot.wp
     <div class="badges" style="margin-bottom:12px">
       <span class="stag">{spot.cat}</span>
       {c.tags.map(t => <span class="b">{t}</span>)}
-      {(spot.amenities || []).map(a => <span class="b amenity">{a}</span>)}
     </div>
 
+    {/* ① 楽しさ紹介文（テンプレ・明記） */}
     <div class="intro">
       <span class="aiflag">カテゴリにもとづく紹介</span>
       <div>{spot.intro}</div>
     </div>
 
+    {/* ② 画像（あれば）／無ければ上部のカテゴリタイル */}
+    {imgUrl && (
+      <div class="sec2">
+        <img class="dimg" src={imgUrl} alt={spot.name} loading="lazy" referrerpolicy="no-referrer" />
+        <div class="dimg-credit">画像：<a href={imgCredit} target="_blank" rel="noopener">Wikimedia Commons</a>（各ライセンスは画像ページを参照）</div>
+      </div>
+    )}
+
+    {/* ③ 公式・地図/経路・電話（一次情報へ誘導） */}
+    <div class="sec2">
+      <h2>公式・地図・連絡先</h2>
+      <div class="links">
+        <a class="lbtn primary" href={official.url} target="_blank" rel="noopener">{official.label}</a>
+        <a class="lbtn" href={gmaps} target="_blank" rel="noopener">🗺 地図で開く</a>
+        <a class="lbtn" href={route} target="_blank" rel="noopener">🚗 経路</a>
+        <a class="lbtn" href={apple} target="_blank" rel="noopener"> Appleマップ</a>
+        {spot.phone && <a class="lbtn teal" href={`tel:${spot.phone.replace(/[^0-9+]/g,'')}`}>📞 {spot.phone}</a>}
+        {wpUrl && <a class="lbtn" href={wpUrl} target="_blank" rel="noopener">Wikipedia</a>}
+      </div>
+      {official.search && <p class="note" style="margin-top:6px">※ 公式サイトのデータが無いため検索リンクを表示しています。</p>}
+    </div>
+
+    {/* ④ 設備の小バッジ（補足・非保証） */}
+    <div class="sec2">
+      <h2>設備・安全について（補足）</h2>
+      <div class="badges" style="margin-bottom:6px">
+        {(spot.amenities && spot.amenities.length)
+          ? spot.amenities.map(a => <span class="b amenity">{a}</span>)
+          : <span class="b">設備情報なし</span>}
+      </div>
+      <p class="note">授乳室・おむつ替え・トイレ、アレルギー対応などの有無・対応可否は保証しません。最新情報は各施設の一次情報（上のリンク）をご確認ください。</p>
+    </div>
+
+    {/* ⑤ 【広告】アフィリ枠（従・PR表示・最大2枠。設定OFFなら非表示） */}
+    {ads.length > 0 && (
+      <div class="sec2">
+        <h2>関連サービス</h2>
+        {ads.map(a => (
+          <a class="ad" href={a.url} target="_blank" rel="sponsored nofollow noopener">
+            <span class="adlabel">広告・PR</span><b>{a.label}</b>
+            <span class="adnote">提携サイトへ移動します。内容・価格・在庫は提携先をご確認ください。</span>
+          </a>
+        ))}
+      </div>
+    )}
+
+    {/* こんな子におすすめ */}
     <div class="sec2">
       <h2>こんな子におすすめ</h2>
       <p class="note">{ageText}。小さな子とのおでかけは、無理のないスケジュールで楽しんでください。</p>
     </div>
 
-    <div class="sec2">
-      <h2>設備・安全について（補足）</h2>
-      <p class="note">
-        {(spot.amenities && spot.amenities.length)
-          ? <>把握できている設備：{spot.amenities.join('・')}。</>
-          : <>設備情報はこのデータには含まれていません。</>}
-        授乳室・おむつ替え・トイレ、アレルギー対応などの有無や対応可否は保証しません。最新情報は必ず各施設の一次情報をご確認ください。
-      </p>
-    </div>
-
-    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
-      <a class="cta" href="/plan">この辺で一日プランを組む →</a>
-      {wpUrl && <a class="cta teal" href={wpUrl} target="_blank" rel="noopener">Wikipediaで見る →</a>}
-    </div>
+    <div style="margin-top:14px"><a class="cta" href="/plan">この辺で楽しい一日プランを組む →</a></div>
 
     <div class="owner">
-      この施設の運営者の方へ：設備情報を自己申告いただけます（他ソースと突合後に反映。一般の方の投稿は受け付けていません）。 <a href="/api/claim">情報を更新する</a>
+      この施設の運営者の方へ：情報の更新・自己申告を受け付けます（他ソースと突合後に反映。一般の方の投稿は受け付けていません）。 <a href="/api/claim">情報を更新する</a>
     </div>
 
+    {/* ⑥ 近隣スポット */}
     <div class="sec2" style="margin-top:22px">
       <h2>近くのスポット</h2>
       <div class="grid" style="margin-top:10px">
@@ -89,6 +146,6 @@ const wpUrl = spot.wp
       </div>
     </div>
 
-    <p class="note" style="margin-top:18px">出典：千葉市（CC BY 4.0）／© OpenStreetMap contributors（ODbL）。</p>
+    <p class="note" style="margin-top:18px">出典：千葉市（CC BY 4.0）／© OpenStreetMap contributors（ODbL）。地図・検索リンクは座標・名称から生成しています（競合サイトへの送客・写真転載・URLの捏造はしていません）。</p>
   </section>
 </Base>
