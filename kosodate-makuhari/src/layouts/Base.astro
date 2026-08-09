@@ -5,12 +5,14 @@ const nav = [
   { href: "/features", label: "特集", key: "features" },
   { href: "/plan", label: "プラン", key: "plan" },
 ];
+const GTM_ID = "GTM-MXHVRS78"; // Google タグ マネージャー（空にすると無効化）
 ---
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  {GTM_ID && <script is:inline set:html={`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${GTM_ID}');`} />}
   <title>{title}</title>
   <meta name="description" content={desc} />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -20,6 +22,7 @@ const nav = [
   {jsonld && <script type="application/ld+json" set:html={JSON.stringify(jsonld)} />}
 </head>
 <body>
+  {GTM_ID && <noscript set:html={`<iframe src="https://www.googletagmanager.com/ns.html?id=${GTM_ID}" height="0" width="0" style="display:none;visibility:hidden"></iframe>`} />}
   <header class="hd"><div class="hdin">
     <a class="brand" href="/"><span class="logo">🎈</span>どこいこ？<small>千葉</small></a>
     <nav class="hnav">
