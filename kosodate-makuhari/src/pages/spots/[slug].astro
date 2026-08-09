@@ -124,7 +124,7 @@ const jsonld = {
       <p class="note">{ageText}。小さな子とのおでかけは、無理のないスケジュールで楽しんでください。</p>
     </div>
 
-    <div style="margin-top:14px"><a class="cta" href="/plan">この辺で楽しい一日プランを組む →</a></div>
+    <div style="margin-top:14px"><a class="cta" href={`/plan?center=${spot.id}`}>{spot.name}を中心に一日プランを組む →</a></div>
 
     <div class="owner">
       この施設の運営者の方へ：情報の更新・自己申告を受け付けます（他ソースと突合後に反映。一般の方の投稿は受け付けていません）。 <a href="/legal#contact">情報を更新する</a>

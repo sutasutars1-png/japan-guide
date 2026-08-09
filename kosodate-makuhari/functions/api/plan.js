@@ -18,10 +18,17 @@ export async function onRequestPost(context){
       "サーバに GEMINI_API_KEY が設定されていません。Pagesプロジェクトの環境変数に設定して再デプロイしてください。" ] });
   }
 
-  const { age, allergy, candidates } = await request.json();
-  const conditions = `子供:${age}歳帯 / 拠点:海浜幕張 / 移動:徒歩 / 安全:${allergy?"アレルギー配慮あり":"なし"}`;
-  const prompt = `候補地(JSON): ${JSON.stringify(candidates)}
+  const { age, allergy, candidates, span, rain, categories, amenities, center } = await request.json();
+  const parts = [`子供:${age}歳帯`, `所要:${span || "半日"}`, `移動:徒歩圏`];
+  if (center && center.name) parts.push(`起点:${center.name}（最初のstopは必ずここにし、以降はこの近くで構成する）`);
+  if (rain) parts.push(`天候:雨（屋内中心にする）`);
+  if (Array.isArray(categories) && categories.length) parts.push(`希望ジャンル:${categories.join("・")}`);
+  if (Array.isArray(amenities) && amenities.length) parts.push(`重視設備:${amenities.join("・")}（候補データにその設備がある場所を優先）`);
+  parts.push(`安全:${allergy ? "アレルギー配慮あり" : "指定なし"}`);
+  const conditions = parts.join(" / ");
+  const prompt = `候補地(JSON・各要素は{id,name,cat,amenities}): ${JSON.stringify(candidates)}
 条件: ${conditions}
+このリストのみを使い、リスト外の場所・事実は加えない。地域名や施設固有の事実は推測しない。
 次のJSON形式だけで出力: {"summary":str,"stops":[{"time":str,"name":str,"why":str,"caveats":[str]}],"data_gaps":[str]}`;
 
   // 既定は常に最新のFlashを指すエイリアス。RPDを増やしたい場合は環境変数 GEMINI_MODEL=gemini-flash-lite-latest

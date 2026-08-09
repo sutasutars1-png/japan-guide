@@ -3,28 +3,22 @@ import Base from '../layouts/Base.astro';
 import spots from '../../data/spots.json';
 import { CATS } from '../cats.js';
 
-// 楽しいスポット中心の候補を、カテゴリを一巡させて多様に最大40件
-const byCat = {};
-for (const s of spots) (byCat[s.cat] ||= []).push(s);
-const order = CATS.map(c => c.key);
-const candidates = [];
-let i = 0;
-while (candidates.length < 40 && order.some(k => (byCat[k] || [])[i])) {
-  for (const k of order) {
-    const s = (byCat[k] || [])[i];
-    if (s && candidates.length < 40) candidates.push({ id: s.id, name: s.name, cat: s.cat });
-  }
-  i++;
-}
+// 汎用（地域非依存）: データから条件の選択肢を生成
+const catList = CATS.map(c => ({ key: c.key, indoor: c.indoor }));
+const amenityOptions = [...new Set(spots.flatMap(s => s.amenities || []))].sort();
+const lite = spots.map(s => ({ id: s.id, name: s.name, cat: s.cat, lat: s.lat, lng: s.lng, am: s.amenities || [] }));
+const catIndoor = Object.fromEntries(CATS.map(c => [c.key, c.indoor]));
 ---
 <Base
   title="楽しい一日プランを組む｜こどもと、どこいこ？千葉"
-  desc="千葉のおでかけスポットから、こどもと楽しむ半日／一日プランをAIが提案。昼寝・食事・設備は配慮として添えます。"
+  desc="おでかけスポットから、こどもと楽しむ半日／一日プランをAIが提案。ジャンル・設備・天候などの条件で調整できます。"
   active="plan">
 
   <section>
     <div class="sh"><h2>楽しい一日プランを組む</h2></div>
     <p class="lead">条件を選ぶと、候補スポットの中から「楽しい半日／一日」の巡り方を提案します。設備・料金などの事実は断定せず、配慮ポイントを添えます。</p>
+
+    <div id="centerBanner" class="gaps" style="display:none;margin-top:12px"></div>
 
     <div class="field" style="margin-top:14px">
       <label>お子さまの年齢
@@ -35,6 +29,7 @@ while (candidates.length < 40 && order.some(k => (byCat[k] || [])[i])) {
         </select>
       </label>
     </div>
+
     <div class="field">
       <label>おでかけの長さ
         <select id="span" style="margin-left:8px">
@@ -43,10 +38,28 @@ while (candidates.length < 40 && order.some(k => (byCat[k] || [])[i])) {
         </select>
       </label>
     </div>
+
+    <div class="field">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px">遊びたいジャンル（任意・複数可）</div>
+      <div class="frow" id="cats">
+        {catList.map(c => <span class="chip" data-cat={c.key}>{c.key}</span>)}
+      </div>
+    </div>
+
+    {amenityOptions.length > 0 && (
+      <div class="field">
+        <div style="font-weight:700;font-size:14px;margin-bottom:8px">重視したい設備（任意・複数可）</div>
+        <div class="frow" id="ams">
+          {amenityOptions.map(a => <span class="chip" data-am={a}>{a}</span>)}
+        </div>
+      </div>
+    )}
+
     <div class="field">
       <label><input type="checkbox" id="rain" /> 雨の日（屋内中心にする）</label><br />
       <label style="display:inline-block;margin-top:8px"><input type="checkbox" id="allergy" checked /> 食事はアレルギーに配慮</label>
     </div>
+
     <button class="cta" id="go" style="border:none;cursor:pointer">プランを組む →</button>
 
     <div id="out" style="margin-top:18px"></div>
@@ -54,18 +67,63 @@ while (candidates.length < 40 && order.some(k => (byCat[k] || [])[i])) {
     <p class="note" style="margin-top:16px">生成はサーバ関数（/api/plan）が Gemini（無料枠）を呼び、候補スポットのみから構成します。DB外の事実は述べません。楽しみ方の紹介であり、設備・料金・営業などは各施設の一次情報をご確認ください。</p>
   </section>
 
-  <script define:vars={{ candidates }}>
-    const btn = document.getElementById('go');
-    btn.onclick = async () => {
+  <script define:vars={{ lite, catIndoor }}>
+    const selCats = new Set(), selAms = new Set();
+    const params = new URLSearchParams(location.search);
+    const CENTER = params.get('center');
+    let centerSpot = CENTER ? lite.find(s => s.id === CENTER) : null;
+
+    // 起点スポットのバナー＋関連ジャンルの初期選択
+    if (centerSpot) {
+      const b = document.getElementById('centerBanner');
+      b.style.display = '';
+      b.innerHTML = `<b>「${centerSpot.name}」を中心に組みます</b><div class="gap">このスポットを起点に、近くのおでかけ先で一日を提案します。</div>`;
+    }
+    // 事前選択：URLの ?cat= があれば
+    if (params.get('cat')) selCats.add(params.get('cat'));
+    if (params.get('rain') === '1') document.getElementById('rain').checked = true;
+
+    function syncChips(sel, root){ document.querySelectorAll(`#${root} .chip`).forEach(x=>{
+      const v = x.dataset.cat ?? x.dataset.am; x.classList.toggle('on', sel.has(v)); }); }
+    document.querySelectorAll('#cats .chip').forEach(b => b.onclick = () => { const v=b.dataset.cat; selCats.has(v)?selCats.delete(v):selCats.add(v); syncChips(selCats,'cats'); });
+    document.querySelectorAll('#ams .chip').forEach(b => b.onclick = () => { const v=b.dataset.am; selAms.has(v)?selAms.delete(v):selAms.add(v); syncChips(selAms,'ams'); });
+    syncChips(selCats,'cats');
+
+    const dist = (a,b)=>Math.hypot((a.lat-b.lat)*111,(a.lng-b.lng)*91);
+    function diversify(pool, n){
+      const byCat = {}; pool.forEach(s => (byCat[s.cat] ||= []).push(s));
+      const cats = Object.keys(byCat); const out = []; let i=0;
+      while (out.length < n && cats.some(c => byCat[c][i])) { for (const c of cats){ if (byCat[c][i] && out.length<n) out.push(byCat[c][i]); } i++; }
+      return out;
+    }
+    function buildCandidates(rain){
+      let pool = lite.slice();
+      if (selCats.size) pool = pool.filter(s => selCats.has(s.cat));
+      if (rain) pool = pool.filter(s => catIndoor[s.cat]);
+      if (selAms.size) pool = pool.filter(s => [...selAms].every(a => s.am.includes(a)));
+      if (!pool.length) pool = lite.slice(); // 条件が厳しすぎたら全体から
+      if (centerSpot){
+        pool = pool.slice().sort((a,b)=>dist(a,centerSpot)-dist(b,centerSpot)).slice(0,30);
+        pool = [centerSpot, ...pool.filter(s => s.id !== centerSpot.id)];
+      } else {
+        pool = diversify(pool, 40);
+      }
+      return pool.slice(0,30).map(s => ({ id:s.id, name:s.name, cat:s.cat, amenities:s.am }));
+    }
+
+    document.getElementById('go').onclick = async () => {
       const out = document.getElementById('out');
       const rain = document.getElementById('rain').checked;
       out.innerHTML = '<div class="gaps">楽しいプランを組み立て中…</div>';
       const body = {
         age: document.getElementById('age').value,
-        allergy: document.getElementById('allergy').checked,
-        candidates,
         span: document.getElementById('span').value,
-        rain
+        allergy: document.getElementById('allergy').checked,
+        rain,
+        categories: [...selCats],
+        amenities: [...selAms],
+        center: centerSpot ? { name: centerSpot.name } : null,
+        candidates: buildCandidates(rain)
       };
       try {
         const r = await fetch('/api/plan', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(body) });
