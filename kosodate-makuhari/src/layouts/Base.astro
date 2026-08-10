@@ -6,6 +6,7 @@ const nav = [
   { href: "/plan", label: "プラン", key: "plan" },
 ];
 const GA_ID = "G-3EXGYJ5D9X"; // Google アナリティクス（GA4）測定ID（空にすると無効化）
+const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : undefined;
 ---
 <!DOCTYPE html>
 <html lang="ja">
@@ -16,6 +17,7 @@ const GA_ID = "G-3EXGYJ5D9X"; // Google アナリティクス（GA4）測定ID�
   {GA_ID && <script is:inline set:html={`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}');`} />}
   <title>{title}</title>
   <meta name="description" content={desc} />
+  {canonical && <link rel="canonical" href={canonical} />}
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" />

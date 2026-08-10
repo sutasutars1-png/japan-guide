@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://dokoiko.aipress-lab.com/sitemap.xml
