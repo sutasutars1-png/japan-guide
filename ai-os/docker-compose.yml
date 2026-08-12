@@ -1,0 +1,62 @@
+# AI-OS · Execution Plane — reproducible local stack (Phase 0)
+# DoD: `git clone` → `docker compose up` boots Postgres + api + web in one command.
+# Everything runs locally. No paid infra. Only the LLM is pay-per-use (Phase 4+).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aios}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aios_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-aios}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aios} -d ${POSTGRES_DB:-aios}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-aios}:${POSTGRES_PASSWORD:-aios_dev_password}@db:5432/${POSTGRES_DB:-aios}
+      AIOS_ENV: ${AIOS_ENV:-development}
+      # SandboxRuntime backend: "docker" (isolated, default) or "local" (DEV ONLY, unsafe).
+      SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-docker}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-python:3.11-slim}
+      # Never commit real keys — provide them via .env (git-ignored).
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    # Phase 2: the Execution Manager talks to the host Docker daemon to spawn
+    # single-use, non-root sandbox containers. Mounting the socket is required
+    # for the Docker SandboxRuntime; it is NEVER mounted into a sandbox itself.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  web:
+    build:
+      context: ./apps/web
+    restart: unless-stopped
+    environment:
+      # Browser talks to the api via the host-published port.
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000}
+      NODE_ENV: ${NODE_ENV:-development}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
