@@ -17,47 +17,63 @@ export async function fetchJSON<T>(path: string, fallback: T): Promise<T> {
 
 export type LogLine = { t: string; s: string };
 
-// Open a live execution stream. Returns a cleanup function.
-// onLine is called per log line; onDone when the stream closes.
+// Shared WebSocket opener: connects to `path`, sends `payload`, streams log
+// lines to onLine, and calls onDone once (on "stream closed" / error / close).
+// Returns a cleanup function.
+function openStream(
+  path: string,
+  payload: Record<string, unknown>,
+  onLine: (line: LogLine) => void,
+  onDone: () => void,
+): () => void {
+  let ws: WebSocket | null = null;
+  let closed = false;
+  const done = () => {
+    if (!closed) {
+      closed = true;
+      onDone();
+    }
+  };
+  try {
+    const url = API_BASE.replace(/^http/, "ws") + path;
+    ws = new WebSocket(url);
+    ws.onopen = () => ws?.send(JSON.stringify(payload));
+    ws.onmessage = (ev) => {
+      try {
+        const line = JSON.parse(ev.data) as LogLine;
+        if (line.s === "stream closed") done();
+        else onLine(line);
+      } catch {
+        /* ignore malformed frame */
+      }
+    };
+    ws.onerror = () => done();
+    ws.onclose = () => done();
+  } catch {
+    done();
+  }
+  return () => {
+    closed = true;
+    ws?.close();
+  };
+}
+
+// Phase 2: run one command in the sandbox. approved=true means the human OK'd it.
 export function streamExecution(
   onLine: (line: LogLine) => void,
   onDone: () => void,
   command?: string,
   approved = false,
 ): () => void {
-  let ws: WebSocket | null = null;
-  let closed = false;
-  try {
-    const url = API_BASE.replace(/^http/, "ws") + "/execution/stream";
-    ws = new WebSocket(url);
-    ws.onopen = () => {
-      // No command → the server replays the scripted demo live.
-      // approved=true means the human OK'd this exact command in the modal.
-      ws?.send(JSON.stringify(command ? { command, approved } : {}));
-    };
-    ws.onmessage = (ev) => {
-      try {
-        const line = JSON.parse(ev.data) as LogLine;
-        if (line.s === "stream closed") {
-          onDone();
-        } else {
-          onLine(line);
-        }
-      } catch {
-        /* ignore malformed frame */
-      }
-    };
-    ws.onerror = () => {
-      if (!closed) onDone();
-    };
-    ws.onclose = () => {
-      if (!closed) onDone();
-    };
-  } catch {
-    onDone();
-  }
-  return () => {
-    closed = true;
-    ws?.close();
-  };
+  return openStream("/execution/stream", command ? { command, approved } : {}, onLine, onDone);
+}
+
+// Phase 4: give a goal and watch the PLAN→EXECUTE→OBSERVE loop drive.
+export function streamAgent(
+  onLine: (line: LogLine) => void,
+  onDone: () => void,
+  goal: string,
+  maxIterations = 8,
+): () => void {
+  return openStream("/agent/stream", { goal, max_iterations: maxIterations }, onLine, onDone);
 }

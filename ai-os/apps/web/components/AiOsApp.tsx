@@ -4,7 +4,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { fetchJSON, streamExecution } from "@/lib/api";
+import { fetchJSON, streamExecution, streamAgent } from "@/lib/api";
 
 /* ============================================================
    AI-OS · Execution Plane — Phase 1 UI
@@ -206,6 +206,21 @@ export default function App(){
       approved,
     );
   };
+
+  // Phase 4: give the AI a goal and watch the PLAN→EXECUTE→OBSERVE loop.
+  const runGoal=(goal)=>{
+    if(!goal||!goal.trim())return;
+    if(runCleanup.current)runCleanup.current();
+    setApproval(null);
+    setLive(true);
+    setLines([]);
+    setRunning(true);
+    runCleanup.current=streamAgent(
+      (line)=>setLines(p=>[...p,line]),
+      ()=>setRunning(false),
+      goal.trim(),
+    );
+  };
   useEffect(()=>{
     if(!running)return;
     const id=setInterval(()=>{
@@ -253,7 +268,7 @@ export default function App(){
           <TopBar view={view} activeModel={activeAgent.model} running={running}/>
           <div style={{flex:1,minHeight:0,display:"flex"}}>
             {view==="exec" && <ExecView {...{proj,setProj,lines,running,elapsed:fmt(elapsed),
-              cpu,ram,net,tokens,agents,comments,logRef,askApproval,activeAgent,onRun:runCommand,live}}/>}
+              cpu,ram,net,tokens,agents,comments,logRef,askApproval,activeAgent,onRun:runCommand,onGoal:runGoal,live}}/>}
             {view==="agents" && <AgentsView agents={agents} setAgents={setAgents}/>}
             {view==="flow" && <FlowView agents={agents}/>}
             {view==="data" && <DataView proj={proj} setProj={setProj}/>}
@@ -331,7 +346,7 @@ function ExecView(p){
         <SandboxPane lines={p.lines} running={p.running} elapsed={p.elapsed}
           cpu={p.cpu} ram={p.ram} logRef={p.logRef} model={p.activeAgent.model}/>
         <AiComments comments={p.comments}/>
-        <CommandBar disabled={p.running} onRun={p.onRun}/>
+        <CommandBar disabled={p.running} onRun={p.onRun} onGoal={p.onGoal}/>
       </main>
       <StatusRail {...p}/>
     </>
@@ -496,19 +511,40 @@ function AiComments({comments}){
     </div>
   );
 }
-function CommandBar({disabled,onRun}){
+function CommandBar({disabled,onRun,onGoal}){
   const [v,setV]=useState("");
-  const send=()=>{ if(disabled||!v.trim())return; onRun&&onRun(v); setV(""); };
+  const [mode,setMode]=useState("goal"); // "goal" = give the AI a goal | "cmd" = raw command
+  const send=()=>{
+    if(disabled||!v.trim())return;
+    if(mode==="goal") onGoal&&onGoal(v); else onRun&&onRun(v);
+    setV("");
+  };
+  const isGoal=mode==="goal";
   return (
-    <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:"var(--panel)",
+    <div style={{display:"flex",flexDirection:"column",gap:8,padding:"9px 12px",background:"var(--panel)",
       border:"1px solid var(--line)",borderRadius:12}}>
-      <span className="disp" style={{fontSize:13,fontWeight:600,color:"var(--live)"}}>›</span>
-      <input value={v} onChange={e=>setV(e.target.value)}
-        onKeyDown={e=>{ if(e.key==="Enter")send(); }}
-        placeholder={disabled?"実行中…":'サンドボックスで実行するコマンド（例: python -c "print(2+2)"）'}
-        style={{flex:1,border:"none",outline:"none",fontSize:13.5,background:"transparent",color:"var(--ink)"}}/>
-      <button onClick={send} style={{padding:"7px 15px",borderRadius:8,background:"var(--live)",color:"#04120f",
-        fontSize:13,fontWeight:600,opacity:disabled?.4:1,cursor:disabled?"default":"pointer"}}>Send</button>
+      <div style={{display:"flex",gap:4}}>
+        {[["goal","✨ AIにゴールを渡す"],["cmd","› コマンドを直接実行"]].map(([id,l])=>(
+          <button key={id} onClick={()=>setMode(id)} className="mono"
+            style={{fontSize:10.5,padding:"4px 10px",borderRadius:7,
+              background:mode===id?(id==="goal"?"var(--aiSoft)":"var(--liveSoft)"):"transparent",
+              border:`1px solid ${mode===id?(id==="goal"?"rgba(140,125,242,.4)":"rgba(18,199,185,.4)"):"var(--line)"}`,
+              color:mode===id?(id==="goal"?"var(--ai)":"var(--live)"):"var(--ink3)"}}>{l}</button>
+        ))}
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <span className="disp" style={{fontSize:13,fontWeight:600,color:isGoal?"var(--ai)":"var(--live)"}}>{isGoal?"✨":"›"}</span>
+        <input value={v} onChange={e=>setV(e.target.value)}
+          onKeyDown={e=>{ if(e.key==="Enter")send(); }}
+          placeholder={disabled?"実行中…":isGoal
+            ?"やってほしいことを書く（例: 数字[3,1,4,1,5]の合計と最大を求めて報告して）"
+            :'サンドボックスで実行するコマンド（例: python -c "print(2+2)"）'}
+          style={{flex:1,border:"none",outline:"none",fontSize:13.5,background:"transparent",color:"var(--ink)"}}/>
+        <button onClick={send} style={{padding:"7px 15px",borderRadius:8,
+          background:isGoal?"var(--ai)":"var(--live)",color:"#04120f",
+          fontSize:13,fontWeight:600,opacity:disabled?.4:1,cursor:disabled?"default":"pointer"}}>
+          {isGoal?"Run":"Send"}</button>
+      </div>
     </div>
   );
 }
