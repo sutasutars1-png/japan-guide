@@ -15,7 +15,11 @@ __all__ = [
 
 
 def get_llm_provider(name: str | None = None) -> LLMProvider:
-    name = (name or os.getenv("LLM_PROVIDER", "anthropic")).lower()
+    name = (name or os.getenv("LLM_PROVIDER", "gemini")).lower()
+    if name == "gemini":
+        from .gemini_provider import GeminiProvider
+
+        return GeminiProvider()
     if name == "anthropic":
         from .anthropic_provider import AnthropicProvider
 

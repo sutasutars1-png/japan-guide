@@ -45,6 +45,14 @@ def test_tools_lists_shell():
     assert "shell.execute" in names
 
 
+def test_llm_status_reports_provider_and_model():
+    r = client.get("/llm")
+    body = r.json()
+    assert body["provider"] == "gemini"
+    assert body["model"].startswith("gemini")
+    assert isinstance(body["key_present"], bool)
+
+
 def test_approval_flow():
     created = client.post(
         "/approvals",
