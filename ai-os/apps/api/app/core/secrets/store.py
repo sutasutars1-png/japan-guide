@@ -25,7 +25,8 @@ class SecretStore:
 
     def _load_from_env(self) -> None:
         # Well-known secret-bearing env vars are auto-registered for masking.
-        for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GITHUB_TOKEN", "POSTGRES_PASSWORD"):
+        for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
+                    "GOOGLE_API_KEY", "GITHUB_TOKEN", "POSTGRES_PASSWORD"):
             val = os.getenv(key)
             if val:
                 self.set(key, val)

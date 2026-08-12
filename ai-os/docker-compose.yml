@@ -31,8 +31,10 @@ services:
       SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-docker}
       SANDBOX_IMAGE: ${SANDBOX_IMAGE:-python:3.11-slim}
       # Never commit real keys — provide them via .env (git-ignored).
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.5-flash}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     ports:
       - "${API_PORT:-8000}:8000"
