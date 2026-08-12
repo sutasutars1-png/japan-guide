@@ -49,7 +49,10 @@ async def run(body: RunCommand) -> list[dict]:
     lines: list[dict] = []
     try:
         async for line in mgr.run(
-            body.command, actor=body.actor, allow_domains=body.allow_domains
+            body.command,
+            actor=body.actor,
+            allow_domains=body.allow_domains,
+            approved=body.approved,
         ):
             lines.append({"t": line.t, "s": line.s})
     except Exception as exc:  # noqa: BLE001
@@ -78,7 +81,11 @@ async def stream(ws: WebSocket) -> None:
 
         if first and first.get("command"):
             mgr = get_execution_manager()
-            async for line in mgr.run(first["command"], actor=first.get("actor", "Builder")):
+            async for line in mgr.run(
+                first["command"],
+                actor=first.get("actor", "Builder"),
+                approved=bool(first.get("approved", False)),
+            ):
                 await ws.send_json({"t": line.t, "s": line.s})
         else:
             for entry in seed.SCRIPT:

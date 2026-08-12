@@ -69,6 +69,7 @@ class RunCommand(BaseModel):
     command: str
     actor: str = "Builder"
     allow_domains: list[str] = Field(default_factory=list)
+    approved: bool = False  # set true after the human OK'd it in the Approval modal
 
 
 class PolicyCheck(BaseModel):

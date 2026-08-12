@@ -47,3 +47,22 @@ def test_git_push_requires_approval():
     d = evaluate("git push origin main")
     assert d.requires_approval is True
     assert d.risk >= RiskLevel.HIGH
+
+
+def test_rm_rf_dir_requires_approval_but_is_allowed():
+    # destructive but not catastrophic → pause for approval, not an outright block
+    d = evaluate("rm -rf ./build")
+    assert d.allowed is True
+    assert d.requires_approval is True
+    assert d.risk >= RiskLevel.HIGH
+
+
+def test_rm_fr_and_separate_flags_also_require_approval():
+    assert evaluate("rm -fr node_modules").requires_approval is True
+    assert evaluate("rm -r -f dist").requires_approval is True
+
+
+def test_rm_rf_root_is_still_blocked_not_approvable():
+    d = evaluate("rm -rf /")
+    assert d.allowed is False
+    assert d.requires_approval is False

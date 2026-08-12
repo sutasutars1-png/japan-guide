@@ -57,6 +57,10 @@ def evaluate(command: str) -> PolicyDecision:
 
     lowered = normalized.lower()
     risk = _classify(lowered)
+    # A recursive-force delete of a non-root path isn't catastrophic (so it's not
+    # blocked outright above) but is destructive — pause it for human approval.
+    if _is_recursive_force_rm(lowered):
+        risk = max(risk, RiskLevel.HIGH)
     requires_approval = risk >= RiskLevel.HIGH
     return PolicyDecision(
         allowed=True,
@@ -64,6 +68,25 @@ def evaluate(command: str) -> PolicyDecision:
         reason="ok" if not requires_approval else "high-risk action requires human approval",
         requires_approval=requires_approval,
     )
+
+
+def _is_recursive_force_rm(lowered: str) -> bool:
+    """True if the command runs `rm` with both a recursive and a force flag,
+    in any order/spelling (-rf, -fr, -r -f, -Rf, --recursive --force …)."""
+    try:
+        tokens = shlex.split(lowered)
+    except ValueError:
+        tokens = lowered.split()
+    if "rm" not in tokens:
+        return False
+    flags = [t for t in tokens if t.startswith("-")]
+    recursive = ("--recursive" in flags) or any(
+        "r" in f for f in flags if not f.startswith("--")
+    )
+    force = ("--force" in flags) or any(
+        "f" in f for f in flags if not f.startswith("--")
+    )
+    return recursive and force
 
 
 def _classify(lowered: str) -> RiskLevel:

@@ -55,8 +55,14 @@ class ExecutionManager:
         *,
         actor: str = "Builder",
         allow_domains: list[str] | None = None,
+        approved: bool = False,
     ) -> AsyncIterator[LogLine]:
-        """Run one command in a fresh sandbox, yielding UI-shaped log lines."""
+        """Run one command in a fresh sandbox, yielding UI-shaped log lines.
+
+        `approved=True` means a human already OK'd this exact command in the
+        Approval modal, so the L3/L4 gate is skipped — but a *blocked* command
+        (rm -rf /, mkfs, …) never runs, even with approval.
+        """
         job = Job(id="job-" + uuid.uuid4().hex[:8], command=command)
         self._jobs[job.id] = job
 
@@ -68,13 +74,16 @@ class ExecutionManager:
             log.append(AuditEvent("policy.block", actor, decision.reason, int(decision.risk)))
             yield line
             return
-        if decision.requires_approval:
+        if decision.requires_approval and not approved:
             job.status = "halted"
-            line = LogLine("halt", f"{actor} requests approval: {command} (L{int(decision.risk)})")
+            line = LogLine("halt", f"approval required · {command} · L{int(decision.risk)}")
             job.lines.append(line)
             log.append(AuditEvent("approval.request", actor, command, int(decision.risk)))
             yield line
             return
+        if decision.requires_approval and approved:
+            log.append(AuditEvent("approval.granted", "human", command, int(decision.risk)))
+            yield self._emit(job, "ok", f"approved by you · running (L{int(decision.risk)})")
 
         spec = SandboxSpec(
             limits=ResourceLimits(),
