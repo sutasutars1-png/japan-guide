@@ -42,8 +42,21 @@ class DockerSandboxRuntime(SandboxRuntime):
             self._client = docker.from_env()
         return self._client
 
+    def _ensure_image(self, image: str) -> None:
+        """Pull the sandbox image on first use if it isn't present locally.
+
+        Without this, a fresh machine fails container create with
+        'No such image: <image>'. The pull happens once; later runs are instant.
+        """
+        client = self._ensure_client()
+        try:
+            client.images.get(image)
+        except Exception:  # noqa: BLE001 — ImageNotFound (and any transport hiccup)
+            client.images.pull(image)
+
     async def create(self, spec: SandboxSpec) -> SandboxHandle:
         client = self._ensure_client()
+        await asyncio.to_thread(self._ensure_image, spec.image)
         sbx_id = "sbx-" + uuid.uuid4().hex[:6]
 
         # network: default deny → attach to the isolated "none" network, then

@@ -84,11 +84,17 @@ async def stream(ws: WebSocket) -> None:
             for entry in seed.SCRIPT:
                 await ws.send_json(entry)
                 await asyncio.sleep(0.76)
-        await ws.send_json({"t": "sys", "s": "stream closed"})
     except WebSocketDisconnect:
         return
     except Exception as exc:  # noqa: BLE001
         try:
             await ws.send_json({"t": "err", "s": f"stream error: {exc}"})
+        except Exception:
+            pass
+    finally:
+        # Always send the terminal signal so the UI unlocks the input,
+        # even when the run errored. Best-effort — the socket may be gone.
+        try:
+            await ws.send_json({"t": "sys", "s": "stream closed"})
         except Exception:
             pass

@@ -80,6 +80,8 @@ class ExecutionManager:
             limits=ResourceLimits(),
             network=NetworkPolicy(default_deny=True, allow_domains=allow_domains or []),
         )
+        # Give immediate feedback: the first run may download the sandbox image.
+        yield self._emit(job, "sys", "preparing sandbox… (first run may download the image)")
         handle = await self._runtime.create(spec)
         job.status = "running"
         log.append(
