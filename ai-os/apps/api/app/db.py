@@ -47,3 +47,23 @@ def init_db() -> bool:
     except Exception as exc:  # noqa: BLE001 — boot must survive a missing DB
         log.warning("database unavailable, continuing without persistence: %s", exc)
         return False
+
+
+def audit_sink(event) -> None:
+    """Append one audit event to the append-only audit_logs table.
+
+    Registered on the in-memory AuditLog at startup. Best-effort: any failure is
+    swallowed by the caller so a DB hiccup never breaks an execution.
+    """
+    if SessionLocal is None:
+        return
+    with SessionLocal() as session:
+        session.add(
+            AuditLogRow(
+                kind=event.kind,
+                actor=event.actor,
+                risk=event.risk,
+                summary=event.summary,
+            )
+        )
+        session.commit()

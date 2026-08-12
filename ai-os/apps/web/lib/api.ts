@@ -23,6 +23,7 @@ export function streamExecution(
   onLine: (line: LogLine) => void,
   onDone: () => void,
   command?: string,
+  approved = false,
 ): () => void {
   let ws: WebSocket | null = null;
   let closed = false;
@@ -31,7 +32,8 @@ export function streamExecution(
     ws = new WebSocket(url);
     ws.onopen = () => {
       // No command → the server replays the scripted demo live.
-      ws?.send(JSON.stringify(command ? { command } : {}));
+      // approved=true means the human OK'd this exact command in the modal.
+      ws?.send(JSON.stringify(command ? { command, approved } : {}));
     };
     ws.onmessage = (ev) => {
       try {

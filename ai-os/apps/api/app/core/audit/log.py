@@ -44,6 +44,13 @@ class AuditLog:
         self._events: list[AuditEvent] = []
         self._max = max_memory
         self._lock = threading.Lock()
+        # Optional durable sink (e.g. Postgres). Wired at startup so this core
+        # module stays decoupled from the database layer.
+        self._sink = None
+
+    def set_sink(self, sink) -> None:
+        """Register a durable sink called for every appended event."""
+        self._sink = sink
 
     def append(self, event: AuditEvent) -> AuditEvent:
         event = event.redacted()
@@ -52,7 +59,11 @@ class AuditLog:
             if len(self._events) > self._max:
                 # trim the in-memory mirror only; the durable store keeps all.
                 self._events = self._events[-self._max :]
-        # Phase 2 follow-up: also INSERT into postgres audit_logs (append-only).
+        if self._sink is not None:
+            try:
+                self._sink(event)  # append-only INSERT into audit_logs
+            except Exception:  # noqa: BLE001 — never let persistence break a run
+                pass
         return event
 
     def tail(self, n: int = 100) -> list[dict[str, Any]]:

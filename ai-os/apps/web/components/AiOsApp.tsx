@@ -181,16 +181,29 @@ export default function App(){
   useEffect(()=>{ if(!live&&lines.length>=script.length)setRunning(false); },[lines,script,live]);
 
   // Phase 2: run a real command in the sandbox and stream live logs.
-  const runCommand=(cmd)=>{
+  // Phase 3: an "approval required" halt pops the Approval modal.
+  const runCommand=(cmd,approved=false)=>{
     if(!cmd||!cmd.trim())return;
     if(runCleanup.current)runCleanup.current();
+    const c=cmd.trim();
+    setApproval(null);
     setLive(true);
     setLines([]);
     setRunning(true);
     runCleanup.current=streamExecution(
-      (line)=>setLines(p=>[...p,line]),
+      (line)=>{
+        setLines(p=>[...p,line]);
+        if(line.t==="halt" && typeof line.s==="string" && line.s.startsWith("approval required")){
+          const m=line.s.match(/L(\d)/);
+          const risk=m?parseInt(m[1],10):3;
+          setApproval({agent:"Builder",action:"コマンドを実行",target:c,risk,
+            reason:"破壊的または高リスクな操作です。実行にはあなたの承認が必要です。",
+            changes:c,command:c});
+        }
+      },
       ()=>setRunning(false),
-      cmd.trim(),
+      c,
+      approved,
     );
   };
   useEffect(()=>{
@@ -212,12 +225,21 @@ export default function App(){
     reason:"This modifies live production data. It cannot be automatically undone.",
     changes:"upsert 1,284 rows"});
   const decide=(ok)=>{
+    const a=approval;
+    setApproval(null);
+    // Real command approval (from a live run): approve re-runs it for real,
+    // reject blocks it. The request was already recorded in the audit log.
+    if(a&&a.command){
+      if(ok){ runCommand(a.command,true); }
+      else { setLines(l=>[...l,{t:"halt",s:`拒否しました · ${a.command} は実行しません`}]); }
+      return;
+    }
+    // Demo button (fake prod-DB write) — original mock behavior.
     setLines(l=>[...l,ok?{t:"ok",s:"approved by you · Executor writing to prod db"}
                         :{t:"halt",s:"rejected by you · write blocked, no changes made"}]);
     setComments(c=>[...c,{who:"Executor",model:"claude-opus-4-8",type:ok?"answer":"proceed",risk:ok?2:0,
       text:ok?"Approval received. Writing 1,284 rows to the production database now."
              :"Understood — I will not write to production. Leaving the data unchanged."}]);
-    setApproval(null);
   };
 
   const activeAgent=agents.find(a=>a.state==="run")||agents[0];
@@ -870,6 +892,15 @@ function ConnectionsView(){
 
 /* ======================= GUARDRAILS VIEW ======================= */
 function GuardrailsView(){
+  const [audit,setAudit]=useState([]);
+  useEffect(()=>{
+    let on=true;
+    const load=()=>fetchJSON("/execution/audit",[]).then(a=>{ if(on&&Array.isArray(a))setAudit(a.slice().reverse()); });
+    load();
+    const id=setInterval(load,4000);
+    return ()=>{on=false;clearInterval(id);};
+  },[]);
+  const kindColor=(k)=>k.includes("block")?"var(--r4)":k.includes("approval")?"var(--r3)":k.includes("command")?"var(--live)":"var(--ink3)";
   return (
     <main style={{flex:1,overflowY:"auto",padding:"22px 26px",maxWidth:860}}>
       <h2 className="disp" style={{margin:"0 0 4px",fontSize:20,fontWeight:600}}>Guardrails</h2>
@@ -887,6 +918,26 @@ function GuardrailsView(){
             </div>
             <div style={{fontSize:12.5,color:"var(--ink2)",lineHeight:1.55,marginBottom:9}}>{g.desc}</div>
             <div className="mono" style={{fontSize:11,color:g.hits.includes("block")||g.hits.includes("pending")?"var(--warn)":"var(--ink3)"}}>{g.hits}</div>
+          </div>
+        ))}
+      </div>
+
+      <h2 className="disp" style={{margin:"30px 0 4px",fontSize:20,fontWeight:600}}>Audit log</h2>
+      <p style={{margin:"0 0 14px",fontSize:12.5,color:"var(--ink2)"}}>
+        すべての操作の記録(追記のみ)。実行・ブロック・承認がここに残ります。
+      </p>
+      <div style={{borderRadius:12,overflow:"hidden",border:"1px solid var(--line)"}}>
+        {audit.length===0 &&
+          <div style={{padding:"16px",fontSize:12.5,color:"var(--ink3)"}}>
+            まだ記録がありません。Execution でコマンドを実行すると、ここに記録されます。
+          </div>}
+        {audit.map((e,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:11,padding:"9px 14px",
+            background:"var(--panel)",borderTop:i>0?"1px solid var(--line)":"none"}}>
+            <RiskBadge level={e.risk||0} tiny/>
+            <span className="mono" style={{fontSize:11,color:kindColor(e.kind||""),minWidth:130}}>{e.kind}</span>
+            <span style={{fontSize:12.5,color:"var(--ink2)",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.summary}</span>
+            <span className="mono" style={{fontSize:10.5,color:"var(--ink3)"}}>{typeof e.at==="string"?e.at.slice(11,19):""}</span>
           </div>
         ))}
       </div>

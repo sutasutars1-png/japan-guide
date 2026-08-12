@@ -13,8 +13,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
+from .core.audit import log as audit_log
 from .core.secrets import store as secret_store
-from .db import init_db
+from .db import audit_sink, init_db
 from .routers import approvals, catalog, execution, tools
 
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +24,8 @@ log = logging.getLogger("aios")
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    init_db()  # best-effort; API works without it
+    if init_db():  # best-effort; API works without it
+        audit_log.set_sink(audit_sink)  # persist audit events to Postgres
     log.info(
         "AI-OS API up · env=%s · sandbox=%s · masking %d secrets",
         settings.env, settings.sandbox_runtime, len(secret_store.names()),
