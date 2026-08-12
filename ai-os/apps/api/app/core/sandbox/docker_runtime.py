@@ -88,22 +88,42 @@ class DockerSandboxRuntime(SandboxRuntime):
         started = time.monotonic()
         yield ExecChunk("system", f"$ {' '.join(command)}")
 
-        def _exec():
-            return container.exec_run(command, stream=True, demux=True, user=str(NON_ROOT_UID))
+        # Stream output live: a worker thread pumps the blocking docker exec
+        # generator into an asyncio queue so lines reach the UI as they happen
+        # instead of all at once when the command finishes.
+        api = self._client.api
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+        exec_id = await asyncio.to_thread(
+            lambda: api.exec_create(container.id, command, user=str(NON_ROOT_UID))["Id"]
+        )
 
-        exec_result = await asyncio.to_thread(_exec)
-        # exec_result.output is a generator of (stdout, stderr) byte tuples
-        for stdout_b, stderr_b in exec_result.output:
-            if stdout_b:
-                for line in stdout_b.decode("utf-8", "replace").splitlines():
-                    yield ExecChunk("stdout", line)
-            if stderr_b:
-                for line in stderr_b.decode("utf-8", "replace").splitlines():
-                    yield ExecChunk("stderr", line)
+        def _pump() -> None:
+            try:
+                stream = api.exec_start(exec_id, stream=True, demux=True)
+                for stdout_b, stderr_b in stream:
+                    if stdout_b:
+                        for line in stdout_b.decode("utf-8", "replace").splitlines():
+                            loop.call_soon_threadsafe(queue.put_nowait, ("stdout", line))
+                    if stderr_b:
+                        for line in stderr_b.decode("utf-8", "replace").splitlines():
+                            loop.call_soon_threadsafe(queue.put_nowait, ("stderr", line))
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, None)  # end sentinel
 
-        exit_code = getattr(exec_result, "exit_code", 0) or 0
+        pump_task = asyncio.create_task(asyncio.to_thread(_pump))
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            stream_name, line = item
+            yield ExecChunk(stream_name, line)
+        await pump_task
+
+        info = await asyncio.to_thread(api.exec_inspect, exec_id)
         self._results[handle.id] = ExecResult(
-            exit_code=exit_code, duration_seconds=time.monotonic() - started
+            exit_code=info.get("ExitCode") or 0,
+            duration_seconds=time.monotonic() - started,
         )
 
     def last_result(self, handle: SandboxHandle) -> Optional[ExecResult]:

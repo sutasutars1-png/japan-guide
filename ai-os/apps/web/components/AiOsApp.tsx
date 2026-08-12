@@ -4,7 +4,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { fetchJSON } from "@/lib/api";
+import { fetchJSON, streamExecution } from "@/lib/api";
 
 /* ============================================================
    AI-OS · Execution Plane — Phase 1 UI
@@ -160,22 +160,39 @@ export default function App(){
   const [tokens,setTokens]=useState(12420);
   const [approval,setApproval]=useState(null);
   const [comments,setComments]=useState(COMMENTS);
+  const [live,setLive]=useState(false); // true once a real command has been run
   const logRef=useRef(null);
+  const runCleanup=useRef(null);
 
   // Hydrate from the API when it is reachable; otherwise the fake data stands.
   useEffect(()=>{
     let cancelled=false;
     fetchJSON("/agents",INIT_AGENTS).then(a=>{ if(!cancelled&&Array.isArray(a)&&a.length)setAgents(a); });
     fetchJSON("/execution/demo",SCRIPT).then(s=>{ if(!cancelled&&Array.isArray(s)&&s.length)setScript(s); });
-    return ()=>{cancelled=true;};
+    return ()=>{cancelled=true; if(runCleanup.current)runCleanup.current();};
   },[]);
 
+  // Demo replay — only until the user runs a real command (then live takes over).
   useEffect(()=>{
-    if(!running||lines.length>=script.length)return;
+    if(live||!running||lines.length>=script.length)return;
     const id=setTimeout(()=>setLines(p=>p.length>=script.length?p:[...p,script[p.length]]),760);
     return ()=>clearTimeout(id);
-  },[running,lines,script]);
-  useEffect(()=>{ if(lines.length>=script.length)setRunning(false); },[lines,script]);
+  },[running,lines,script,live]);
+  useEffect(()=>{ if(!live&&lines.length>=script.length)setRunning(false); },[lines,script,live]);
+
+  // Phase 2: run a real command in the sandbox and stream live logs.
+  const runCommand=(cmd)=>{
+    if(!cmd||!cmd.trim())return;
+    if(runCleanup.current)runCleanup.current();
+    setLive(true);
+    setLines([]);
+    setRunning(true);
+    runCleanup.current=streamExecution(
+      (line)=>setLines(p=>[...p,line]),
+      ()=>setRunning(false),
+      cmd.trim(),
+    );
+  };
   useEffect(()=>{
     if(!running)return;
     const id=setInterval(()=>{
@@ -214,7 +231,7 @@ export default function App(){
           <TopBar view={view} activeModel={activeAgent.model} running={running}/>
           <div style={{flex:1,minHeight:0,display:"flex"}}>
             {view==="exec" && <ExecView {...{proj,setProj,lines,running,elapsed:fmt(elapsed),
-              cpu,ram,net,tokens,agents,comments,logRef,askApproval,activeAgent}}/>}
+              cpu,ram,net,tokens,agents,comments,logRef,askApproval,activeAgent,onRun:runCommand,live}}/>}
             {view==="agents" && <AgentsView agents={agents} setAgents={setAgents}/>}
             {view==="flow" && <FlowView agents={agents}/>}
             {view==="data" && <DataView proj={proj} setProj={setProj}/>}
@@ -292,7 +309,7 @@ function ExecView(p){
         <SandboxPane lines={p.lines} running={p.running} elapsed={p.elapsed}
           cpu={p.cpu} ram={p.ram} logRef={p.logRef} model={p.activeAgent.model}/>
         <AiComments comments={p.comments}/>
-        <CommandBar disabled={p.running}/>
+        <CommandBar disabled={p.running} onRun={p.onRun}/>
       </main>
       <StatusRail {...p}/>
     </>
@@ -457,17 +474,19 @@ function AiComments({comments}){
     </div>
   );
 }
-function CommandBar({disabled}){
+function CommandBar({disabled,onRun}){
   const [v,setV]=useState("");
+  const send=()=>{ if(disabled||!v.trim())return; onRun&&onRun(v); setV(""); };
   return (
     <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:"var(--panel)",
       border:"1px solid var(--line)",borderRadius:12}}>
       <span className="disp" style={{fontSize:13,fontWeight:600,color:"var(--live)"}}>›</span>
       <input value={v} onChange={e=>setV(e.target.value)}
-        placeholder={disabled?"Builder is working…":"Tell the AI what to do next"}
+        onKeyDown={e=>{ if(e.key==="Enter")send(); }}
+        placeholder={disabled?"実行中…":'サンドボックスで実行するコマンド（例: python -c "print(2+2)"）'}
         style={{flex:1,border:"none",outline:"none",fontSize:13.5,background:"transparent",color:"var(--ink)"}}/>
-      <button style={{padding:"7px 15px",borderRadius:8,background:"var(--live)",color:"#04120f",
-        fontSize:13,fontWeight:600,opacity:disabled?.4:1}}>Send</button>
+      <button onClick={send} style={{padding:"7px 15px",borderRadius:8,background:"var(--live)",color:"#04120f",
+        fontSize:13,fontWeight:600,opacity:disabled?.4:1,cursor:disabled?"default":"pointer"}}>Send</button>
     </div>
   );
 }
