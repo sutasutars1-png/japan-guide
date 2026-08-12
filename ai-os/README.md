@@ -114,9 +114,10 @@ Infra is local `docker-compose` → **free**. The only metered cost is the LLM
 |---|---|---|
 | 0 | Reproducible foundation (`docker compose up`) | ✅ done |
 | 1 | Mock UI on the API contract | ✅ done |
-| 2 | Real sandbox execution + live logs | 🟡 interface + local runtime done; Docker wiring + WS live |
-| 3 | Policy + Secret + Audit gate | 🟡 primitives done; UI-driven approval queue next |
-| 4 | LLM in the PLAN→EXECUTE→OBSERVE loop | 🟡 provider adapter + tool registry ready |
+| 2 | Real sandbox execution + live logs | ✅ done |
+| 3 | Policy + Secret + Audit gate (approval modal + persisted audit) | ✅ done |
+| 4 | LLM in the PLAN→EXECUTE→OBSERVE loop | 📝 design ready — see [`docs/phase-4-design.md`](./docs/phase-4-design.md) |
 | 5 | Git loop (diff → approve → commit) | ⬜ next |
 
-See [`docs/phase-0.md`](./docs/phase-0.md) and [`docs/phase-1.md`](./docs/phase-1.md).
+See the per-phase reports in [`docs/`](./docs): `phase-0.md`, `phase-1.md`,
+`phase-2.md`, `phase-3.md`, and the Phase 4 design in `phase-4-design.md`.
