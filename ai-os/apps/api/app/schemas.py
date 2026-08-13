@@ -21,8 +21,9 @@ class Agent(BaseModel):
 
 class Skill(BaseModel):
     id: str
+    layer: str  # thinking | domain | execution | overlay
     name: str
-    roles: list[str]
+    roles: list[str] = Field(default_factory=list)  # suggested stages ([] = any)
     description: str
     content: str
 

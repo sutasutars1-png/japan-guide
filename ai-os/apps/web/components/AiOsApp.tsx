@@ -642,10 +642,9 @@ function AgentsView({agents,setAgents}){
 function AgentDetail({agent,update,skillLib=[]}){
   const c={run:"var(--live)",done:"var(--live)",idle:"var(--ink3)"}[agent.state];
   const toggle=(cap)=>update({caps:agent.caps.includes(cap)?agent.caps.filter(x=>x!==cap):[...agent.caps,cap]});
-  const byId=Object.fromEntries(skillLib.map(s=>[s.id,s]));
   const current=agent.skills||[];
-  const roleAvailable=skillLib.filter(s=>(s.roles||[]).includes(agent.name));
   const toggleSkill=(id)=>update({skills:current.includes(id)?current.filter(x=>x!==id):[...current,id]});
+  const LAYER_LABEL={thinking:"思考モード",domain:"専門レンズ",execution:"実行の手順",overlay:"追加の方針"};
   return (
     <div style={{maxWidth:720}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6}}>
@@ -685,32 +684,32 @@ function AgentDetail({agent,update,skillLib=[]}){
         </div>
       </Field>
 
-      <Field label="Skills（役割の手順）" hint="この役割に効く手順。ゴール実行時にAIの指示へ自動で組み込まれます。">
-        {current.length===0 &&
-          <div style={{fontSize:11.5,color:"var(--ink3)",marginBottom:8}}>スキル未設定。下から追加できます。</div>}
-        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:roleAvailable.length?12:0}}>
-          {current.map(id=>{
-            const s=byId[id];
-            return (
-              <button key={id} onClick={()=>toggleSkill(id)} title={s?s.description:id}
-                style={{fontSize:11.5,padding:"6px 11px",borderRadius:8,textAlign:"left",
-                  background:"var(--aiSoft)",border:"1px solid rgba(140,125,242,.4)",color:"var(--ai)"}}>
-                ✓ {s?s.name:id}
-              </button>
-            );
-          })}
-        </div>
-        {roleAvailable.some(s=>!current.includes(s.id)) &&
-          <>
-            <div className="mono" style={{fontSize:10,color:"var(--ink3)",margin:"2px 0 6px"}}>この役割で使える他のスキル</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-              {roleAvailable.filter(s=>!current.includes(s.id)).map(s=>(
-                <button key={s.id} onClick={()=>toggleSkill(s.id)} title={s.description}
-                  style={{fontSize:11.5,padding:"6px 11px",borderRadius:8,
-                    background:"var(--panel)",border:"1px solid var(--line)",color:"var(--ink3)"}}>+ {s.name}</button>
-              ))}
+      <Field label="Skills（層構造・手動選択）" hint="工程 × 思考 × 専門レンズ × 実行 × 方針。選んだスキルはゴール実行時にAIの指示へ層ごとに組み込まれます。">
+        {["thinking","domain","execution","overlay"].map(layer=>{
+          const inLayer=skillLib.filter(s=>s.layer===layer);
+          if(!inLayer.length)return null;
+          const cur=inLayer.filter(s=>current.includes(s.id));
+          const avail=inLayer.filter(s=>!current.includes(s.id));
+          return (
+            <div key={layer} style={{marginBottom:14}}>
+              <div className="mono" style={{fontSize:10,letterSpacing:".05em",color:"var(--ink3)",marginBottom:6}}>
+                {LAYER_LABEL[layer]} <span style={{color:"var(--ai)"}}>{cur.length?`· ${cur.length}選択`:""}</span>
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {cur.map(s=>(
+                  <button key={s.id} onClick={()=>toggleSkill(s.id)} title={s.description}
+                    style={{fontSize:11,padding:"5px 10px",borderRadius:8,
+                      background:"var(--aiSoft)",border:"1px solid rgba(140,125,242,.45)",color:"var(--ai)"}}>✓ {s.name}</button>
+                ))}
+                {avail.map(s=>(
+                  <button key={s.id} onClick={()=>toggleSkill(s.id)} title={s.description}
+                    style={{fontSize:11,padding:"5px 10px",borderRadius:8,
+                      background:"var(--panel)",border:"1px solid var(--line)",color:"var(--ink3)"}}>+ {s.name}</button>
+                ))}
+              </div>
             </div>
-          </>}
+          );
+        })}
       </Field>
 
       <div style={{display:"flex",gap:10,marginTop:8}}>

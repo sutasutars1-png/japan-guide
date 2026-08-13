@@ -10,9 +10,15 @@ router = APIRouter(prefix="/skills", tags=["skills"])
 
 
 @router.get("", response_model=list[Skill])
-def list_skills(role: str | None = None) -> list[dict]:
-    """All skills, or only those suited to `role` (e.g. ?role=Builder)."""
-    return skill_lib.list_skills(role)
+def list_skills(layer: str | None = None, role: str | None = None) -> list[dict]:
+    """All skills, filtered by `layer` (thinking|domain|execution|overlay)
+    and/or suggested `role`/stage (e.g. ?layer=domain, ?role=Builder)."""
+    return skill_lib.list_skills(layer=layer, role=role)
+
+
+@router.get("/layers")
+def layers() -> list[str]:
+    return skill_lib.LAYERS
 
 
 @router.get("/roles")
