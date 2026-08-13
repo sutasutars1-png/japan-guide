@@ -607,6 +607,8 @@ function AgentsView({agents,setAgents}){
   const agent=agents.find(a=>a.id===sel)||agents[0];
   const update=(patch)=>setAgents(as=>as.map(a=>a.id===sel?{...a,...patch}:a));
   const add=(a)=>{ setAgents(as=>[...as,a]); setSel(a.id); setAdding(false); };
+  const [skillLib,setSkillLib]=useState([]);
+  useEffect(()=>{ fetchJSON("/skills",[]).then(s=>{ if(Array.isArray(s))setSkillLib(s); }); },[]);
   return (
     <>
       <aside style={{width:262,flexShrink:0,background:"var(--bg2)",borderRight:"1px solid var(--line)",
@@ -632,14 +634,18 @@ function AgentsView({agents,setAgents}){
       </aside>
       <main style={{flex:1,minWidth:0,overflowY:"auto",padding:"22px 26px"}}>
         {adding ? <AddAgent onCancel={()=>setAdding(false)} onCreate={add}/>
-                : <AgentDetail agent={agent} update={update}/>}
+                : <AgentDetail agent={agent} update={update} skillLib={skillLib}/>}
       </main>
     </>
   );
 }
-function AgentDetail({agent,update}){
+function AgentDetail({agent,update,skillLib=[]}){
   const c={run:"var(--live)",done:"var(--live)",idle:"var(--ink3)"}[agent.state];
   const toggle=(cap)=>update({caps:agent.caps.includes(cap)?agent.caps.filter(x=>x!==cap):[...agent.caps,cap]});
+  const byId=Object.fromEntries(skillLib.map(s=>[s.id,s]));
+  const current=agent.skills||[];
+  const roleAvailable=skillLib.filter(s=>(s.roles||[]).includes(agent.name));
+  const toggleSkill=(id)=>update({skills:current.includes(id)?current.filter(x=>x!==id):[...current,id]});
   return (
     <div style={{maxWidth:720}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6}}>
@@ -678,6 +684,35 @@ function AgentDetail({agent,update}){
           })}
         </div>
       </Field>
+
+      <Field label="Skills（役割の手順）" hint="この役割に効く手順。ゴール実行時にAIの指示へ自動で組み込まれます。">
+        {current.length===0 &&
+          <div style={{fontSize:11.5,color:"var(--ink3)",marginBottom:8}}>スキル未設定。下から追加できます。</div>}
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:roleAvailable.length?12:0}}>
+          {current.map(id=>{
+            const s=byId[id];
+            return (
+              <button key={id} onClick={()=>toggleSkill(id)} title={s?s.description:id}
+                style={{fontSize:11.5,padding:"6px 11px",borderRadius:8,textAlign:"left",
+                  background:"var(--aiSoft)",border:"1px solid rgba(140,125,242,.4)",color:"var(--ai)"}}>
+                ✓ {s?s.name:id}
+              </button>
+            );
+          })}
+        </div>
+        {roleAvailable.some(s=>!current.includes(s.id)) &&
+          <>
+            <div className="mono" style={{fontSize:10,color:"var(--ink3)",margin:"2px 0 6px"}}>この役割で使える他のスキル</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {roleAvailable.filter(s=>!current.includes(s.id)).map(s=>(
+                <button key={s.id} onClick={()=>toggleSkill(s.id)} title={s.description}
+                  style={{fontSize:11.5,padding:"6px 11px",borderRadius:8,
+                    background:"var(--panel)",border:"1px solid var(--line)",color:"var(--ink3)"}}>+ {s.name}</button>
+              ))}
+            </div>
+          </>}
+      </Field>
+
       <div style={{display:"flex",gap:10,marginTop:8}}>
         <button style={btnPrimary}>Save changes</button>
         <span className="mono" style={{alignSelf:"center",fontSize:11,color:"var(--ink3)"}}>edits apply to this session instantly</span>

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from ..agent_loop import AgentLoop, get_agent_loop
 from ..schemas import LogLine
+from ..skills import compose_system
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -24,11 +25,12 @@ class GoalRequest(BaseModel):
 @router.post("/run", response_model=list[LogLine])
 async def run(body: GoalRequest) -> list[dict]:
     lines: list[dict] = []
+    system = body.system or compose_system(body.agent_name)
     try:
         async for line in get_agent_loop().run(
             body.goal,
             agent_name=body.agent_name,
-            system=body.system,
+            system=system,
             max_iterations=body.max_iterations,
         ):
             lines.append({"t": line.t, "s": line.s})
@@ -48,10 +50,12 @@ async def stream(ws: WebSocket) -> None:
             await ws.send_json({"t": "err", "s": "no goal provided"})
             return
         loop: AgentLoop = get_agent_loop()
+        agent_name = (msg or {}).get("agent_name", "Builder")
+        system = (msg or {}).get("system") or compose_system(agent_name)
         async for line in loop.run(
             goal,
-            agent_name=(msg or {}).get("agent_name", "Builder"),
-            system=(msg or {}).get("system"),
+            agent_name=agent_name,
+            system=system,
             max_iterations=int((msg or {}).get("max_iterations", 8)),
         ):
             await ws.send_json({"t": line.t, "s": line.s})

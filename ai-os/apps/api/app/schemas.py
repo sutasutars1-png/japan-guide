@@ -15,7 +15,16 @@ class Agent(BaseModel):
     model: str
     state: str = "idle"  # idle | run | done
     caps: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)  # base skill ids (Phase 4)
     role: str = ""
+
+
+class Skill(BaseModel):
+    id: str
+    name: str
+    roles: list[str]
+    description: str
+    content: str
 
 
 class Project(BaseModel):
