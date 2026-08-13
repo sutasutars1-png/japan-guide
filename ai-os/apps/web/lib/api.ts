@@ -77,3 +77,21 @@ export function streamAgent(
 ): () => void {
   return openStream("/agent/stream", { goal, max_iterations: maxIterations }, onLine, onDone);
 }
+
+export type Flow = {
+  id: string;
+  name: string;
+  max_iterations: number;
+  stations: { agent: string; next: string }[];
+};
+
+// Phase 4 · stage 3c: run a goal through a multi-agent flow (Planner→Builder→…),
+// each station handing its DONE report to the next. flowId picks the pipeline.
+export function streamFlow(
+  onLine: (line: LogLine) => void,
+  onDone: () => void,
+  goal: string,
+  flowId = "flow.default",
+): () => void {
+  return openStream("/flow/stream", { goal, flow_id: flowId }, onLine, onDone);
+}
