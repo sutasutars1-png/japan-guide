@@ -60,6 +60,10 @@ answer = await provider.complete(prompt)   # API でも手動でも同じ1行
 
 ## 3. スキルモデル:主スキル(base)＋副スキル(overlay)
 
+> **更新**: スキルの内部構造は層構造DB(思考モード×専門レンズ×実行×オーバーレイ)へ
+> 拡張された。詳細は [`phase-4-skill-layers.md`](./phase-4-skill-layers.md) を参照。
+> 本節の base/overlay・複数プリセット・戻せる、という枠組みはそのまま有効。
+
 ### 主スキル (base) — プリセット。複数切替・戻せる
 - Agent の核となる能力・人格。**工場出荷プリセット**を持つ。
 - **複数プリセットを切替可**(例: Builder に「Web開発」「データ分析」)。汎用・組み替えと相性が良い。
