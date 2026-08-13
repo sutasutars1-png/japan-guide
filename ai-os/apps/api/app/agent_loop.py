@@ -53,12 +53,17 @@ def parse_agent_action(text: str) -> tuple[str, str]:
         lines = [ln for ln in cleaned.splitlines() if not ln.strip().startswith("```")]
         cleaned = "\n".join(lines).strip()
 
-    for line in cleaned.splitlines():
+    lines = cleaned.splitlines()
+    for idx, line in enumerate(lines):
         s = line.strip()
         if s.upper().startswith("RUN:"):
             return "run", s[4:].strip()
         if s.upper().startswith("DONE:"):
-            return "done", s[5:].strip()
+            # A DONE report may span multiple lines (e.g. a trailing `→NEXT:`
+            # handoff line): keep everything from here to the end.
+            first = s[5:].strip()
+            rest = lines[idx + 1:]
+            return "done", "\n".join([first, *rest]).strip()
     return "done", cleaned
 
 
