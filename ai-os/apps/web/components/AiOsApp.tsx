@@ -4,7 +4,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { fetchJSON, streamExecution, streamAgent } from "@/lib/api";
+import { fetchJSON, streamExecution, streamAgent, API_BASE } from "@/lib/api";
 
 /* ============================================================
    AI-OS · Execution Plane — Phase 1 UI
@@ -608,7 +608,21 @@ function AgentsView({agents,setAgents}){
   const update=(patch)=>setAgents(as=>as.map(a=>a.id===sel?{...a,...patch}:a));
   const add=(a)=>{ setAgents(as=>[...as,a]); setSel(a.id); setAdding(false); };
   const [skillLib,setSkillLib]=useState([]);
-  useEffect(()=>{ fetchJSON("/skills",[]).then(s=>{ if(Array.isArray(s))setSkillLib(s); }); },[]);
+  const [presets,setPresets]=useState([]);
+  useEffect(()=>{
+    fetchJSON("/skills",[]).then(s=>{ if(Array.isArray(s))setSkillLib(s); });
+    fetchJSON("/presets",[]).then(p=>{ if(Array.isArray(p))setPresets(p); });
+  },[]);
+  const sync=(a)=>setAgents(as=>as.map(x=>x.id===a.id?a:x));
+  // Persist edits to the backend store so the agent loop composes from them.
+  const persist=(id,agent)=>{ setAgents(as=>as.map(x=>x.id===id?agent:x));
+    fetch(`${API_BASE}/agents/${id}`,{method:"PUT",headers:{"content-type":"application/json"},
+      body:JSON.stringify(agent)}).then(r=>r.ok&&r.json()).then(a=>a&&sync(a)).catch(()=>{}); };
+  const applyPreset=(id,presetId)=>fetch(`${API_BASE}/agents/${id}/apply-preset`,
+    {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({preset_id:presetId})})
+    .then(r=>r.ok&&r.json()).then(a=>a&&sync(a)).catch(()=>{});
+  const resetPreset=(id)=>fetch(`${API_BASE}/agents/${id}/reset-preset`,{method:"POST"})
+    .then(r=>r.ok&&r.json()).then(a=>a&&sync(a)).catch(()=>{});
   return (
     <>
       <aside style={{width:262,flexShrink:0,background:"var(--bg2)",borderRight:"1px solid var(--line)",
@@ -634,17 +648,21 @@ function AgentsView({agents,setAgents}){
       </aside>
       <main style={{flex:1,minWidth:0,overflowY:"auto",padding:"22px 26px"}}>
         {adding ? <AddAgent onCancel={()=>setAdding(false)} onCreate={add}/>
-                : <AgentDetail agent={agent} update={update} skillLib={skillLib}/>}
+                : <AgentDetail agent={agent} update={update} skillLib={skillLib}
+                    presets={presets} persist={persist} applyPreset={applyPreset} resetPreset={resetPreset}/>}
       </main>
     </>
   );
 }
-function AgentDetail({agent,update,skillLib=[]}){
+function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,resetPreset}){
   const c={run:"var(--live)",done:"var(--live)",idle:"var(--ink3)"}[agent.state];
-  const toggle=(cap)=>update({caps:agent.caps.includes(cap)?agent.caps.filter(x=>x!==cap):[...agent.caps,cap]});
+  // persisting update: write through to the backend store so the loop sees it.
+  const pupdate=(patch)=>{ const next={...agent,...patch}; persist?persist(agent.id,next):update(patch); };
+  const toggle=(cap)=>pupdate({caps:agent.caps.includes(cap)?agent.caps.filter(x=>x!==cap):[...agent.caps,cap]});
   const current=agent.skills||[];
-  const toggleSkill=(id)=>update({skills:current.includes(id)?current.filter(x=>x!==id):[...current,id]});
+  const toggleSkill=(id)=>pupdate({skills:current.includes(id)?current.filter(x=>x!==id):[...current,id]});
   const LAYER_LABEL={thinking:"思考モード",domain:"専門レンズ",execution:"実行の手順",overlay:"追加の方針"};
+  const stagePresets=presets.filter(p=>p.stage===agent.name);
   return (
     <div style={{maxWidth:720}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6}}>
@@ -656,13 +674,26 @@ function AgentDetail({agent,update,skillLib=[]}){
         </span>
       </div>
 
+      {stagePresets.length>0 &&
+        <Field label="プリセット（主スキルの束）" hint="この工程のスキルセットを切替。編集しても「戻す」で復元できます。">
+          <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+            <select value={agent.preset||""} onChange={e=>applyPreset&&applyPreset(agent.id,e.target.value)}
+              style={{...inp,maxWidth:320}}>
+              {!agent.preset && <option value="">— 未選択 —</option>}
+              {stagePresets.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <button onClick={()=>resetPreset&&resetPreset(agent.id)} style={btnGhost}>プリセットに戻す</button>
+          </div>
+        </Field>}
+
       <Field label="Model">
-        <select value={agent.model} onChange={e=>update({model:e.target.value})}
+        <select value={agent.model} onChange={e=>pupdate({model:e.target.value})}
           style={inp}>{MODELS.map(m=><option key={m} value={m}>{m}</option>)}</select>
       </Field>
 
       <Field label="Role & instructions" hint="What this agent may do — shown to the model as its system prompt.">
-        <textarea value={agent.role} onChange={e=>update({role:e.target.value})} rows={4}
+        <textarea value={agent.role} onChange={e=>update({role:e.target.value})}
+          onBlur={()=>pupdate({role:agent.role})} rows={4}
           style={{...inp,resize:"vertical",lineHeight:1.55}}/>
       </Field>
 

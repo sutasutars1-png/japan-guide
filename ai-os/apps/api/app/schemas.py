@@ -16,7 +16,19 @@ class Agent(BaseModel):
     state: str = "idle"  # idle | run | done
     caps: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)  # base skill ids (Phase 4)
+    preset: str | None = None  # active preset id (resettable)
     role: str = ""
+
+
+class Preset(BaseModel):
+    id: str
+    name: str
+    stage: str
+    skills: list[str]
+
+
+class ApplyPreset(BaseModel):
+    preset_id: str
 
 
 class Skill(BaseModel):

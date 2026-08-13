@@ -254,9 +254,15 @@ def skill_ids_for_agent(agent_name: str) -> list[str]:
 
 
 def _agent_role_text(agent_name: str) -> str | None:
-    for a in seed.AGENTS:
-        if a["name"] == agent_name:
-            return a.get("role")
+    # Prefer the live store (reflects UI edits) then fall back to the seed.
+    from . import agents_store
+
+    a = agents_store.get_by_name(agent_name)
+    if a is not None:
+        return a.get("role")
+    for s in seed.AGENTS:
+        if s["name"] == agent_name:
+            return s.get("role")
     return None
 
 
