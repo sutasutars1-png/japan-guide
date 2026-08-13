@@ -16,7 +16,7 @@ from .config import settings
 from .core.audit import log as audit_log
 from .core.secrets import store as secret_store
 from .db import audit_sink, init_db
-from .routers import agent, approvals, catalog, execution, llm, tools
+from .routers import agent, approvals, catalog, execution, llm, skills, tools
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("aios")
@@ -54,6 +54,7 @@ app.include_router(approvals.router)
 app.include_router(tools.router)
 app.include_router(llm.router)
 app.include_router(agent.router)
+app.include_router(skills.router)
 
 
 @app.get("/", tags=["meta"])
