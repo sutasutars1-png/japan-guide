@@ -4,7 +4,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { fetchJSON, streamExecution, streamAgent, streamFlow, API_BASE } from "@/lib/api";
+import { fetchJSON, streamExecution, streamAgent, streamFlow, API_BASE,
+  fetchConnections, fetchModels, setConnKey, refreshConn, clearConnKey, addManualModel,
+  fetchManualPending, submitManual } from "@/lib/api";
 
 /* ============================================================
    AI-OS · Execution Plane — Phase 1 UI
@@ -365,6 +367,7 @@ function ExecView(p){
         <SandboxPane lines={p.lines} running={p.running} elapsed={p.elapsed}
           cpu={p.cpu} ram={p.ram} logRef={p.logRef} model={p.activeAgent.model}/>
         <AiComments comments={p.comments}/>
+        <ManualBridgePanel/>
         <CommandBar disabled={p.running} onRun={p.onRun} onGoal={p.onGoal} onFlow={p.onFlow} flows={p.flows}/>
       </main>
       <StatusRail {...p}/>
@@ -530,6 +533,55 @@ function AiComments({comments}){
     </div>
   );
 }
+// Manual bridge: when an agent is backed by an API-less AI (Claude Code / Claude
+// in the browser), its prompt lands here to copy out; paste the reply back to
+// hand it to the waiting run. Poll while the view is open.
+function ManualBridgePanel(){
+  const [pending,setPending]=useState([]);
+  const [reply,setReply]=useState({});
+  const [copied,setCopied]=useState(null);
+  useEffect(()=>{
+    let on=true;
+    const load=()=>fetchManualPending().then(p=>{ if(on&&Array.isArray(p))setPending(p); });
+    load();
+    const id=setInterval(load,1500);
+    return ()=>{on=false;clearInterval(id);};
+  },[]);
+  if(pending.length===0)return null;
+  const copy=(p)=>{ try{ navigator.clipboard.writeText(p.prompt); setCopied(p.id); setTimeout(()=>setCopied(null),1200); }catch{} };
+  const send=async(p)=>{ const r=(reply[p.id]||"").trim(); if(!r)return;
+    try{ await submitManual(p.id,r); setReply(x=>({...x,[p.id]:""})); setPending(list=>list.filter(x=>x.id!==p.id)); }catch{} };
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:10,padding:"11px 13px",background:"var(--aiSoft)",
+      border:"1px solid rgba(140,125,242,.4)",borderRadius:12}}>
+      {pending.map(p=>(
+        <div key={p.id} style={{display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:13,fontWeight:600,color:"var(--ai)"}}>🔗 手動ブリッジ — {p.title}</span>
+            <span style={{fontSize:11,color:"var(--ink3)"}}>この内容をAIに貼り付け、返答をここに戻してください</span>
+          </div>
+          <div style={{position:"relative"}}>
+            <pre className="mono" style={{margin:0,maxHeight:120,overflow:"auto",padding:"9px 11px",
+              borderRadius:9,background:"var(--panel2)",border:"1px solid var(--line2)",
+              fontSize:11.5,color:"var(--ink2)",whiteSpace:"pre-wrap"}}>{p.prompt}</pre>
+            <button onClick={()=>copy(p)} className="mono" style={{position:"absolute",top:7,right:7,fontSize:10.5,
+              padding:"3px 9px",borderRadius:7,background:"var(--ai)",color:"#04120f",fontWeight:600}}>
+              {copied===p.id?"コピー済":"コピー"}</button>
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+            <textarea value={reply[p.id]||""} onChange={e=>setReply(x=>({...x,[p.id]:e.target.value}))}
+              rows={2} placeholder="AIの返答を貼り付け（例: DONE: 完了しました）"
+              style={{flex:1,padding:"8px 10px",borderRadius:9,background:"var(--panel2)",border:"1px solid var(--line2)",
+                color:"var(--ink)",fontSize:12.5,resize:"vertical",outline:"none",lineHeight:1.5}}/>
+            <button onClick={()=>send(p)} disabled={!(reply[p.id]||"").trim()}
+              style={{padding:"9px 15px",borderRadius:9,background:"var(--ai)",color:"#04120f",fontSize:13,fontWeight:600,
+                opacity:(reply[p.id]||"").trim()?1:.4}}>返答を渡す</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 function CommandBar({disabled,onRun,onGoal,onFlow,flows}){
   const [v,setV]=useState("");
   const [mode,setMode]=useState("goal"); // "goal" = one AI | "flow" = pipeline | "cmd" = raw command
@@ -651,9 +703,11 @@ function AgentsView({agents,setAgents}){
   const add=(a)=>{ setAgents(as=>[...as,a]); setSel(a.id); setAdding(false); };
   const [skillLib,setSkillLib]=useState([]);
   const [presets,setPresets]=useState([]);
+  const [models,setModels]=useState([]); // live-discovered model ids from Connections
   useEffect(()=>{
     fetchJSON("/skills",[]).then(s=>{ if(Array.isArray(s))setSkillLib(s); });
     fetchJSON("/presets",[]).then(p=>{ if(Array.isArray(p))setPresets(p); });
+    fetchModels().then(m=>{ if(Array.isArray(m))setModels(m.map(x=>x.model)); });
   },[]);
   const sync=(a)=>setAgents(as=>as.map(x=>x.id===a.id?a:x));
   // Persist edits to the backend store so the agent loop composes from them.
@@ -689,15 +743,18 @@ function AgentsView({agents,setAgents}){
         </div>
       </aside>
       <main style={{flex:1,minWidth:0,overflowY:"auto",padding:"22px 26px"}}>
-        {adding ? <AddAgent onCancel={()=>setAdding(false)} onCreate={add}/>
-                : <AgentDetail agent={agent} update={update} skillLib={skillLib}
+        {adding ? <AddAgent onCancel={()=>setAdding(false)} onCreate={add} models={models}/>
+                : <AgentDetail agent={agent} update={update} skillLib={skillLib} models={models}
                     presets={presets} persist={persist} applyPreset={applyPreset} resetPreset={resetPreset}/>}
       </main>
     </>
   );
 }
-function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,resetPreset}){
+function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,resetPreset,models=[]}){
   const c={run:"var(--live)",done:"var(--live)",idle:"var(--ink3)"}[agent.state];
+  // Model options come from live discovery; fall back to constants when the API
+  // is unreachable, and always include the agent's current model.
+  const modelOpts=Array.from(new Set([...(models.length?models:MODELS),agent.model].filter(Boolean)));
   // persisting update: write through to the backend store so the loop sees it.
   const pupdate=(patch)=>{ const next={...agent,...patch}; persist?persist(agent.id,next):update(patch); };
   const toggle=(cap)=>pupdate({caps:agent.caps.includes(cap)?agent.caps.filter(x=>x!==cap):[...agent.caps,cap]});
@@ -728,9 +785,9 @@ function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,re
           </div>
         </Field>}
 
-      <Field label="Model">
+      <Field label="Model" hint={models.length?"Connectionsで取得した有効なモデル":"Connectionsでキーを設定すると実際のモデルが並びます"}>
         <select value={agent.model} onChange={e=>pupdate({model:e.target.value})}
-          style={inp}>{MODELS.map(m=><option key={m} value={m}>{m}</option>)}</select>
+          style={inp}>{modelOpts.map(m=><option key={m} value={m}>{m}</option>)}</select>
       </Field>
 
       <Field label="Role & instructions" hint="What this agent may do — shown to the model as its system prompt.">
@@ -792,8 +849,9 @@ function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,re
     </div>
   );
 }
-function AddAgent({onCancel,onCreate}){
-  const [name,setName]=useState(""); const [model,setModel]=useState(MODELS[0]);
+function AddAgent({onCancel,onCreate,models=[]}){
+  const modelOpts=models.length?models:MODELS;
+  const [name,setName]=useState(""); const [model,setModel]=useState(modelOpts[0]);
   const [role,setRole]=useState(""); const [caps,setCaps]=useState([]);
   const toggle=(c)=>setCaps(cs=>cs.includes(c)?cs.filter(x=>x!==c):[...cs,c]);
   const create=()=>onCreate({id:"a"+Date.now(),name:name||"New agent",model,role:role||"Describe what this agent may do.",caps,state:"idle"});
@@ -802,7 +860,7 @@ function AddAgent({onCancel,onCreate}){
       <h2 className="disp" style={{margin:"0 0 4px",fontSize:22,fontWeight:600}}>New agent</h2>
       <p style={{margin:"0 0 20px",fontSize:12.5,color:"var(--ink2)"}}>Give it a name, a model, a role, and only the capabilities it needs.</p>
       <Field label="Name"><input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Deployer" style={inp}/></Field>
-      <Field label="Model"><select value={model} onChange={e=>setModel(e.target.value)} style={inp}>{MODELS.map(m=><option key={m}>{m}</option>)}</select></Field>
+      <Field label="Model"><select value={model} onChange={e=>setModel(e.target.value)} style={inp}>{modelOpts.map(m=><option key={m}>{m}</option>)}</select></Field>
       <Field label="Role & instructions"><textarea value={role} onChange={e=>setRole(e.target.value)} rows={4} placeholder="What may this agent do? What must it never do?" style={{...inp,resize:"vertical",lineHeight:1.55}}/></Field>
       <Field label="Capabilities" hint="Nothing is granted by default.">
         <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
@@ -973,63 +1031,102 @@ function DataView({proj,setProj}){
 
 /* ======================= CONNECTIONS VIEW ======================= */
 function ConnectionsView(){
-  const [tab,setTab]=useState("ai");
-  const ai=[
-    {name:"Anthropic",key:"sk-ant-•••••••",status:"connected",used:842,cap:2000},
-    {name:"OpenAI",key:"sk-•••••••",status:"connected",used:120,cap:500},
-    {name:"Google",key:"•••••••",status:"connected",used:60,cap:1000},
-  ];
-  const apis=[
-    {name:"GitHub",key:"ghp_•••••••",status:"connected",used:800,cap:5000,unit:"req/hr"},
-    {name:"Cloudflare",key:"•••••••",status:"connected",used:0,cap:0},
-    {name:"SMTP / Email",key:"—",status:"not connected",used:0,cap:0},
-  ];
-  const list=tab==="ai"?ai:apis;
+  const [conns,setConns]=useState([]);
+  const [loaded,setLoaded]=useState(false);
+  const load=()=>fetchConnections().then(c=>{ if(Array.isArray(c))setConns(c); setLoaded(true); });
+  useEffect(()=>{ load(); },[]);
+  const replace=(c)=>setConns(list=>list.map(x=>x.id===c.id?c:x));
   return (
     <main style={{flex:1,overflowY:"auto",padding:"22px 26px",maxWidth:900}}>
-      <h2 className="disp" style={{margin:"0 0 14px",fontSize:20,fontWeight:600}}>Connections</h2>
-      <div style={{display:"flex",gap:4,marginBottom:20,background:"var(--panel)",padding:4,borderRadius:10,width:"fit-content",border:"1px solid var(--line)"}}>
-        {[["ai","AI models"],["api","APIs & services"]].map(([id,l])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{padding:"7px 16px",borderRadius:7,fontSize:13,fontWeight:500,
-            background:tab===id?"var(--panel3)":"transparent",color:tab===id?"var(--ink)":"var(--ink3)"}}>{l}</button>
-        ))}
-      </div>
+      <h2 className="disp" style={{margin:"0 0 4px",fontSize:20,fontWeight:600}}>Connections</h2>
+      <p style={{margin:"0 0 18px",fontSize:12.5,color:"var(--ink2)"}}>
+        APIキーを設定すると、利用可能なモデルを各プロバイダから自動取得します。
+        Claude Code / Claude（ブラウザ）はキー不要で、コピペ連携で使えます。</p>
+      {!loaded && <div style={{fontSize:13,color:"var(--ink3)"}}>読み込み中…</div>}
+      {loaded && conns.length===0 &&
+        <div style={{fontSize:13,color:"var(--ink3)"}}>APIに接続できません（バックエンド未起動）。</div>}
       <div style={{display:"flex",flexDirection:"column",gap:11}}>
-        {list.map(c=>{
-          const on=c.status==="connected"; const pct=c.cap?Math.min(100,(c.used/c.cap)*100):0;
-          return (
-            <div key={c.name} style={{padding:"15px 17px",borderRadius:12,background:"var(--panel)",border:"1px solid var(--line)"}}>
-              <div style={{display:"flex",alignItems:"center",gap:11}}>
-                <span style={{width:9,height:9,borderRadius:9,background:on?"var(--live)":"var(--ink3)"}}/>
-                <span style={{fontSize:15,fontWeight:600}}>{c.name}</span>
-                <span className="mono" style={{fontSize:11.5,color:"var(--ink3)"}}>{c.key}</span>
-                <span className="mono" style={{marginLeft:"auto",fontSize:11,color:on?"var(--live)":"var(--ink3)"}}>{c.status}</span>
-                <button style={{marginLeft:8,fontSize:12,color:"var(--ink2)",padding:"5px 10px",borderRadius:7,border:"1px solid var(--line2)"}}>Edit</button>
-              </div>
-              {c.cap>0 &&
-                <div style={{marginTop:13}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                    <span style={{fontSize:11.5,color:"var(--ink3)"}}>Remaining this month</span>
-                    <span className="mono" style={{fontSize:11.5,color:"var(--ink2)"}}>
-                      {(c.cap-c.used).toLocaleString()}{c.unit?" "+c.unit:"K"} left · {c.used.toLocaleString()}/{c.cap.toLocaleString()}{c.unit?"":"K"}</span>
-                  </div>
-                  <div style={{height:7,background:"var(--panel2)",borderRadius:6,overflow:"hidden"}}>
-                    <div style={{width:`${pct}%`,height:"100%",borderRadius:6,
-                      background:pct>85?"var(--r3)":"var(--live)"}}/>
-                  </div>
-                </div>}
-            </div>
-          );
-        })}
-        <button style={{padding:"13px",borderRadius:12,border:"1px dashed var(--line2)",
-          color:"var(--ink2)",fontSize:13,fontWeight:500,background:"transparent"}}>
-          + Add {tab==="ai"?"AI model":"API / service"}
-        </button>
+        {conns.map(c=><ConnectionCard key={c.id} c={c} onChange={replace}/>)}
       </div>
       <p style={{marginTop:16,fontSize:11.5,color:"var(--ink3)",display:"flex",alignItems:"center",gap:7}}>
-        <Icon name="shield" c="var(--live)" s={13}/> Keys are stored encrypted and never sent to any model, log, or stdout.
+        <Icon name="shield" c="var(--live)" s={13}/> キーは .env（git管理外）に保存され、マスクされます。モデル・ログ・stdoutには決して送られません。
       </p>
     </main>
+  );
+}
+function ConnectionCard({c,onChange}){
+  const [editing,setEditing]=useState(false);
+  const [key,setKey]=useState("");
+  const [newModel,setNewModel]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState(null);
+  const manual=c.kind==="manual";
+  const on=c.connected;
+  const save=async()=>{
+    if(!key.trim())return;
+    setBusy(true); setErr(null);
+    try{ onChange(await setConnKey(c.id,key.trim())); setEditing(false); setKey(""); }
+    catch(e){ setErr(String(e.message||e)); }
+    finally{ setBusy(false); }
+  };
+  const refresh=async()=>{ setBusy(true); setErr(null);
+    try{ onChange(await refreshConn(c.id)); }catch(e){ setErr(String(e.message||e)); }finally{ setBusy(false); } };
+  const clear=async()=>{ setBusy(true); setErr(null);
+    try{ onChange(await clearConnKey(c.id)); }catch(e){ setErr(String(e.message||e)); }finally{ setBusy(false); } };
+  const addModel=async()=>{ if(!newModel.trim())return; setBusy(true);
+    try{ onChange(await addManualModel(c.id,newModel.trim())); setNewModel(""); }catch(e){ setErr(String(e.message||e)); }finally{ setBusy(false); } };
+  return (
+    <div style={{padding:"15px 17px",borderRadius:12,background:"var(--panel)",border:"1px solid var(--line)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap"}}>
+        <span style={{width:9,height:9,borderRadius:9,background:on?"var(--live)":"var(--ink3)"}}/>
+        <span style={{fontSize:15,fontWeight:600}}>{c.name}</span>
+        <span className="mono" style={{fontSize:10.5,padding:"2px 7px",borderRadius:6,
+          background:manual?"var(--aiSoft)":"var(--liveSoft)",color:manual?"var(--ai)":"var(--live)"}}>
+          {manual?"コピペ連携":"API"}{c.free?" · free":""}</span>
+        <span className="mono" style={{fontSize:11.5,color:"var(--ink3)"}}>{c.key_hint}</span>
+        <span className="mono" style={{marginLeft:"auto",fontSize:11,color:on?"var(--live)":"var(--ink3)"}}>
+          {on?"connected":"not connected"}</span>
+        {!manual && <button onClick={()=>setEditing(v=>!v)} style={{marginLeft:8,fontSize:12,color:"var(--ink2)",
+          padding:"5px 10px",borderRadius:7,border:"1px solid var(--line2)"}}>{editing?"Cancel":on?"Edit key":"Set key"}</button>}
+        {!manual && on && <button onClick={refresh} disabled={busy} style={{fontSize:12,color:"var(--ink2)",
+          padding:"5px 10px",borderRadius:7,border:"1px solid var(--line2)"}}>Refresh</button>}
+      </div>
+
+      {editing && !manual &&
+        <div style={{marginTop:12,display:"flex",gap:8,alignItems:"center"}}>
+          <input type="password" value={key} onChange={e=>setKey(e.target.value)} autoFocus
+            onKeyDown={e=>{ if(e.key==="Enter")save(); }} placeholder={`${c.name} のAPIキーを貼り付け`}
+            className="mono" style={{flex:1,padding:"9px 11px",borderRadius:9,background:"var(--panel2)",
+              border:"1px solid var(--line2)",color:"var(--ink)",fontSize:12.5,outline:"none"}}/>
+          <button onClick={save} disabled={busy||!key.trim()} style={{...btnPrimary,opacity:busy||!key.trim()?.5:1}}>
+            {busy?"確認中…":"Save & 取得"}</button>
+          {on && <button onClick={clear} disabled={busy} style={btnGhost}>削除</button>}
+        </div>}
+
+      {err && <div style={{marginTop:10,fontSize:11.5,color:"var(--r3)"}}>{err}</div>}
+      {c.error && <div style={{marginTop:10,fontSize:11.5,color:"var(--r3)"}}>{c.error}</div>}
+
+      <div style={{marginTop:12}}>
+        <div style={{fontSize:11.5,color:"var(--ink3)",marginBottom:6}}>
+          利用可能なモデル {c.models.length>0?`(${c.models.length})`:""}
+          {!manual && on && c.models.length===0 && " — Refreshで取得"}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          {c.models.map(m=>(
+            <span key={m} className="mono" style={{fontSize:11,padding:"3px 9px",borderRadius:7,
+              background:"var(--panel2)",border:"1px solid var(--line2)",color:"var(--ink2)"}}>{m}</span>
+          ))}
+          {c.models.length===0 && <span style={{fontSize:11.5,color:"var(--ink3)"}}>—</span>}
+        </div>
+        {manual &&
+          <div style={{marginTop:10,display:"flex",gap:8,alignItems:"center"}}>
+            <input value={newModel} onChange={e=>setNewModel(e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter")addModel(); }} placeholder="モデル名を追加（例: claude-opus-4-8）"
+              className="mono" style={{flex:1,padding:"7px 10px",borderRadius:8,background:"var(--panel2)",
+                border:"1px solid var(--line2)",color:"var(--ink)",fontSize:12,outline:"none"}}/>
+            <button onClick={addModel} disabled={busy||!newModel.trim()} style={{...btnGhost,opacity:busy||!newModel.trim()?.5:1}}>追加</button>
+          </div>}
+      </div>
+    </div>
   );
 }
 

@@ -78,6 +78,40 @@ export function streamAgent(
   return openStream("/agent/stream", { goal, max_iterations: maxIterations }, onLine, onDone);
 }
 
+// ---- Connections (Phase 4): providers, keys, live-discovered models ----
+export type Connection = {
+  id: string; name: string; kind: "api" | "manual"; free: boolean;
+  connected: boolean; key_hint: string; models: string[]; error: string | null;
+};
+export type ModelInfo = { model: string; provider: string; kind: string };
+
+async function jsonReq<T>(path: string, method: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: body !== undefined ? { "content-type": "application/json" } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+  return (await res.json()) as T;
+}
+
+export const fetchConnections = () => fetchJSON<Connection[]>("/connections", []);
+export const fetchModels = () => fetchJSON<ModelInfo[]>("/models", []);
+export const setConnKey = (id: string, key: string) =>
+  jsonReq<Connection>(`/connections/${id}/key`, "PUT", { key });
+export const refreshConn = (id: string) =>
+  jsonReq<Connection>(`/connections/${id}/refresh`, "POST");
+export const clearConnKey = (id: string) =>
+  jsonReq<Connection>(`/connections/${id}/key`, "DELETE");
+export const addManualModel = (id: string, model: string) =>
+  jsonReq<Connection>(`/connections/${id}/models`, "POST", { model });
+
+// Manual bridge: prompts waiting for a human to paste in/out of an API-less AI.
+export type ManualPending = { id: string; title: string; prompt: string; created: number };
+export const fetchManualPending = () => fetchJSON<ManualPending[]>("/manual/pending", []);
+export const submitManual = (id: string, reply: string) =>
+  jsonReq<{ ok: boolean }>("/manual/submit", "POST", { id, reply });
+
 export type Flow = {
   id: string;
   name: string;
