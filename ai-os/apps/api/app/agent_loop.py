@@ -19,7 +19,7 @@ from typing import AsyncIterator
 
 from .config import settings
 from .core.audit import AuditEvent, log
-from .core.llm import LLMMessage, get_llm_provider
+from .core.llm import LLMMessage, get_provider_for_model
 from .core.policy import evaluate
 from .execution_manager import LogLine, get_execution_manager
 
@@ -71,11 +71,23 @@ def _wrap(text: str) -> list[str]:
     return [ln for ln in text.splitlines()] or [text]
 
 
+def _agent_model(agent_name: str) -> str | None:
+    """The model configured for this agent in the live store, if any."""
+    try:
+        from . import agents_store  # lazy: avoid import cycle
+        a = agents_store.get_by_name(agent_name)
+        return a.get("model") if a else None
+    except Exception:  # noqa: BLE001 — model routing is best-effort
+        return None
+
+
 class AgentLoop:
     def __init__(self, provider=None, manager=None, model: str | None = None) -> None:
-        self._provider = provider or get_llm_provider()
+        # None = resolve dynamically per agent (model + provider from Connections);
+        # explicit values (tests) are respected as-is.
+        self._provider = provider
         self._manager = manager or get_execution_manager()
-        self._model = model or settings.llm_model
+        self._model = model
 
     async def run(
         self,
@@ -87,18 +99,22 @@ class AgentLoop:
         token_budget: int | None = None,
     ) -> AsyncIterator[LogLine]:
         budget = token_budget if token_budget is not None else settings.llm_token_budget
+        # Pick this agent's model, then the provider that serves it (Gemini,
+        # Anthropic, OpenAI, or the manual bridge for API-less assistants).
+        model = self._model or _agent_model(agent_name) or settings.llm_model
+        provider = self._provider or get_provider_for_model(model)
         history: list[LLMMessage] = [
             LLMMessage(role="system", content=(system or DEFAULT_ROLE) + "\n\n" + LOOP_PROTOCOL),
             LLMMessage(role="user", content=f"Goal: {goal}"),
         ]
         used_tokens = 0
-        yield LogLine("sys", f"agent '{agent_name}' · model {self._model} · goal: {goal}")
+        yield LogLine("sys", f"agent '{agent_name}' · model {model} · goal: {goal}")
         log.append(AuditEvent("agent.start", agent_name, goal))
 
         for i in range(max_iterations):
             yield LogLine("sys", f"— iteration {i + 1}/{max_iterations} · thinking… —")
             try:
-                resp = await self._provider.complete(history, model=self._model, max_tokens=1024)
+                resp = await provider.complete(history, model=model, max_tokens=1024)
             except Exception as exc:  # noqa: BLE001 — surface LLM/transport errors
                 yield LogLine("err", f"LLM error: {exc}")
                 return

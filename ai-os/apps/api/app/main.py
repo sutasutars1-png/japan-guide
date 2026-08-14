@@ -16,7 +16,9 @@ from .config import settings
 from .core.audit import log as audit_log
 from .core.secrets import store as secret_store
 from .db import audit_sink, init_db
-from .routers import agent, approvals, catalog, execution, flow, llm, skills, tools
+from .routers import (
+    agent, approvals, catalog, connections, execution, flow, llm, skills, tools,
+)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("aios")
@@ -26,6 +28,11 @@ log = logging.getLogger("aios")
 async def lifespan(_app: FastAPI):
     if init_db():  # best-effort; API works without it
         audit_log.set_sink(audit_sink)  # persist audit events to Postgres
+    try:
+        from .connections import bootstrap as discover_models
+        discover_models()  # discover models for any provider whose key is set
+    except Exception as exc:  # noqa: BLE001 — never block boot on discovery
+        log.warning("model discovery skipped: %s", exc)
     log.info(
         "AI-OS API up · env=%s · sandbox=%s · masking %d secrets",
         settings.env, settings.sandbox_runtime, len(secret_store.names()),
@@ -56,6 +63,7 @@ app.include_router(llm.router)
 app.include_router(agent.router)
 app.include_router(skills.router)
 app.include_router(flow.router)
+app.include_router(connections.router)
 
 
 @app.get("/", tags=["meta"])
