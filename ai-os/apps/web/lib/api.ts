@@ -95,6 +95,9 @@ async function jsonReq<T>(path: string, method: string, body?: unknown): Promise
   return (await res.json()) as T;
 }
 
+export const deleteAgent = (id: string) =>
+  fetch(`${API_BASE}/agents/${id}`, { method: "DELETE" }).then((r) => r.ok);
+
 export const fetchConnections = () => fetchJSON<Connection[]>("/connections", []);
 export const fetchModels = () => fetchJSON<ModelInfo[]>("/models", []);
 export const setConnKey = (id: string, key: string) =>
