@@ -1061,6 +1061,9 @@ function ConnectionCard({c,onChange}){
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState(null);
   const manual=c.kind==="manual";
+  const noKey=c.kind!=="api";        // manual + cli need no API key
+  const isCli=c.kind==="cli";
+  const kindLabel=c.kind==="api"?"API":isCli?"ローカルCLI":"コピペ連携";
   const on=c.connected;
   const save=async()=>{
     if(!key.trim())return;
@@ -1081,18 +1084,22 @@ function ConnectionCard({c,onChange}){
         <span style={{width:9,height:9,borderRadius:9,background:on?"var(--live)":"var(--ink3)"}}/>
         <span style={{fontSize:15,fontWeight:600}}>{c.name}</span>
         <span className="mono" style={{fontSize:10.5,padding:"2px 7px",borderRadius:6,
-          background:manual?"var(--aiSoft)":"var(--liveSoft)",color:manual?"var(--ai)":"var(--live)"}}>
-          {manual?"コピペ連携":"API"}{c.free?" · free":""}</span>
+          background:c.kind==="api"?"var(--liveSoft)":"var(--aiSoft)",color:c.kind==="api"?"var(--live)":"var(--ai)"}}>
+          {kindLabel}{c.free?" · free":""}</span>
         <span className="mono" style={{fontSize:11.5,color:"var(--ink3)"}}>{c.key_hint}</span>
         <span className="mono" style={{marginLeft:"auto",fontSize:11,color:on?"var(--live)":"var(--ink3)"}}>
-          {on?"connected":"not connected"}</span>
-        {!manual && <button onClick={()=>setEditing(v=>!v)} style={{marginLeft:8,fontSize:12,color:"var(--ink2)",
+          {on?"connected":isCli?"CLI未検出":"not connected"}</span>
+        {!noKey && <button onClick={()=>setEditing(v=>!v)} style={{marginLeft:8,fontSize:12,color:"var(--ink2)",
           padding:"5px 10px",borderRadius:7,border:"1px solid var(--line2)"}}>{editing?"Cancel":on?"Edit key":"Set key"}</button>}
-        {!manual && on && <button onClick={refresh} disabled={busy} style={{fontSize:12,color:"var(--ink2)",
+        {c.kind==="api" && on && <button onClick={refresh} disabled={busy} style={{fontSize:12,color:"var(--ink2)",
           padding:"5px 10px",borderRadius:7,border:"1px solid var(--line2)"}}>Refresh</button>}
       </div>
+      {isCli &&
+        <div style={{marginTop:8,fontSize:11.5,color:"var(--ink3)",lineHeight:1.5}}>
+          バックエンドが、あなたのログイン済み <span className="mono">claude</span> を実行します。
+          APIキー不要・課金なし。バックエンドを <b>Claude Codeにログイン済みのPC</b> で起動してください。</div>}
 
-      {editing && !manual &&
+      {editing && !noKey &&
         <div style={{marginTop:12,display:"flex",gap:8,alignItems:"center"}}>
           <input type="password" value={key} onChange={e=>setKey(e.target.value)} autoFocus
             onKeyDown={e=>{ if(e.key==="Enter")save(); }} placeholder={`${c.name} のAPIキーを貼り付け`}

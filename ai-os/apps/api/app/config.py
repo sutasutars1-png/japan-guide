@@ -21,6 +21,13 @@ class Settings:
     llm_model: str = os.getenv("LLM_MODEL", "gemini-2.5-flash")
     llm_token_budget: int = int(os.getenv("LLM_TOKEN_BUDGET", "40000"))
     cors_origins: list[str] = field(default_factory=_origins)
+    # Claude Code CLI provider (#5): the backend shells out to the user's own
+    # logged-in `claude` binary — no API key, no token injection.
+    claude_cli_path: str = os.getenv("AIOS_CLAUDE_CLI", "claude")
+    claude_cli_model: str = os.getenv("AIOS_CLAUDE_CLI_MODEL", "")  # "" = CLI default
+    claude_cli_timeout: int = int(os.getenv("AIOS_CLAUDE_CLI_TIMEOUT", "300"))
+    # Override the invocation entirely (version-proofing); space-separated.
+    claude_cli_args: str = os.getenv("AIOS_CLAUDE_CLI_ARGS", "")
 
 
 settings = Settings()
