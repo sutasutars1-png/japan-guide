@@ -54,14 +54,25 @@ many automatic worker steps.
   provider before it leaves. All transitions audited (`orchestrate.start/plan/
   halt/done`).
 
+## Report chaining, re-plan, and plan review (all implemented)
+- **Report chaining** — each worker's DONE report is captured and prepended (last
+  few) to the next step's context via `_with_context(...)`, so工程が積み上がる.
+- **Re-plan loop** — if a worker produces no result (error / no DONE report), the
+  orchestrator is consulted again with `compose_replan_prompt(...)` for a revised
+  *remaining* plan; bounded by `max_replans` (default 2). An L3/L4 approval **halt**
+  still stops the run (a human decision, never re-planned).
+- **Plan-first / editable checklist** — `make_plan()` returns the parsed plan
+  without running; `POST /orchestrate/plan` serves it. `run(..., steps=<edited>)`
+  (and the WS/POST `steps` field) dispatch a pre-approved plan, skipping planning.
+  UI: a 「計画を確認してから実行」 toggle shows a `PlanReview` panel (edit agent/task,
+  reorder, add/remove) before dispatch.
+
 ## Known Issues
-- Plan is a flat ordered list (option (a)); conditional routing / re-plan on worker
-  failure (option (b), `→NEXT:`) is a later slice.
-- Worker DONE reports aren't yet fed forward as context between steps (each step
-  runs on its task text). Chaining reports is a small follow-up.
-- `per_worker_iters` / `max_workers` are fixed defaults.
+- `per_worker_iters` / `max_workers` / `max_replans` are fixed defaults (not yet
+  surfaced in the UI).
+- Re-plan replaces the *remaining* queue wholesale; it does not diff against
+  already-done work beyond passing a completed-steps summary.
 
 ## Next
-- Feed each worker's DONE report into the next step's context (report chaining).
-- Re-plan loop: on a worker halt/failure, re-consult the orchestrator (still rare).
-- Surface the plan in the UI as an editable checklist before dispatch (optional).
+- Surface iteration/worker/re-plan budgets in the UI.
+- Optional `→NEXT:`-style conditional routing inside a single plan.
