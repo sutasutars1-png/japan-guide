@@ -17,8 +17,23 @@ from pathlib import Path
 
 _lock = threading.Lock()
 
-# ai-os/.env  (…/ai-os/apps/api/app/env_file.py → parents[3] == ai-os)
-_DEFAULT_ENV = Path(__file__).resolve().parents[3] / ".env"
+def _default_env() -> Path:
+    """Where to persist keys, robust to layout.
+
+    - Repo checkout: …/ai-os/apps/api/app/env_file.py → ai-os/.env (parents[3]).
+    - Docker image: /srv/app/env_file.py has only 3 parents, so parents[3] would
+      IndexError — fall back to the app package's parent (WORKDIR, e.g. /srv/.env).
+    Overridable at runtime via AIOS_ENV_FILE.
+    """
+    p = Path(__file__).resolve()
+    parents = p.parents
+    if len(parents) >= 4 and (parents[3] / "apps").is_dir():
+        return parents[3] / ".env"          # monorepo root (ai-os/)
+    return (parents[1] if len(parents) >= 2 else p.parent) / ".env"
+
+
+# ai-os/.env in a checkout; /srv/.env in the container.
+_DEFAULT_ENV = _default_env()
 
 
 def env_path() -> Path:
