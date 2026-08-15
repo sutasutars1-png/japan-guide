@@ -41,6 +41,24 @@ def env_path() -> Path:
     return Path(override) if override else _DEFAULT_ENV
 
 
+def load_env_file() -> None:
+    """Load `KEY=value` pairs from the .env into os.environ, WITHOUT overriding
+    vars already set. Docker injects env itself (those win); when the API runs on
+    the host this makes keys the user saved via the UI survive a restart.
+    """
+    path = env_path()
+    if not path.exists():
+        return
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key, val = key.strip(), val.strip()
+        if key and key not in os.environ:
+            os.environ[key] = val
+
+
 _VALID_KEY = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 

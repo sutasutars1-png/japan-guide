@@ -9,10 +9,16 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+# Load persisted keys from the git-ignored .env into the environment BEFORE
+# config/secret-store read it (no-op under Docker, where env is injected).
+from .env_file import load_env_file  # noqa: E402
 
-from .config import settings
+load_env_file()
+
+from fastapi import FastAPI  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+
+from .config import settings  # noqa: E402
 from .core.audit import log as audit_log
 from .core.secrets import store as secret_store
 from .db import audit_sink, init_db
