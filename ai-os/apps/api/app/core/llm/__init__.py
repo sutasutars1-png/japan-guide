@@ -29,7 +29,11 @@ def get_llm_provider(name: str | None = None) -> LLMProvider:
         from .openai_provider import OpenAIProvider
 
         return OpenAIProvider()
-    if name in ("claude-code", "claude-web", "manual"):
+    if name in ("claude-cli", "claude-code"):
+        from .claude_cli_provider import ClaudeCliProvider
+
+        return ClaudeCliProvider()
+    if name in ("claude-web", "manual"):
         from .manual_provider import ManualBridgeProvider
 
         return ManualBridgeProvider(label=name)

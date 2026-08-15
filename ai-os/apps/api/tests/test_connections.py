@@ -48,10 +48,10 @@ def test_discovery_error_is_captured_not_raised(monkeypatch):
 
 def test_manual_provider_needs_no_key_and_lists_models():
     conns = {c["id"]: c for c in connections.list_connections()}
-    cc = conns["claude-code"]
-    assert cc["kind"] == "manual"
-    assert cc["connected"] is True          # ready without a key
-    assert "claude-code" in cc["models"]
+    cw = conns["claude-web"]
+    assert cw["kind"] == "manual"
+    assert cw["connected"] is True          # ready without a key
+    assert "claude-web" in cw["models"]
 
 
 def test_add_manual_model():
@@ -60,8 +60,8 @@ def test_add_manual_model():
 
 
 def test_model_routing_picks_provider():
-    assert isinstance(get_provider_for_model("claude-code"), ManualBridgeProvider)
-    assert get_provider_for_model("claude-code").name == "manual"
+    assert isinstance(get_provider_for_model("claude-web"), ManualBridgeProvider)
+    assert get_provider_for_model("claude-web").name == "manual"
 
 
 # ---- manual bridge ----------------------------------------------------------

@@ -31,8 +31,8 @@ PROVIDERS: list[dict[str, Any]] = [
      "env": "ANTHROPIC_API_KEY", "free": False},
     {"id": "openai", "name": "OpenAI", "kind": "api",
      "env": "OPENAI_API_KEY", "free": False},
-    {"id": "claude-code", "name": "Claude Code（直接実行・コピペ）", "kind": "manual",
-     "free": True, "default_models": ["claude-code"]},
+    {"id": "claude-cli", "name": "Claude Code（ローカルCLI・自動）", "kind": "cli",
+     "free": True, "default_models": ["claude-cli"]},
     {"id": "claude-web", "name": "Claude（ブラウザ・コピペ）", "kind": "manual",
      "free": True, "default_models": ["claude-web"]},
 ]
@@ -50,9 +50,17 @@ def _env_names(p: dict) -> list[str]:
     return [p["env"], *p.get("alt_env", [])] if p.get("env") else []
 
 
+def _cli_path() -> str | None:
+    """Resolved path of the Claude Code CLI, or None if not on PATH."""
+    from .core.llm.claude_cli_provider import ClaudeCliProvider
+    return ClaudeCliProvider.available()
+
+
 def _key_present(p: dict) -> bool:
     if p["kind"] == "manual":
         return True  # always "ready" — the transport is a human, no key needed
+    if p["kind"] == "cli":
+        return _cli_path() is not None  # ready iff the `claude` binary is found
     names = set(secret_store.names())
     return any(n in names for n in _env_names(p))
 
@@ -60,6 +68,9 @@ def _key_present(p: dict) -> bool:
 def _masked_hint(p: dict) -> str:
     if p["kind"] == "manual":
         return "APIキー不要（コピペ連携）"
+    if p["kind"] == "cli":
+        path = _cli_path()
+        return f"CLI検出: {path}" if path else "claude CLI 未検出"
     for n in _env_names(p):
         val = secret_store.get(n)
         if val:
@@ -125,7 +136,7 @@ def refresh_models(provider_id: str) -> dict[str, Any]:
     if p is None:
         raise KeyError(provider_id)
     st = _state[provider_id]
-    if p["kind"] == "manual":
+    if p["kind"] != "api":  # manual + cli keep their curated model list
         st["error"] = None
         return connection(provider_id)
     key = next((secret_store.get(n) for n in _env_names(p) if secret_store.get(n)), None)
@@ -153,7 +164,7 @@ def set_key(provider_id: str, key: str) -> dict[str, Any]:
     p = _BY_ID.get(provider_id)
     if p is None:
         raise KeyError(provider_id)
-    if p["kind"] == "manual":
+    if p["kind"] != "api":
         raise ValueError("this provider needs no API key")
     key = (key or "").strip()
     if not key:
@@ -230,8 +241,10 @@ def provider_id_for_model(model: str) -> str | None:
             return p["id"]
     # Heuristic fallback for unseen ids so routing still works pre-discovery.
     m = (model or "").lower()
-    if m.startswith("claude-code") or m == "claude-web":
-        return "claude-code" if "code" in m else "claude-web"
+    if m.startswith("claude-cli") or m == "claude-code":
+        return "claude-cli"
+    if m == "claude-web":
+        return "claude-web"
     if m.startswith("claude"):
         return "anthropic"
     if m.startswith(("gpt", "o1", "o3", "o4")):
