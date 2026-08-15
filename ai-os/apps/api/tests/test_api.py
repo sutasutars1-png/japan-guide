@@ -37,7 +37,7 @@ def test_capabilities():
     r = client.get("/capabilities")
     body = r.json()
     assert "shell.execute" in body["capabilities"]
-    assert "claude-opus-4-8" in body["models"]
+    assert "claude-cli" in body["models"]
 
 
 def test_policy_check_endpoint_blocks():
