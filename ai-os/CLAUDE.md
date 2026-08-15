@@ -20,8 +20,14 @@ must never be removed:
 delivered, in order: Gemini adapter → agent loop (PLAN→EXECUTE→OBSERVE) → layered
 skill DB → presets/overlays → multi-agent flows → Connections (keys + live model
 discovery) → manual bridge → **Claude Code CLI provider (#5)** → **orchestrator**
-(goal→plan→dispatch) → report chaining + re-plan + editable plan review. Latest
-work merged via PRs #13–#18. **80 pytest green; `next build` type-checks.**
+(goal→plan→dispatch) → report chaining + re-plan + editable plan review, then UI
+polish + Docker/host run modes and a string of boot-crash fixes. Merged via PRs
+#13–#28. **82 pytest green; `next build` type-checks.**
+
+**Verified working end-to-end (user-confirmed):** UI goal → Claude orchestrator
+(subscription CLI, keyless) → Gemini workers, running in **Mode B** (host api). And
+Mode A (all-Docker) with Gemini workers. The whole "type a goal in the 🧭 command
+bar → 統括 → workers" loop runs.
 
 **Dev workflow (do this every stage):**
 - Develop on branch **`claude/ai-execution-platform-o2qef8`**.
@@ -51,6 +57,25 @@ workers work, but `claude-cli` is "未検出" (no `claude` in the container). **
 the api shells out to your own logged-in `claude` → automatic Claude orchestrator,
 subscription, no token injection. Set Planner's Model to `claude-cli`. Mounting
 `~/.claude` into a container is the rejected token-injection path — never do it.
+
+**Operational gotchas (each cost a debugging round — don't repeat):**
+- **Test against pinned deps.** `pip install -r requirements.txt` before pytest.
+  Example that only bit in Docker: FastAPI 0.115 asserts a `status_code=204` route
+  has no response body; a `-> None`/response-model 204 route crashes at import.
+  Return `Response(status_code=204)` and don't annotate a body.
+- **`__file__`-relative paths must survive the container layout.** In the image the
+  app is at `/srv/app` (3 parents), not `…/ai-os/apps/api/app` (4). `parents[3]`
+  → IndexError. See `env_file._default_env()` for the guard.
+- **Always pass `encoding="utf-8"` to file reads/writes.** Windows defaults to
+  cp932; a UTF-8 `.env` (Japanese comments) crashed the host api with
+  `UnicodeDecodeError`. Reads use `errors="replace"` so a stray byte can't crash boot.
+- **Docker images are baked (`COPY app`).** `docker compose up` without `--build`
+  runs stale code. The api source is now bind-mounted + `--reload` so a `git pull`
+  → `docker compose restart api` suffices; **web still needs `--build`.**
+- **`.bat` echoes:** cmd + `chcp 65001` mis-parses fullwidth `（） 「」` and colons —
+  keep launcher echoes to plain text.
+- **The api loads `.env` at boot** (`main.py` → `load_env_file()`), so keys saved
+  via the UI survive a restart in host mode (Docker injects env itself).
 
 ## Layout
 
@@ -214,7 +239,14 @@ the manual bridge; `gemini-*` etc. for API workers.
 
 ### Docs map (`docs/`)
 phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills,
--skills-layered, -presets, -flows, -connections, -claude-cli, **-orchestrate**.
+-skills-layered, -presets, -flows, -connections, -claude-cli, -orchestrate,
+**run-modes** (Docker vs host api).
+
+### Launchers (repo root of `ai-os/`)
+- `START-AI-OS.bat` — Mode A, all-Docker (Gemini). `docker compose up --build`.
+- `START-AI-OS-CLAUDE.bat` — Mode B, db+web in Docker + **api on host** (for the
+  keyless `claude-cli` orchestrator; needs Docker + logged-in `claude` + Python).
+- `STOP-AI-OS.bat` — `docker compose down` (host api stops when its window closes).
 
 ---
 
