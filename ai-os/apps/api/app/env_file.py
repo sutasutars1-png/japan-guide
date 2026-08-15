@@ -49,7 +49,9 @@ def load_env_file() -> None:
     path = env_path()
     if not path.exists():
         return
-    for raw in path.read_text().splitlines():
+    # Always UTF-8 (the file may hold Japanese comments); errors="replace" so a
+    # stray byte in a comment can never crash boot. Windows defaults to cp932.
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -73,7 +75,7 @@ def set_env_value(key: str, value: str) -> None:
     with _lock:
         path = env_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        lines = path.read_text().splitlines() if path.exists() else []
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines() if path.exists() else []
         prefix = f"{key}="
         replaced = False
         for i, line in enumerate(lines):
@@ -85,7 +87,7 @@ def set_env_value(key: str, value: str) -> None:
                 break
         if not replaced:
             lines.append(f"{key}={value}")
-        path.write_text("\n".join(lines) + "\n")
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         try:
             os.chmod(path, 0o600)  # keys are readable only by the owner
         except OSError:
@@ -100,11 +102,11 @@ def unset_env_value(key: str) -> None:
     with _lock:
         path = env_path()
         if path.exists():
-            lines = path.read_text().splitlines()
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
             out = []
             prefix = f"{key}="
             for line in lines:
                 stripped = line.lstrip("#").lstrip()
                 out.append(f"# {key}=" if stripped.startswith(prefix) else line)
-            path.write_text("\n".join(out) + "\n")
+            path.write_text("\n".join(out) + "\n", encoding="utf-8")
         os.environ.pop(key, None)
