@@ -41,7 +41,15 @@ it into a foreign container).
   `connected` iff the `claude` binary is found on PATH; the UI card explains it
   runs the user's own login and must be started on a logged-in machine.
 - **Config:** `AIOS_CLAUDE_CLI` (path), `AIOS_CLAUDE_CLI_MODEL`,
-  `AIOS_CLAUDE_CLI_TIMEOUT`, `AIOS_CLAUDE_CLI_ARGS`.
+  `AIOS_CLAUDE_CLI_TIMEOUT`, `AIOS_CLAUDE_CLI_ARGS`,
+  `AIOS_CLAUDE_CLI_FORCE_SUBSCRIPTION`.
+- **Billing safety (subscription, not metered API):** the CLI provider spawns
+  `claude` with `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` **stripped from its
+  environment** (default). So even if the user has set an Anthropic API key for
+  API workers, the orchestrator CLI uses the **subscription login** — it can never
+  silently switch to metered API billing. Not logged in → the CLI fails cleanly
+  (a visible error), never a surprise charge. `--bare` (which forces API-key auth)
+  is never used. Opt out with `AIOS_CLAUDE_CLI_FORCE_SUBSCRIPTION=0`.
 
 ## Tests
 - `pytest` green (71). New `test_claude_cli.py` (subprocess mocked, no real call):

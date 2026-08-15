@@ -51,6 +51,23 @@ def _build_args() -> list[str]:
     return args
 
 
+# Env vars that would make `claude` use metered API billing instead of the
+# subscription login. Stripped from the subprocess env by default.
+_API_BILLING_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+
+
+def _build_env() -> dict:
+    """The subprocess environment. By default we remove API-key vars so the CLI
+    falls back to the user's subscription login — never a surprise API charge."""
+    import os
+
+    env = os.environ.copy()
+    if settings.claude_cli_force_subscription:
+        for k in _API_BILLING_ENV:
+            env.pop(k, None)
+    return env
+
+
 class ClaudeCliProvider(LLMProvider):
     name = "claude-cli"
 
@@ -85,7 +102,8 @@ class ClaudeCliProvider(LLMProvider):
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=cwd,  # empty throwaway dir: nothing here to touch
+                cwd=cwd,      # empty throwaway dir: nothing here to touch
+                env=_build_env(),  # subscription login only — no metered API key
             )
             try:
                 out_b, err_b = await asyncio.wait_for(

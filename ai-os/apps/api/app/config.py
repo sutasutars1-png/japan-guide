@@ -28,6 +28,12 @@ class Settings:
     claude_cli_timeout: int = int(os.getenv("AIOS_CLAUDE_CLI_TIMEOUT", "300"))
     # Override the invocation entirely (version-proofing); space-separated.
     claude_cli_args: str = os.getenv("AIOS_CLAUDE_CLI_ARGS", "")
+    # Billing safety: strip ANTHROPIC_API_KEY / _AUTH_TOKEN from the CLI's env so
+    # `claude` uses your SUBSCRIPTION login, never metered API billing. Default on.
+    # If not logged in, the CLI fails cleanly instead of silently charging the API.
+    claude_cli_force_subscription: bool = (
+        os.getenv("AIOS_CLAUDE_CLI_FORCE_SUBSCRIPTION", "1").lower() not in ("0", "false", "no")
+    )
 
 
 settings = Settings()

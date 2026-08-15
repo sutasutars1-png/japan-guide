@@ -165,7 +165,14 @@ the manual bridge; `gemini-*` etc. for API workers.
 - **Claude Code CLI provider (#5):** `core/llm/claude_cli_provider.py` — backend
   runs the user's `claude -p`; text-only (no `--dangerously-skip-permissions`),
   masked prompt, throwaway cwd, on the host (not the sandbox). `cli`-kind
-  connection; config via `AIOS_CLAUDE_CLI*`.
+  connection; config via `AIOS_CLAUDE_CLI*`. **Billing safety:** spawns `claude`
+  with `ANTHROPIC_API_KEY`/`_AUTH_TOKEN` stripped from its env (default), so it
+  uses the **subscription login**, never metered API — not logged in ⇒ clean
+  failure, never a surprise charge (`AIOS_CLAUDE_CLI_FORCE_SUBSCRIPTION=0` to opt
+  out). Which Claude tier bills: **manual `claude-web`** = your browser subscription
+  (free); **`claude-cli` (#5)** = subscription (free); **`anthropic` API models**
+  = metered, and only if the user sets an Anthropic key AND assigns an agent a
+  `claude-*` API model.
 - **Orchestrator (`/orchestrate`):** `app/orchestrator.py` — goal → composed
   orchestrator prompt → **single-shot** provider call → `parse_plan` → auto-dispatch
   each `<agent>: <task>` step to the worker's loop. Orchestrator defaults to
