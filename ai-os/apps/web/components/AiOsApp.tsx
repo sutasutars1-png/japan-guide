@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { fetchJSON, streamExecution, streamAgent, streamFlow, streamOrchestrate, fetchPlan, API_BASE,
   fetchConnections, fetchModels, setConnKey, refreshConn, clearConnKey, addManualModel,
-  fetchManualPending, submitManual } from "@/lib/api";
+  fetchManualPending, submitManual, deleteAgent } from "@/lib/api";
 
 /* ============================================================
    AI-OS · Execution Plane — Phase 1 UI
@@ -166,6 +166,7 @@ export default function App(){
   const [flows,setFlows]=useState([]); // available multi-agent pipelines (Phase 4 · 3c)
   const [plan,setPlan]=useState(null); // {goal, steps} awaiting user review before dispatch
   const [planBusy,setPlanBusy]=useState(false);
+  const [apiReady,setApiReady]=useState(true); // any API provider key registered?
   const logRef=useRef(null);
   const runCleanup=useRef(null);
 
@@ -177,6 +178,14 @@ export default function App(){
     fetchJSON("/flows",[]).then(f=>{ if(!cancelled&&Array.isArray(f)&&f.length)setFlows(f); });
     return ()=>{cancelled=true; if(runCleanup.current)runCleanup.current();};
   },[]);
+  // Re-check whether any API provider key is registered whenever the view changes
+  // (so registering a key in Connections clears the setup banner on return).
+  useEffect(()=>{
+    let cancelled=false;
+    fetchConnections().then(cs=>{ if(!cancelled&&Array.isArray(cs)&&cs.length)
+      setApiReady(cs.some(c=>c.kind==="api"&&c.connected)); });
+    return ()=>{cancelled=true;};
+  },[view]);
 
   // Demo replay — only until the user runs a real command (then live takes over).
   useEffect(()=>{
@@ -321,7 +330,8 @@ export default function App(){
           <div style={{flex:1,minHeight:0,display:"flex"}}>
             {view==="exec" && <ExecView {...{proj,setProj,lines,running,elapsed:fmt(elapsed),
               cpu,ram,net,tokens,agents,comments,logRef,askApproval,activeAgent,onRun:runCommand,onGoal:runGoal,onFlow:runFlow,
-              onOrchestrate:runOrchestrate,onReviewPlan:reviewPlan,plan,planBusy,onConfirmPlan:confirmPlan,onCancelPlan:()=>setPlan(null),flows,live}}/>}
+              onOrchestrate:runOrchestrate,onReviewPlan:reviewPlan,plan,planBusy,onConfirmPlan:confirmPlan,onCancelPlan:()=>setPlan(null),flows,live,
+              apiReady,onGotoConnections:()=>setView("conns")}}/>}
             {view==="agents" && <AgentsView agents={agents} setAgents={setAgents}/>}
             {view==="flow" && <FlowView agents={agents}/>}
             {view==="data" && <DataView proj={proj} setProj={setProj}/>}
@@ -389,12 +399,42 @@ function ActiveModelChip({model,running}){
   );
 }
 
+// A small amber chip marking UI that is still sample/demo data (not wired to the
+// backend yet), so real vs. placeholder is obvious at a glance.
+function SampleBadge({label="サンプル"}){
+  return (
+    <span className="mono" title="このセクションはデモ用のダミーデータで、まだ実機能に接続されていません"
+      style={{fontSize:9.5,fontWeight:600,padding:"2px 7px",borderRadius:6,letterSpacing:".03em",
+        background:"rgba(240,170,60,.14)",border:"1px solid rgba(240,170,60,.45)",color:"#d9922e"}}>
+      ⚠ {label}
+    </span>
+  );
+}
+// Shown on the Execution screen when no API provider key is registered, so the
+// user knows workers can't run automatically until they add one (e.g. Gemini).
+function SetupBanner({onGoto}){
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:11,
+      background:"rgba(240,170,60,.1)",border:"1px solid rgba(240,170,60,.4)"}}>
+      <span style={{fontSize:16}}>🔑</span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:13,fontWeight:600,color:"var(--ink)"}}>APIキーが未登録です</div>
+        <div style={{fontSize:11.5,color:"var(--ink2)"}}>
+          ワーカーを自動実行するには、Connectionsで Gemini（無料）などのAPIキーを登録してください。</div>
+      </div>
+      <button onClick={onGoto} style={{padding:"8px 14px",borderRadius:8,background:"#d9922e",
+        color:"#1a1204",fontSize:12.5,fontWeight:600,flexShrink:0}}>Connectionsを開く</button>
+    </div>
+  );
+}
+
 /* ======================= EXECUTION VIEW ======================= */
 function ExecView(p){
   return (
     <>
       <ProjectsSidebar proj={p.proj} setProj={p.setProj}/>
       <main style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",padding:"16px 18px",gap:12}}>
+        {!p.apiReady && <SetupBanner onGoto={p.onGotoConnections}/>}
         <TaskHeader onAction={p.askApproval}/>
         <SandboxPane lines={p.lines} running={p.running} elapsed={p.elapsed}
           cpu={p.cpu} ram={p.ram} logRef={p.logRef} model={p.activeAgent.model}/>
@@ -412,7 +452,10 @@ function ProjectsSidebar({proj,setProj}){
   return (
     <aside style={{width:206,flexShrink:0,background:"var(--bg2)",borderRight:"1px solid var(--line)",
       display:"flex",flexDirection:"column"}}>
-      <Rail label="Projects" action="+"/>
+      <div style={{display:"flex",alignItems:"center",gap:7,padding:"12px 12px 6px"}}>
+        <span className="disp" style={{fontSize:11,letterSpacing:".06em",color:"var(--ink3)",textTransform:"uppercase"}}>Projects</span>
+        <SampleBadge/>
+      </div>
       <div style={{overflowY:"auto",padding:"4px 10px"}}>
         {PROJECTS.map(p=>{
           const dot={run:"var(--live)",review:"var(--r2)",idle:"var(--ink3)"}[p.status];
@@ -438,6 +481,7 @@ function TaskHeader({onAction}){
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
           <RiskBadge level={2}/>
           <span className="mono" style={{fontSize:11.5,color:"var(--ink3)"}}>Task #1024 · Builder</span>
+          <SampleBadge/>
         </div>
         <h1 className="disp" style={{margin:0,fontSize:18,fontWeight:600}}>
           Analyze the dataset, run tests, and write results
@@ -544,7 +588,7 @@ function AiComments({comments}){
       borderRadius:12,padding:"10px 12px"}}>
       <div style={{fontSize:10.5,fontWeight:600,letterSpacing:".07em",textTransform:"uppercase",
         color:"var(--ink3)",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-        <Icon name="spark" c="var(--ai)" s={12}/> AI decisions & answers
+        <Icon name="spark" c="var(--ai)" s={12}/> AI decisions & answers <SampleBadge/>
       </div>
       {comments.map((c,i)=>{
         const s=style[c.type]||style.answer;
@@ -766,13 +810,13 @@ function StatusRail(p){
         })}
       </div>
 
-      <Sec>Instruments</Sec>
+      <div style={{display:"flex",alignItems:"center",gap:7}}><Sec>Instruments</Sec><SampleBadge/></div>
       <Meter label="CPU" value={p.cpu} max={100} txt={`${p.cpu.toFixed(0)}%`}/>
       <Meter label="Memory" value={p.ram} max={4} txt={`${p.ram.toFixed(2)} GB`}/>
       <Meter label="Network" value={Math.min(p.net,50)} max={50} txt={`${p.net.toFixed(1)} MB`}/>
       <Meter label="Tokens (task)" value={p.tokens} max={40000} txt={p.tokens.toLocaleString()}/>
 
-      <Sec style={{marginTop:20}}>Risk level</Sec>
+      <div style={{display:"flex",alignItems:"center",gap:7,marginTop:20}}><Sec>Risk level</Sec><SampleBadge/></div>
       <RiskGauge current={2}/>
 
       <Sec style={{marginTop:20}}>Guardrails</Sec>
@@ -811,6 +855,13 @@ function AgentsView({agents,setAgents}){
     .then(r=>r.ok&&r.json()).then(a=>a&&sync(a)).catch(()=>{});
   const resetPreset=(id)=>fetch(`${API_BASE}/agents/${id}/reset-preset`,{method:"POST"})
     .then(r=>r.ok&&r.json()).then(a=>a&&sync(a)).catch(()=>{});
+  const del=(id)=>{
+    const a=agents.find(x=>x.id===id);
+    if(!window.confirm(`エージェント「${a?.name||id}」を削除しますか？`))return;
+    deleteAgent(id).catch(()=>{}); // best-effort backend delete
+    setAgents(as=>{ const next=as.filter(x=>x.id!==id);
+      setSel(s=>s===id?(next[0]?.id):s); return next; });
+  };
   return (
     <>
       <aside style={{width:262,flexShrink:0,background:"var(--bg2)",borderRight:"1px solid var(--line)",
@@ -837,12 +888,13 @@ function AgentsView({agents,setAgents}){
       <main style={{flex:1,minWidth:0,overflowY:"auto",padding:"22px 26px"}}>
         {adding ? <AddAgent onCancel={()=>setAdding(false)} onCreate={add} models={models}/>
                 : <AgentDetail agent={agent} update={update} skillLib={skillLib} models={models}
-                    presets={presets} persist={persist} applyPreset={applyPreset} resetPreset={resetPreset}/>}
+                    presets={presets} persist={persist} applyPreset={applyPreset} resetPreset={resetPreset}
+                    onDelete={del}/>}
       </main>
     </>
   );
 }
-function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,resetPreset,models=[]}){
+function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,resetPreset,models=[],onDelete}){
   const c={run:"var(--live)",done:"var(--live)",idle:"var(--ink3)"}[agent.state];
   // Model options come from live discovery; fall back to constants when the API
   // is unreachable, and always include the agent's current model.
@@ -907,6 +959,9 @@ function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,re
       </Field>
 
       <Field label="Skills（層構造・手動選択）" hint="工程 × 思考 × 専門レンズ × 実行 × 方針。選んだスキルはゴール実行時にAIの指示へ層ごとに組み込まれます。">
+        {skillLib.length===0 &&
+          <div style={{fontSize:12,color:"var(--ink3)",padding:"8px 0"}}>
+            スキルDBを読み込めません（バックエンド未起動か接続不可）。APIを起動すると選択肢が表示されます。</div>}
         {["thinking","domain","execution","overlay"].map(layer=>{
           const inLayer=skillLib.filter(s=>s.layer===layer);
           if(!inLayer.length)return null;
@@ -934,9 +989,13 @@ function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,re
         })}
       </Field>
 
-      <div style={{display:"flex",gap:10,marginTop:8}}>
+      <div style={{display:"flex",gap:10,marginTop:8,alignItems:"center"}}>
         <button style={btnPrimary}>Save changes</button>
-        <span className="mono" style={{alignSelf:"center",fontSize:11,color:"var(--ink3)"}}>edits apply to this session instantly</span>
+        <span className="mono" style={{fontSize:11,color:"var(--ink3)"}}>edits apply to this session instantly</span>
+        <button onClick={()=>onDelete&&onDelete(agent.id)}
+          style={{marginLeft:"auto",padding:"9px 16px",borderRadius:9,background:"rgba(226,75,65,.12)",
+            border:"1px solid rgba(226,75,65,.4)",color:"var(--r4)",fontSize:13,fontWeight:600}}>
+          エージェントを削除</button>
       </div>
     </div>
   );
@@ -1063,7 +1122,10 @@ function DataView({proj,setProj}){
     <>
       <ProjectsSidebar proj={proj} setProj={setProj}/>
       <main style={{flex:1,overflowY:"auto",padding:"22px 26px"}}>
-        <h2 className="disp" style={{margin:"0 0 4px",fontSize:20,fontWeight:600}}>Where your data lives</h2>
+        <div style={{display:"flex",alignItems:"center",gap:9,margin:"0 0 4px"}}>
+          <h2 className="disp" style={{margin:0,fontSize:20,fontWeight:600}}>Where your data lives</h2>
+          <SampleBadge/>
+        </div>
         <p style={{margin:"0 0 18px",fontSize:12.5,color:"var(--ink2)"}}>{total.toFixed(1)} GB total across {STORES.length} stores — all local, nothing sent to a third party.</p>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:12,marginBottom:30}}>
           {STORES.map(s=>(

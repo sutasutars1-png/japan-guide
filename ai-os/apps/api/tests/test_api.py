@@ -21,6 +21,18 @@ def test_agents_shape_matches_ui():
     assert {"id", "name", "model", "state", "caps", "role"} <= set(a)
 
 
+def test_create_and_delete_agent():
+    created = client.post("/agents", json={
+        "id": "tmp-del", "name": "Temp", "model": "gemini-2.5-flash",
+        "state": "idle", "caps": [], "role": "throwaway",
+    })
+    assert created.status_code == 201
+    assert any(a["id"] == "tmp-del" for a in client.get("/agents").json())
+    assert client.delete("/agents/tmp-del").status_code == 204
+    assert not any(a["id"] == "tmp-del" for a in client.get("/agents").json())
+    assert client.delete("/agents/tmp-del").status_code == 404  # already gone
+
+
 def test_capabilities():
     r = client.get("/capabilities")
     body = r.json()

@@ -38,6 +38,14 @@ def replace(agent_id: str, agent: dict) -> dict | None:
     return None
 
 
+def remove(agent_id: str) -> bool:
+    for i, a in enumerate(_agents):
+        if a["id"] == agent_id:
+            del _agents[i]
+            return True
+    return False
+
+
 def patch(agent_id: str, changes: dict) -> dict | None:
     a = get_by_id(agent_id)
     if a is None:

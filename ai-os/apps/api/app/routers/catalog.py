@@ -46,6 +46,12 @@ def update_agent(agent_id: str, patch: Agent) -> dict:
     return updated
 
 
+@router.delete("/agents/{agent_id}", status_code=204)
+def delete_agent(agent_id: str) -> None:
+    if not agents_store.remove(agent_id):
+        raise HTTPException(status_code=404, detail="agent not found")
+
+
 # ---- presets (Phase 4: base-skill bundles, resettable) ----
 
 @router.get("/presets", response_model=list[Preset])
