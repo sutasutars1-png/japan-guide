@@ -131,12 +131,21 @@ export function streamFlow(
 }
 
 // Phase 4: hand the goal to the orchestrator (統括AI) — it plans, then the
-// workers are dispatched automatically. The orchestrator agent decides the plan.
+// workers are dispatched automatically. A pre-approved/edited `steps` plan skips
+// the planning step.
+export type PlanStep = { agent: string; task: string };
 export function streamOrchestrate(
   onLine: (line: LogLine) => void,
   onDone: () => void,
   goal: string,
   orchestrator = "Planner",
+  steps?: PlanStep[],
 ): () => void {
-  return openStream("/orchestrate/stream", { goal, orchestrator }, onLine, onDone);
+  const payload: Record<string, unknown> = { goal, orchestrator };
+  if (steps && steps.length) payload.steps = steps;
+  return openStream("/orchestrate/stream", payload, onLine, onDone);
 }
+
+// Ask the orchestrator for a plan without running it (for an editable checklist).
+export const fetchPlan = (goal: string, orchestrator = "Planner") =>
+  jsonReq<{ text: string; plan: PlanStep[] }>("/orchestrate/plan", "POST", { goal, orchestrator });

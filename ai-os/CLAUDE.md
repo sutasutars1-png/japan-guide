@@ -141,14 +141,18 @@ the manual bridge; `gemini-*` etc. for API workers.
   orchestrator prompt → **single-shot** provider call → `parse_plan` → auto-dispatch
   each `<agent>: <task>` step to the worker's loop. Orchestrator defaults to
   **Planner**; its model decides its tier (set it to `claude-cli` for keyless
-  auto-Claude). UI: 「🧭 統括AIに任せる」 command-bar mode (the default). This is the
-  end-to-end "goal → 統括 → workers" path; the plan is a flat ordered list (option a).
+  auto-Claude). UI: 「🧭 統括AIに任せる」 command-bar mode (the default). End-to-end
+  "goal → 統括 → workers" path. Now also:
+  - **Report chaining:** each worker's DONE report feeds the next step's context.
+  - **Re-plan loop:** a worker that produces no result triggers a bounded re-plan
+    (`max_replans`); an L3/L4 halt still stops (human decision, never re-planned).
+  - **Plan-first UI:** `POST /orchestrate/plan` + `run(steps=…)` / WS `steps` field;
+    a 「計画を確認してから実行」 toggle shows an editable `PlanReview` checklist.
 
 ### Next (not yet built)
-- **Report chaining:** feed each worker's DONE report into the next step's context.
-- **Re-plan loop / routing (option b):** on a worker halt/failure, re-consult the
-  orchestrator; support `→NEXT:`-style conditional routing in the plan.
-- Optional: show the parsed plan as an editable checklist before dispatch.
+- Surface iteration/worker/re-plan budgets in the UI.
+- Optional `→NEXT:`-style conditional routing inside a single plan.
+- Optional durable stores (flows/presets/connections are in-memory; keys persist).
 
 ### Docs map (`docs/`)
 phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills,

@@ -6,18 +6,26 @@ os.environ.setdefault("AIOS_ALLOW_UNSAFE_LOCAL", "1")
 from app.agent_loop import AgentLoop  # noqa: E402
 from app.core.llm.base import LLMResponse, LLMUsage  # noqa: E402
 from app.core.sandbox.local_runtime import LocalSubprocessRuntime  # noqa: E402
-from app.execution_manager import ExecutionManager  # noqa: E402
+from app.execution_manager import ExecutionManager, LogLine  # noqa: E402
 from app.orchestrator import OrchestratorRunner, compose_orchestration_prompt, parse_plan  # noqa: E402
 
 
 class FakeProvider:
+    """Returns a fixed reply, or successive replies from a list (one per call)."""
     name = "fake"
 
     def __init__(self, reply):
+        self._replies = list(reply) if isinstance(reply, list) else None
         self._reply = reply
+        self._i = 0
 
     async def complete(self, messages, *, model, tools=None, max_tokens=1024):
-        return LLMResponse(text=self._reply, usage=LLMUsage(input_tokens=3, output_tokens=3))
+        if self._replies is not None:
+            text = self._replies[min(self._i, len(self._replies) - 1)]
+            self._i += 1
+        else:
+            text = self._reply
+        return LLMResponse(text=text, usage=LLMUsage(input_tokens=3, output_tokens=3))
 
 
 def _runner(plan_text, worker_reply):
@@ -60,8 +68,8 @@ async def test_orchestrate_dispatches_all_steps():
     out = await _collect(_runner(plan, "DONE: 完了"), "ゴール", orchestrator="Planner")
     joined = "\n".join(s for _, s in out)
     assert "計画を受領" in joined
-    assert "工程 1/2: Builder" in joined
-    assert "工程 2/2: Reviewer" in joined
+    assert "工程 1: Builder" in joined
+    assert "工程 2: Reviewer" in joined
     assert "オーケストレーション完了 ✓" in joined
 
 
@@ -70,3 +78,53 @@ async def test_orchestrate_stops_when_plan_unparseable():
     joined = "\n".join(s for _, s in out)
     assert "解析できませんでした" in joined
     assert "オーケストレーション完了" not in joined
+
+
+async def test_make_plan_returns_parsed_steps():
+    r = _runner("Builder: やる\nDONE", "DONE: ok")
+    planned = await r.make_plan("ゴール", orchestrator="Planner")
+    assert planned["plan"] == [{"agent": "Builder", "task": "やる"}]
+
+
+async def test_preapproved_steps_skip_planning():
+    # orchestrator provider would return junk, but steps are supplied → not used
+    r = _runner("この計画は使われないはず", "DONE: できた")
+    steps = [{"agent": "Builder", "task": "手動で決めた作業"}]
+    out = await _collect(r, "ゴール", steps=steps)
+    joined = "\n".join(s for _, s in out)
+    assert "工程 1: Builder — 手動で決めた作業" in joined
+    assert "オーケストレーション完了 ✓" in joined
+    assert "[統括]" not in joined  # planning was skipped
+
+
+async def test_report_chaining_feeds_prior_output():
+    seen = []  # the goal each worker step actually received
+
+    class SpyLoop:
+        async def run(self, goal, *, agent_name, system=None, max_iterations=6):
+            seen.append(goal)
+            yield LogLine("ok", "agent finished ✓")
+            yield LogLine("out", f"{agent_name} の成果物")
+
+    r = OrchestratorRunner(loop=SpyLoop(), provider=FakeProvider("Builder: A\nReviewer: B\nDONE"))
+    await _collect(r, "ゴール")
+    # 2nd worker's goal carries the 1st worker's report
+    assert "これまでの成果" in seen[1]
+    assert "Builder の成果物" in seen[1]
+
+
+async def test_replan_on_worker_failure():
+    # worker always fails (never emits 'agent finished ✓' → no report). The
+    # orchestrator replans once, the revision also fails → stops at the limit.
+    plans = ["Builder: 最初", "Reviewer: 立て直し"]
+
+    class FailLoop:
+        async def run(self, goal, *, agent_name, system=None, max_iterations=6):
+            yield LogLine("warn", "reached max iterations")
+
+    r = OrchestratorRunner(loop=FailLoop(), provider=FakeProvider(plans))
+    out = await _collect(r, "ゴール", max_replans=1)
+    joined = "\n".join(s for _, s in out)
+    assert "再計画を依頼します（1/1）" in joined
+    assert "[統括·再計画]" in joined
+    assert "再計画の上限" in joined

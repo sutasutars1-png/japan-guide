@@ -4,7 +4,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { fetchJSON, streamExecution, streamAgent, streamFlow, streamOrchestrate, API_BASE,
+import { fetchJSON, streamExecution, streamAgent, streamFlow, streamOrchestrate, fetchPlan, API_BASE,
   fetchConnections, fetchModels, setConnKey, refreshConn, clearConnKey, addManualModel,
   fetchManualPending, submitManual } from "@/lib/api";
 
@@ -164,6 +164,8 @@ export default function App(){
   const [comments,setComments]=useState(COMMENTS);
   const [live,setLive]=useState(false); // true once a real command has been run
   const [flows,setFlows]=useState([]); // available multi-agent pipelines (Phase 4 · 3c)
+  const [plan,setPlan]=useState(null); // {goal, steps} awaiting user review before dispatch
+  const [planBusy,setPlanBusy]=useState(false);
   const logRef=useRef(null);
   const runCleanup=useRef(null);
 
@@ -244,11 +246,11 @@ export default function App(){
   };
 
   // Phase 4: hand the goal to the orchestrator (統括AI); it plans, workers
-  // dispatch automatically.
-  const runOrchestrate=(goal)=>{
+  // dispatch automatically. An optional pre-approved `steps` plan skips planning.
+  const runOrchestrate=(goal,steps)=>{
     if(!goal||!goal.trim())return;
     if(runCleanup.current)runCleanup.current();
-    setApproval(null);
+    setApproval(null); setPlan(null);
     setLive(true);
     setLines([]);
     setRunning(true);
@@ -256,8 +258,21 @@ export default function App(){
       (line)=>setLines(p=>[...p,line]),
       ()=>setRunning(false),
       goal.trim(),
+      "Planner",
+      steps,
     );
   };
+  // Plan-first: fetch the orchestrator's plan and show it for editing before run.
+  const reviewPlan=(goal)=>{
+    if(!goal||!goal.trim())return;
+    setPlanBusy(true); setPlan(null);
+    fetchPlan(goal.trim()).then(res=>{
+      setPlanBusy(false);
+      if(res&&Array.isArray(res.plan)&&res.plan.length)setPlan({goal:goal.trim(),steps:res.plan});
+      else runOrchestrate(goal); // nothing parseable → just run and let it report
+    }).catch(()=>{ setPlanBusy(false); runOrchestrate(goal); });
+  };
+  const confirmPlan=(steps)=>{ const g=plan?.goal; setPlan(null); if(g)runOrchestrate(g,steps); };
   useEffect(()=>{
     if(!running)return;
     const id=setInterval(()=>{
@@ -305,7 +320,8 @@ export default function App(){
           <TopBar view={view} activeModel={activeAgent.model} running={running}/>
           <div style={{flex:1,minHeight:0,display:"flex"}}>
             {view==="exec" && <ExecView {...{proj,setProj,lines,running,elapsed:fmt(elapsed),
-              cpu,ram,net,tokens,agents,comments,logRef,askApproval,activeAgent,onRun:runCommand,onGoal:runGoal,onFlow:runFlow,onOrchestrate:runOrchestrate,flows,live}}/>}
+              cpu,ram,net,tokens,agents,comments,logRef,askApproval,activeAgent,onRun:runCommand,onGoal:runGoal,onFlow:runFlow,
+              onOrchestrate:runOrchestrate,onReviewPlan:reviewPlan,plan,planBusy,onConfirmPlan:confirmPlan,onCancelPlan:()=>setPlan(null),flows,live}}/>}
             {view==="agents" && <AgentsView agents={agents} setAgents={setAgents}/>}
             {view==="flow" && <FlowView agents={agents}/>}
             {view==="data" && <DataView proj={proj} setProj={setProj}/>}
@@ -384,8 +400,9 @@ function ExecView(p){
           cpu={p.cpu} ram={p.ram} logRef={p.logRef} model={p.activeAgent.model}/>
         <AiComments comments={p.comments}/>
         <ManualBridgePanel/>
+        {p.plan && <PlanReview plan={p.plan.steps} onConfirm={p.onConfirmPlan} onCancel={p.onCancelPlan}/>}
         <CommandBar disabled={p.running} onRun={p.onRun} onGoal={p.onGoal} onFlow={p.onFlow}
-          onOrchestrate={p.onOrchestrate} flows={p.flows}/>
+          onOrchestrate={p.onOrchestrate} onReviewPlan={p.onReviewPlan} planBusy={p.planBusy} flows={p.flows}/>
       </main>
       <StatusRail {...p}/>
     </>
@@ -550,6 +567,51 @@ function AiComments({comments}){
     </div>
   );
 }
+// Plan review: the orchestrator's proposed plan, editable before dispatch.
+// Edit a step's agent/task, remove, add, reorder, then run the approved plan.
+function PlanReview({plan,onConfirm,onCancel}){
+  const [steps,setSteps]=useState(plan||[]);
+  useEffect(()=>{ setSteps(plan||[]); },[plan]);
+  const upd=(i,patch)=>setSteps(s=>s.map((x,j)=>j===i?{...x,...patch}:x));
+  const remove=(i)=>setSteps(s=>s.filter((_,j)=>j!==i));
+  const move=(i,d)=>setSteps(s=>{ const j=i+d; if(j<0||j>=s.length)return s;
+    const n=[...s]; [n[i],n[j]]=[n[j],n[i]]; return n; });
+  const add=()=>setSteps(s=>[...s,{agent:"Builder",task:""}]);
+  const ready=steps.filter(s=>s.task&&s.task.trim());
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:9,padding:"12px 14px",background:"var(--aiSoft)",
+      border:"1px solid rgba(140,125,242,.4)",borderRadius:12}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:13,fontWeight:600,color:"var(--ai)"}}>🧭 統括AIの計画（確認・編集してから実行）</span>
+        <span style={{fontSize:11,color:"var(--ink3)"}}>{steps.length} 工程</span>
+      </div>
+      {steps.map((s,i)=>(
+        <div key={i} style={{display:"flex",gap:7,alignItems:"center"}}>
+          <span className="mono" style={{fontSize:11,color:"var(--ink3)",width:16,textAlign:"right"}}>{i+1}</span>
+          <input value={s.agent} onChange={e=>upd(i,{agent:e.target.value})}
+            className="mono" style={{width:110,padding:"7px 9px",borderRadius:8,background:"var(--panel2)",
+              border:"1px solid var(--line2)",color:"var(--ai)",fontSize:12,outline:"none"}}/>
+          <input value={s.task} onChange={e=>upd(i,{task:e.target.value})}
+            placeholder="この工程の指示" style={{flex:1,padding:"7px 10px",borderRadius:8,background:"var(--panel2)",
+              border:"1px solid var(--line2)",color:"var(--ink)",fontSize:12.5,outline:"none"}}/>
+          <button onClick={()=>move(i,-1)} title="上へ" style={miniBtn}>↑</button>
+          <button onClick={()=>move(i,1)} title="下へ" style={miniBtn}>↓</button>
+          <button onClick={()=>remove(i)} title="削除" style={{...miniBtn,color:"var(--r3)"}}>✕</button>
+        </div>
+      ))}
+      <div style={{display:"flex",gap:8,alignItems:"center",marginTop:2}}>
+        <button onClick={add} style={btnGhost}>+ 工程を追加</button>
+        <button onClick={()=>onConfirm(ready)} disabled={!ready.length}
+          style={{...btnPrimary,marginLeft:"auto",background:"var(--ai)",opacity:ready.length?1:.4}}>
+          この計画で実行（{ready.length}工程）</button>
+        <button onClick={onCancel} style={btnGhost}>キャンセル</button>
+      </div>
+    </div>
+  );
+}
+const miniBtn={width:26,height:28,borderRadius:7,background:"var(--panel2)",border:"1px solid var(--line2)",
+  color:"var(--ink2)",fontSize:12,cursor:"pointer"};
+
 // Manual bridge: when an agent is backed by an API-less AI (Claude Code / Claude
 // in the browser), its prompt lands here to copy out; paste the reply back to
 // hand it to the waiting run. Poll while the view is open.
@@ -599,14 +661,15 @@ function ManualBridgePanel(){
     </div>
   );
 }
-function CommandBar({disabled,onRun,onGoal,onFlow,onOrchestrate,flows}){
+function CommandBar({disabled,onRun,onGoal,onFlow,onOrchestrate,onReviewPlan,planBusy,flows}){
   const [v,setV]=useState("");
   const [mode,setMode]=useState("orchestrate"); // orchestrate | goal | flow | cmd
   const [flowId,setFlowId]=useState("flow.default");
+  const [review,setReview]=useState(false); // orchestrate: confirm the plan first
   const flowList=Array.isArray(flows)?flows:[];
   const send=()=>{
-    if(disabled||!v.trim())return;
-    if(mode==="orchestrate") onOrchestrate&&onOrchestrate(v);
+    if(disabled||planBusy||!v.trim())return;
+    if(mode==="orchestrate"){ (review?onReviewPlan:onOrchestrate)?.(v); }
     else if(mode==="goal") onGoal&&onGoal(v);
     else if(mode==="flow") onFlow&&onFlow(v,flowId);
     else onRun&&onRun(v);
@@ -642,12 +705,20 @@ function CommandBar({disabled,onRun,onGoal,onFlow,onOrchestrate,flows}){
             ))}
           </select>
         )}
+        {isOrch&&(
+          <button onClick={()=>setReview(r=>!r)} className="mono"
+            style={{marginLeft:"auto",fontSize:10.5,padding:"4px 10px",borderRadius:7,
+              background:review?"var(--aiSoft)":"transparent",
+              border:`1px solid ${review?"rgba(140,125,242,.4)":"var(--line)"}`,
+              color:review?"var(--ai)":"var(--ink3)"}}>
+            {review?"☑":"☐"} 計画を確認してから実行</button>
+        )}
       </div>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         <span className="disp" style={{fontSize:13,fontWeight:600,color:accent}}>{glyph}</span>
         <input value={v} onChange={e=>setV(e.target.value)}
           onKeyDown={e=>{ if(e.key==="Enter")send(); }}
-          placeholder={disabled?"実行中…":isOrch
+          placeholder={planBusy?"統括AIが計画中…":disabled?"実行中…":isOrch
             ?"ゴールを渡すと統括AIが分解し、各エージェントへ自動で割り振ります（例: このCSVを集計してレポートにまとめて）"
             :isFlow
             ?"複数エージェントに任せるゴール（例: このデータを分析してレポートにまとめて）"
@@ -657,8 +728,8 @@ function CommandBar({disabled,onRun,onGoal,onFlow,onOrchestrate,flows}){
           style={{flex:1,border:"none",outline:"none",fontSize:13.5,background:"transparent",color:"var(--ink)"}}/>
         <button onClick={send} style={{padding:"7px 15px",borderRadius:8,
           background:accent,color:"#04120f",
-          fontSize:13,fontWeight:600,opacity:disabled?.4:1,cursor:disabled?"default":"pointer"}}>
-          {isOrch?"統括":isFlow?"Flow":isGoal?"Run":"Send"}</button>
+          fontSize:13,fontWeight:600,opacity:(disabled||planBusy)?.4:1,cursor:(disabled||planBusy)?"default":"pointer"}}>
+          {isOrch?(review?"計画":"統括"):isFlow?"Flow":isGoal?"Run":"Send"}</button>
       </div>
     </div>
   );
