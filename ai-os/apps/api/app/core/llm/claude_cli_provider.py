@@ -25,6 +25,7 @@ isn't found, so the API still boots.
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 import tempfile
 from typing import Any
@@ -59,13 +60,19 @@ _API_BILLING_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
 def _build_env() -> dict:
     """The subprocess environment. By default we remove API-key vars so the CLI
     falls back to the user's subscription login — never a surprise API charge."""
-    import os
-
     env = os.environ.copy()
     if settings.claude_cli_force_subscription:
         for k in _API_BILLING_ENV:
             env.pop(k, None)
     return env
+
+
+def _exec_argv(resolved: str) -> list[str]:
+    """Prefix for launching the CLI. On Windows the npm shim is `claude.cmd`,
+    which CreateProcess can't exec directly (WinError 193) — run it via cmd.exe."""
+    if os.name == "nt" and resolved.lower().endswith((".cmd", ".bat")):
+        return [os.environ.get("COMSPEC", "cmd.exe"), "/c", resolved]
+    return [resolved]
 
 
 class ClaudeCliProvider(LLMProvider):
@@ -95,7 +102,7 @@ class ClaudeCliProvider(LLMProvider):
                 "バックエンドを実行する環境でログインしてください。"
             )
         prompt = render_prompt(messages)  # masked, flattened
-        args = [resolved, *_build_args()]
+        args = [*_exec_argv(resolved), *_build_args()]
         with tempfile.TemporaryDirectory(prefix="aios-claude-") as cwd:
             proc = await asyncio.create_subprocess_exec(
                 *args,
@@ -114,8 +121,13 @@ class ClaudeCliProvider(LLMProvider):
                 raise RuntimeError("claude CLI がタイムアウトしました。") from exc
 
         if proc.returncode != 0:
-            err = (err_b.decode(errors="replace") or "").strip()[:400]
-            raise RuntimeError(f"claude CLI がエラー終了 (code {proc.returncode}): {err}")
-        text = out_b.decode(errors="replace").strip()
+            # claude may print the reason to stderr OR stdout; surface whichever.
+            detail = (err_b.decode("utf-8", "replace").strip()
+                      or out_b.decode("utf-8", "replace").strip()
+                      or "(出力なし)")
+            raise RuntimeError(f"claude CLI がエラー終了 (code {proc.returncode}): {detail[:500]}")
+        text = out_b.decode("utf-8", "replace").strip()
+        if not text:
+            raise RuntimeError("claude CLI が空の応答を返しました（ログイン状態を確認してください）。")
         # Usage is not reported by the CLI text output; never fabricate counts.
         return LLMResponse(text=text, usage=LLMUsage())

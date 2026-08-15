@@ -169,7 +169,7 @@ class OrchestratorRunner:
             try:
                 planned = await self.make_plan(goal, orchestrator)
             except Exception as exc:  # noqa: BLE001
-                yield LogLine("err", f"統括AIエラー: {exc}")
+                yield LogLine("err", f"統括AIエラー: {type(exc).__name__}: {exc}")
                 return
             for ln in planned["text"].splitlines():
                 yield LogLine("out", f"[統括] {ln}")
