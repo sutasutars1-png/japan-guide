@@ -129,3 +129,14 @@ export function streamFlow(
 ): () => void {
   return openStream("/flow/stream", { goal, flow_id: flowId }, onLine, onDone);
 }
+
+// Phase 4: hand the goal to the orchestrator (統括AI) — it plans, then the
+// workers are dispatched automatically. The orchestrator agent decides the plan.
+export function streamOrchestrate(
+  onLine: (line: LogLine) => void,
+  onDone: () => void,
+  goal: string,
+  orchestrator = "Planner",
+): () => void {
+  return openStream("/orchestrate/stream", { goal, orchestrator }, onLine, onDone);
+}

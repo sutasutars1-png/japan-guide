@@ -137,15 +137,19 @@ the manual bridge; `gemini-*` etc. for API workers.
   runs the user's `claude -p`; text-only (no `--dangerously-skip-permissions`),
   masked prompt, throwaway cwd, on the host (not the sandbox). `cli`-kind
   connection; config via `AIOS_CLAUDE_CLI*`.
+- **Orchestrator (`/orchestrate`):** `app/orchestrator.py` — goal → composed
+  orchestrator prompt → **single-shot** provider call → `parse_plan` → auto-dispatch
+  each `<agent>: <task>` step to the worker's loop. Orchestrator defaults to
+  **Planner**; its model decides its tier (set it to `claude-cli` for keyless
+  auto-Claude). UI: 「🧭 統括AIに任せる」 command-bar mode (the default). This is the
+  end-to-end "goal → 統括 → workers" path; the plan is a flat ordered list (option a).
 
 ### Next (not yet built)
-- **`/orchestrate` entrypoint:** goal → composed orchestrator prompt → (provider) →
-  **plan**; a plan parser; **auto-dispatch** to worker agents. With #5 the
-  orchestrator step is fully automatic. The flow's stations then become
-  **plan-driven** (authored by the orchestrator) rather than fixed.
-- Recommended orchestrator output format: start with **(a) task bullet list**
-  (`<agent>: <instruction>` lines, then `DONE`), extend to `→NEXT:` routing later.
+- **Report chaining:** feed each worker's DONE report into the next step's context.
+- **Re-plan loop / routing (option b):** on a worker halt/failure, re-consult the
+  orchestrator; support `→NEXT:`-style conditional routing in the plan.
+- Optional: show the parsed plan as an editable checklist before dispatch.
 
 ### Docs map (`docs/`)
 phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills,
--skills-layered, -presets, -flows, **-connections**, **-claude-cli**.
+-skills-layered, -presets, -flows, -connections, -claude-cli, **-orchestrate**.

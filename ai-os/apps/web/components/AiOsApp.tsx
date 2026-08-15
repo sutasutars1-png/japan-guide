@@ -4,7 +4,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { fetchJSON, streamExecution, streamAgent, streamFlow, API_BASE,
+import { fetchJSON, streamExecution, streamAgent, streamFlow, streamOrchestrate, API_BASE,
   fetchConnections, fetchModels, setConnKey, refreshConn, clearConnKey, addManualModel,
   fetchManualPending, submitManual } from "@/lib/api";
 
@@ -242,6 +242,22 @@ export default function App(){
       flowId,
     );
   };
+
+  // Phase 4: hand the goal to the orchestrator (統括AI); it plans, workers
+  // dispatch automatically.
+  const runOrchestrate=(goal)=>{
+    if(!goal||!goal.trim())return;
+    if(runCleanup.current)runCleanup.current();
+    setApproval(null);
+    setLive(true);
+    setLines([]);
+    setRunning(true);
+    runCleanup.current=streamOrchestrate(
+      (line)=>setLines(p=>[...p,line]),
+      ()=>setRunning(false),
+      goal.trim(),
+    );
+  };
   useEffect(()=>{
     if(!running)return;
     const id=setInterval(()=>{
@@ -289,7 +305,7 @@ export default function App(){
           <TopBar view={view} activeModel={activeAgent.model} running={running}/>
           <div style={{flex:1,minHeight:0,display:"flex"}}>
             {view==="exec" && <ExecView {...{proj,setProj,lines,running,elapsed:fmt(elapsed),
-              cpu,ram,net,tokens,agents,comments,logRef,askApproval,activeAgent,onRun:runCommand,onGoal:runGoal,onFlow:runFlow,flows,live}}/>}
+              cpu,ram,net,tokens,agents,comments,logRef,askApproval,activeAgent,onRun:runCommand,onGoal:runGoal,onFlow:runFlow,onOrchestrate:runOrchestrate,flows,live}}/>}
             {view==="agents" && <AgentsView agents={agents} setAgents={setAgents}/>}
             {view==="flow" && <FlowView agents={agents}/>}
             {view==="data" && <DataView proj={proj} setProj={setProj}/>}
@@ -368,7 +384,8 @@ function ExecView(p){
           cpu={p.cpu} ram={p.ram} logRef={p.logRef} model={p.activeAgent.model}/>
         <AiComments comments={p.comments}/>
         <ManualBridgePanel/>
-        <CommandBar disabled={p.running} onRun={p.onRun} onGoal={p.onGoal} onFlow={p.onFlow} flows={p.flows}/>
+        <CommandBar disabled={p.running} onRun={p.onRun} onGoal={p.onGoal} onFlow={p.onFlow}
+          onOrchestrate={p.onOrchestrate} flows={p.flows}/>
       </main>
       <StatusRail {...p}/>
     </>
@@ -582,23 +599,25 @@ function ManualBridgePanel(){
     </div>
   );
 }
-function CommandBar({disabled,onRun,onGoal,onFlow,flows}){
+function CommandBar({disabled,onRun,onGoal,onFlow,onOrchestrate,flows}){
   const [v,setV]=useState("");
-  const [mode,setMode]=useState("goal"); // "goal" = one AI | "flow" = pipeline | "cmd" = raw command
+  const [mode,setMode]=useState("orchestrate"); // orchestrate | goal | flow | cmd
   const [flowId,setFlowId]=useState("flow.default");
   const flowList=Array.isArray(flows)?flows:[];
   const send=()=>{
     if(disabled||!v.trim())return;
-    if(mode==="goal") onGoal&&onGoal(v);
+    if(mode==="orchestrate") onOrchestrate&&onOrchestrate(v);
+    else if(mode==="goal") onGoal&&onGoal(v);
     else if(mode==="flow") onFlow&&onFlow(v,flowId);
     else onRun&&onRun(v);
     setV("");
   };
-  const isGoal=mode==="goal", isFlow=mode==="flow";
-  // Accent: goal=violet, flow=violet, cmd=teal.
-  const accent=isFlow||isGoal?"var(--ai)":"var(--live)";
-  const glyph=isFlow?"🔀":isGoal?"✨":"›";
-  const tabs=[["goal","✨ AIにゴールを渡す","var(--aiSoft)","rgba(140,125,242,.4)","var(--ai)"],
+  const isOrch=mode==="orchestrate", isGoal=mode==="goal", isFlow=mode==="flow";
+  // Accent: orchestrate/goal/flow=violet, cmd=teal.
+  const accent=mode==="cmd"?"var(--live)":"var(--ai)";
+  const glyph=isOrch?"🧭":isFlow?"🔀":isGoal?"✨":"›";
+  const tabs=[["orchestrate","🧭 統括AIに任せる","var(--aiSoft)","rgba(140,125,242,.4)","var(--ai)"],
+             ["goal","✨ 単体AIにゴールを渡す","var(--aiSoft)","rgba(140,125,242,.4)","var(--ai)"],
              ["flow","🔀 フローで実行","var(--aiSoft)","rgba(140,125,242,.4)","var(--ai)"],
              ["cmd","› コマンドを直接実行","var(--liveSoft)","rgba(18,199,185,.4)","var(--live)"]];
   return (
@@ -628,7 +647,9 @@ function CommandBar({disabled,onRun,onGoal,onFlow,flows}){
         <span className="disp" style={{fontSize:13,fontWeight:600,color:accent}}>{glyph}</span>
         <input value={v} onChange={e=>setV(e.target.value)}
           onKeyDown={e=>{ if(e.key==="Enter")send(); }}
-          placeholder={disabled?"実行中…":isFlow
+          placeholder={disabled?"実行中…":isOrch
+            ?"ゴールを渡すと統括AIが分解し、各エージェントへ自動で割り振ります（例: このCSVを集計してレポートにまとめて）"
+            :isFlow
             ?"複数エージェントに任せるゴール（例: このデータを分析してレポートにまとめて）"
             :isGoal
             ?"やってほしいことを書く（例: 数字[3,1,4,1,5]の合計と最大を求めて報告して）"
@@ -637,7 +658,7 @@ function CommandBar({disabled,onRun,onGoal,onFlow,flows}){
         <button onClick={send} style={{padding:"7px 15px",borderRadius:8,
           background:accent,color:"#04120f",
           fontSize:13,fontWeight:600,opacity:disabled?.4:1,cursor:disabled?"default":"pointer"}}>
-          {isFlow?"Flow":isGoal?"Run":"Send"}</button>
+          {isOrch?"統括":isFlow?"Flow":isGoal?"Run":"Send"}</button>
       </div>
     </div>
   );
