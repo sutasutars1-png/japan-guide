@@ -43,6 +43,15 @@ the same functions is a planned slice.
 Premise for #5: run the backend on a machine logged into Claude Code (personal,
 single-user).
 
+**Two run modes (`docs/run-modes.md`):** the web UI is identical in both — you
+always type the goal into the 🧭 command bar at localhost:3000. What differs is
+where `api` runs. **Mode A** (`START-AI-OS.bat`, all-Docker): simplest, Gemini
+workers work, but `claude-cli` is "未検出" (no `claude` in the container). **Mode B**
+(`START-AI-OS-CLAUDE.bat`, db+web in Docker + **api on the host** via uvicorn):
+the api shells out to your own logged-in `claude` → automatic Claude orchestrator,
+subscription, no token injection. Set Planner's Model to `claude-cli`. Mounting
+`~/.claude` into a container is the rejected token-injection path — never do it.
+
 ## Layout
 
 - `apps/web` — Next.js + TS. The UI lives in `components/AiOsApp.tsx` (a ported
