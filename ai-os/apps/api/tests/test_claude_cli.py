@@ -32,6 +32,7 @@ def _patch_cli(monkeypatch, proc, path="/usr/bin/claude"):
     async def fake_exec(*args, **kwargs):
         captured["args"] = args
         captured["cwd"] = kwargs.get("cwd")
+        captured["env"] = kwargs.get("env")
         return proc
 
     monkeypatch.setattr(ccp.asyncio, "create_subprocess_exec", fake_exec)
@@ -60,6 +61,18 @@ async def test_cli_masks_prompt_before_spawn(monkeypatch):
     assert b"topsecretxyz" not in (proc.captured_stdin or b"")
     secret_store._values.pop("CLITEST", None)
     secret_store._rebuild_pattern()
+
+
+async def test_cli_forces_subscription_strips_api_key(monkeypatch):
+    # A user may have set an Anthropic API key (for API workers); it must NOT
+    # leak into the `claude` subprocess, or the CLI would bill metered API.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-should-not-leak")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "tok-should-not-leak")
+    proc = _FakeProc(out=b"ok")
+    cap = _patch_cli(monkeypatch, proc)
+    await ClaudeCliProvider().complete([LLMMessage(role="user", content="x")], model="claude-cli")
+    assert "ANTHROPIC_API_KEY" not in cap["env"]
+    assert "ANTHROPIC_AUTH_TOKEN" not in cap["env"]
 
 
 async def test_cli_error_surfaces(monkeypatch):
