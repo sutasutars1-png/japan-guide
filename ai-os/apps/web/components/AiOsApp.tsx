@@ -668,7 +668,7 @@ function ManualBridgePanel(){
     let on=true;
     const load=()=>fetchManualPending().then(p=>{ if(on&&Array.isArray(p))setPending(p); });
     load();
-    const id=setInterval(load,1500);
+    const id=setInterval(load,4000); // low-frequency poll — keeps the api log readable
     return ()=>{on=false;clearInterval(id);};
   },[]);
   if(pending.length===0)return null;
