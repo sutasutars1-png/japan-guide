@@ -6,7 +6,7 @@ API today, before any database wiring.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from .. import agents_store, presets, seed
 from ..schemas import (
@@ -46,10 +46,11 @@ def update_agent(agent_id: str, patch: Agent) -> dict:
     return updated
 
 
-@router.delete("/agents/{agent_id}", status_code=204)
-def delete_agent(agent_id: str) -> None:
+@router.delete("/agents/{agent_id}")
+def delete_agent(agent_id: str) -> Response:
     if not agents_store.remove(agent_id):
         raise HTTPException(status_code=404, detail="agent not found")
+    return Response(status_code=204)
 
 
 # ---- presets (Phase 4: base-skill bundles, resettable) ----
