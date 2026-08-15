@@ -44,8 +44,14 @@ services:
     # Phase 2: the Execution Manager talks to the host Docker daemon to spawn
     # single-use, non-root sandbox containers. Mounting the socket is required
     # for the Docker SandboxRuntime; it is NEVER mounted into a sandbox itself.
+    #
+    # Dev: the app source is bind-mounted and uvicorn runs with --reload, so a
+    # `git pull` takes effect on the next request (or `docker compose restart api`)
+    # WITHOUT rebuilding the image. (The image is only needed for dependencies.)
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./apps/api/app:/srv/app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/srv/app"]
 
   web:
     build:

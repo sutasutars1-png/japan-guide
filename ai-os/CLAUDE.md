@@ -79,7 +79,18 @@ npm run dev
 
 # Full stack
 docker compose up
+
+# Applying updates after `git pull`:
+#  - api: source is bind-mounted + uvicorn --reload → just `docker compose restart api`
+#    (or it auto-reloads). No rebuild needed for Python code changes.
+#  - web: production build baked into the image → needs a rebuild:
+#    `docker compose up --build web`  (or `--build` for the whole stack)
+#  - if requirements.txt / package.json changed: `docker compose up --build`.
 ```
+
+**Stale-image trap:** `docker compose up` (no `--build`) reuses cached images. If
+a code change doesn't appear or the container crashes with an error from a line
+you already fixed, you're running an old image — rebuild with `--build`.
 
 ## Security guardrails (do not regress)
 
