@@ -67,7 +67,9 @@ single-user).
 ## Commands
 
 ```bash
-# API
+# API — install the PINNED deps before pytest; version drift can hide errors that
+# crash the Docker image (e.g. FastAPI 0.115 asserts a 204 route has no body,
+# newer versions don't). Always test against requirements.txt versions.
 cd apps/api && pip install -r requirements.txt && pytest
 uvicorn app.main:app --reload
 
