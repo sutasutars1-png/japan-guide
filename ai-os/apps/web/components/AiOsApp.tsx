@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { fetchJSON, streamExecution, streamAgent, streamFlow, streamOrchestrate, fetchPlan, API_BASE,
   fetchConnections, fetchModels, setConnKey, refreshConn, clearConnKey, addManualModel,
   fetchManualPending, submitManual, deleteAgent } from "@/lib/api";
+import { SKILL_SEED, CONNECTION_SEED } from "@/lib/seed";
 
 /* ============================================================
    AI-OS · Execution Plane — Phase 1 UI
@@ -837,11 +838,12 @@ function AgentsView({agents,setAgents}){
   const agent=agents.find(a=>a.id===sel)||agents[0];
   const update=(patch)=>setAgents(as=>as.map(a=>a.id===sel?{...a,...patch}:a));
   const add=(a)=>{ setAgents(as=>[...as,a]); setSel(a.id); setAdding(false); };
-  const [skillLib,setSkillLib]=useState([]);
+  const [skillLib,setSkillLib]=useState(SKILL_SEED); // embedded fallback → always visible
   const [presets,setPresets]=useState([]);
   const [models,setModels]=useState([]); // live-discovered model ids from Connections
   useEffect(()=>{
-    fetchJSON("/skills",[]).then(s=>{ if(Array.isArray(s))setSkillLib(s); });
+    // Prefer the live skill DB; keep the embedded seed if the API is unreachable.
+    fetchJSON("/skills",[]).then(s=>{ if(Array.isArray(s)&&s.length)setSkillLib(s); });
     fetchJSON("/presets",[]).then(p=>{ if(Array.isArray(p))setPresets(p); });
     fetchModels().then(m=>{ if(Array.isArray(m))setModels(m.map(x=>x.model)); });
   },[]);
@@ -1185,9 +1187,12 @@ function DataView({proj,setProj}){
 
 /* ======================= CONNECTIONS VIEW ======================= */
 function ConnectionsView(){
-  const [conns,setConns]=useState([]);
-  const [loaded,setLoaded]=useState(false);
-  const load=()=>fetchConnections().then(c=>{ if(Array.isArray(c))setConns(c); setLoaded(true); });
+  const [conns,setConns]=useState(CONNECTION_SEED); // embedded fallback → always visible
+  const [online,setOnline]=useState(true);
+  const load=()=>fetchConnections().then(c=>{
+    if(Array.isArray(c)&&c.length){ setConns(c); setOnline(true); }
+    else { setConns(CONNECTION_SEED); setOnline(false); } // backend not reachable
+  });
   useEffect(()=>{ load(); },[]);
   const replace=(c)=>setConns(list=>list.map(x=>x.id===c.id?c:x));
   return (
@@ -1196,11 +1201,9 @@ function ConnectionsView(){
       <p style={{margin:"0 0 18px",fontSize:12.5,color:"var(--ink2)"}}>
         APIキーを設定すると、利用可能なモデルを各プロバイダから自動取得します。
         Claude Code / Claude（ブラウザ）はキー不要で、コピペ連携で使えます。</p>
-      {!loaded && <div style={{fontSize:13,color:"var(--ink3)"}}>読み込み中…</div>}
-      {loaded && conns.length===0 &&
-        <div style={{fontSize:13,color:"var(--ink3)"}}>APIに接続できません（バックエンド未起動）。</div>}
+      {!online && <BackendDownBanner onRetry={load}/>}
       <div style={{display:"flex",flexDirection:"column",gap:11}}>
-        {conns.map(c=><ConnectionCard key={c.id} c={c} onChange={replace}/>)}
+        {conns.map(c=><ConnectionCard key={c.id} c={c} online={online} onChange={replace}/>)}
       </div>
       <p style={{marginTop:16,fontSize:11.5,color:"var(--ink3)",display:"flex",alignItems:"center",gap:7}}>
         <Icon name="shield" c="var(--live)" s={13}/> キーは .env（git管理外）に保存され、マスクされます。モデル・ログ・stdoutには決して送られません。
@@ -1208,7 +1211,34 @@ function ConnectionsView(){
     </main>
   );
 }
-function ConnectionCard({c,onChange}){
+// Keys must be stored by the backend, so registering one needs the API running.
+// When it's unreachable, explain how to start it instead of a blank page.
+function BackendDownBanner({onRetry}){
+  return (
+    <div style={{padding:"13px 15px",borderRadius:11,marginBottom:16,
+      background:"rgba(240,170,60,.1)",border:"1px solid rgba(240,170,60,.4)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+        <span style={{fontSize:16}}>⚠</span>
+        <span style={{fontSize:13,fontWeight:600,color:"var(--ink)"}}>バックエンドAPIに接続できません</span>
+        <button onClick={onRetry} className="mono" style={{marginLeft:"auto",fontSize:11,padding:"4px 10px",
+          borderRadius:7,background:"var(--panel2)",border:"1px solid var(--line2)",color:"var(--ink2)"}}>再接続</button>
+      </div>
+      <div style={{fontSize:11.5,color:"var(--ink2)",lineHeight:1.6}}>
+        キーの保存にはバックエンド（FastAPI）が必要です。下のいずれかで起動してください：
+      </div>
+      <pre className="mono" style={{margin:"8px 0 0",padding:"9px 11px",borderRadius:8,overflow:"auto",
+        background:"var(--panel2)",border:"1px solid var(--line2)",fontSize:11.5,color:"var(--ink2)"}}>{`# フルスタック（推奨）
+cd ai-os && docker compose up
+
+# または API だけ
+cd ai-os/apps/api && pip install -r requirements.txt
+uvicorn app.main:app --reload   # → http://localhost:8000`}</pre>
+      <div style={{fontSize:11,color:"var(--ink3)",marginTop:7}}>
+        別ホスト/ポートの場合は web の <span className="mono">NEXT_PUBLIC_API_BASE</span> を合わせてください。</div>
+    </div>
+  );
+}
+function ConnectionCard({c,online=true,onChange}){
   const [editing,setEditing]=useState(false);
   const [key,setKey]=useState("");
   const [newModel,setNewModel]=useState("");
@@ -1221,9 +1251,10 @@ function ConnectionCard({c,onChange}){
   const on=c.connected;
   const save=async()=>{
     if(!key.trim())return;
+    if(!online){ setErr("バックエンドAPIが未起動のため保存できません。上の手順で起動してください。"); return; }
     setBusy(true); setErr(null);
     try{ onChange(await setConnKey(c.id,key.trim())); setEditing(false); setKey(""); }
-    catch(e){ setErr(String(e.message||e)); }
+    catch(e){ setErr("保存に失敗しました（バックエンド未起動の可能性）: "+String(e.message||e)); }
     finally{ setBusy(false); }
   };
   const refresh=async()=>{ setBusy(true); setErr(null);
