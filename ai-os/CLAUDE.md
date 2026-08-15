@@ -14,6 +14,35 @@ must never be removed:
 2. **Safety primitives** — sandbox isolation, secret masking, audit log, and the
    destructive-operation approval gate. Never weaken these for convenience.
 
+## Status & how to resume (fresh session: start here)
+
+**Where we are:** Roadmap phases 0–4 are implemented and merged to `main`. Phase 4
+delivered, in order: Gemini adapter → agent loop (PLAN→EXECUTE→OBSERVE) → layered
+skill DB → presets/overlays → multi-agent flows → Connections (keys + live model
+discovery) → manual bridge → **Claude Code CLI provider (#5)** → **orchestrator**
+(goal→plan→dispatch) → report chaining + re-plan + editable plan review. Latest
+work merged via PRs #13–#18. **80 pytest green; `next build` type-checks.**
+
+**Dev workflow (do this every stage):**
+- Develop on branch **`claude/ai-execution-platform-o2qef8`**.
+- Stage = commit → open PR → merge to `main`. **After each merge, restart the
+  branch from `main` before the next stage** (the merged PR is done, don't stack
+  on it):
+  `git fetch origin main && git checkout -B claude/ai-execution-platform-o2qef8 origin/main`
+- Each phase ends with a `docs/phase-*.md` report (Implementation / Tests /
+  Security Tests / Known Issues / Next).
+- Never put a model identifier (e.g. `claude-opus-4-8`) in commits/PRs/code.
+
+**State that is NOT persisted:** agent config, skills/presets, flows, connections
+(discovered models), and the manual-bridge queue are **in-memory** (reset on API
+restart). Only **API keys persist** (`.env`, git-ignored). A DB/JSON store behind
+the same functions is a planned slice.
+
+**Environment note:** this repo's dev environment is itself Claude Code with the
+`claude` binary on PATH — which is exactly what the #5 CLI provider shells out to.
+Premise for #5: run the backend on a machine logged into Claude Code (personal,
+single-user).
+
 ## Layout
 
 - `apps/web` — Next.js + TS. The UI lives in `components/AiOsApp.tsx` (a ported
@@ -157,3 +186,83 @@ the manual bridge; `gemini-*` etc. for API workers.
 ### Docs map (`docs/`)
 phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills,
 -skills-layered, -presets, -flows, -connections, -claude-cli, **-orchestrate**.
+
+---
+
+## File map (where things live)
+
+**Backend `apps/api/app/`**
+- `main.py` — FastAPI app; includes all routers; boot hooks (`init_db`, model
+  discovery `connections.bootstrap()`).
+- `config.py` — `Settings` from env (sandbox, llm defaults, `AIOS_CLAUDE_CLI*`).
+- `schemas.py` / `seed.py` — data shapes; seed agents (Planner/Researcher/Builder/
+  Reviewer/Executor) + layered skills.
+- `agents_store.py` — **live** agent config; single source of truth the loop reads.
+- `execution_manager.py` — sandbox run orchestration; `LogLine` type.
+- `agent_loop.py` — one agent's PLAN→EXECUTE→OBSERVE; resolves each agent's
+  **model + provider** at run time (`_agent_model` → `get_provider_for_model`).
+- `flow.py` — fixed multi-agent pipelines + `→NEXT:` handoff parser.
+- `orchestrator.py` — goal → `compose_orchestration_prompt` → single-shot plan →
+  `parse_plan` → dispatch; `_with_context` (report chaining); `compose_replan_prompt`
+  (re-plan); `make_plan()` (plan-first).
+- `connections.py` — provider catalog, key set/clear, **live model discovery**,
+  `provider_id_for_model`, `all_models`, `bootstrap`.
+- `env_file.py` — upsert keys into git-ignored `.env` (chmod 0600).
+- `manual_bridge.py` — human-paste bridge store (pending prompts + futures).
+- `skills.py` / `presets.py` — layered skill DB (thinking×domain×execution×overlay)
+  + presets; `compose_system(agent, skill_ids)`.
+- `core/llm/` — `base.py` (LLMProvider), `__init__.py` (factory +
+  `get_provider_for_model`), providers: `gemini_provider`, `anthropic_provider`,
+  `openai_provider`, `manual_provider`, `claude_cli_provider`.
+- `core/sandbox/` — `SandboxRuntime` (docker default, local dev-only),
+  `core/policy/` (dangerous-command block + L0–L4), `core/secrets/` (store + mask),
+  `core/audit` (append-only log).
+- `routers/` — `agent`, `approvals`, `catalog`, `connections`, `execution`,
+  `flow`, `llm`, `orchestrate`, `skills`, `tools`.
+
+**Frontend `apps/web/`**
+- `components/AiOsApp.tsx` (`@ts-nocheck`, the whole UI). Key components: `App`
+  (state + run handlers), `ExecView`, `CommandBar` (modes: 🧭 orchestrate / ✨ goal
+  / 🔀 flow / › cmd; orchestrate has a 「計画を確認」 toggle), `PlanReview`,
+  `ManualBridgePanel`, `AgentsView`/`AgentDetail` (skills/preset/model editors),
+  `ConnectionsView`/`ConnectionCard`, `FlowView`.
+- `lib/api.ts` — typed client: `streamOrchestrate` (+ `fetchPlan`), `streamFlow`,
+  `streamAgent`, `streamExecution`, connections + models + manual-bridge helpers.
+
+## Endpoint reference
+- Agents/loop: `WS /agent/stream`, `POST /agent/run` (accepts `overlays`).
+- Flows: `GET /flows`, `POST /flow/run`, `WS /flow/stream`.
+- **Orchestrate:** `POST /orchestrate/plan` (plan only), `POST /orchestrate`,
+  `WS /orchestrate/stream` (both accept optional pre-approved `steps`).
+- Connections: `GET /connections`, `PUT /connections/{id}/key`,
+  `POST /connections/{id}/refresh`, `DELETE /connections/{id}/key`,
+  `POST /connections/{id}/models` (manual), `GET /models`.
+- Manual bridge: `GET /manual/pending`, `POST /manual/submit`.
+- Skills/presets/catalog: `GET /skills`, `GET /presets`, `GET/POST/PUT /agents`,
+  `POST /agents/{id}/apply-preset|reset-preset`.
+- Execution/safety: `WS /execution/stream`, `GET /execution/audit`, approvals.
+
+## Quickstart: the orchestrator flow
+1. `cd ai-os && cp .env.example .env` — set `GEMINI_API_KEY` (free) for workers.
+2. To use the **keyless Claude orchestrator**, run the backend on a machine logged
+   into Claude Code (`claude` on PATH). Otherwise pick an API/manual orchestrator.
+3. `docker compose up` (or run `apps/api` + `apps/web` separately).
+4. **Agents** view: set **Planner** (orchestrator) `model` = `claude-cli` (auto,
+   keyless) / `claude-web` (one paste) / `gemini-*` (API). Set workers
+   (Builder/Researcher/Reviewer) to `gemini-*` for free automatic execution.
+   Models come from Connections (live discovery); set keys there.
+5. **Execution** view → 🧭「統括AIに任せる」 → type a goal. Optional: tick
+   「計画を確認してから実行」 to edit the plan (`PlanReview`) before dispatch. A
+   `claude-web` orchestrator surfaces one prompt in the 🔗 manual-bridge panel.
+
+## Locked decisions (don't relitigate without the user)
+- **Gemini free** = default provider; Anthropic/OpenAI are paid.
+- **Skill DB** is layered (thinking × domain × execution × overlay); usage is
+  **manual selection** (option B) — flows pair naturally with manual selection.
+- **Prompt composition** = human-readable Japanese sections. `RUN:`/`DONE:` and
+  the flow `→NEXT:` handoff are **system-owned**, appended last, and authoritative
+  over user skills (skills never widen capabilities — Default Deny is separate).
+- **Bridges:** API / CLI(#5) / manual only. Never build browser-automation or
+  token-injection bridges (ToS-grey). CLI(#5) is single-user personal use.
+- **Orchestrator is single-shot** (one plan per goal) so a manual/CLI orchestrator
+  costs at most one human touch; workers are the automatic bulk.
