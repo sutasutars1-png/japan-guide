@@ -76,6 +76,62 @@ def _exec_argv(resolved: str) -> list[str]:
     return [resolved]
 
 
+def auth_status() -> dict:
+    """`claude auth status --json` → {loggedIn, authMethod, apiProvider}. Never raises."""
+    resolved = shutil.which(settings.claude_cli_path)
+    if not resolved:
+        return {"loggedIn": False, "error": "claude CLI 未検出"}
+    try:
+        proc = subprocess.run(
+            [*_exec_argv(resolved), "auth", "status", "--json"],
+            capture_output=True, timeout=20, env=_build_env(),
+        )
+        out = (proc.stdout or b"").decode("utf-8", "replace").strip()
+        import json
+        data = json.loads(out[out.find("{"):out.rfind("}") + 1]) if "{" in out else {}
+        return {
+            "loggedIn": bool(data.get("loggedIn")),
+            "authMethod": data.get("authMethod"),
+            "apiProvider": data.get("apiProvider"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"loggedIn": False, "error": str(exc)[:200]}
+
+
+def login_launch() -> dict:
+    """Open an interactive `claude auth login` (subscription) in a new console.
+    Returns {launched} or a hint the caller can show. Never raises."""
+    resolved = shutil.which(settings.claude_cli_path)
+    if not resolved:
+        return {"launched": False, "error": "claude CLI 未検出"}
+    try:
+        if os.name == "nt":
+            if resolved.lower().endswith((".cmd", ".bat")):
+                cmd = [os.environ.get("COMSPEC", "cmd.exe"), "/k", resolved, "auth", "login", "--claudeai"]
+            else:
+                cmd = [resolved, "auth", "login", "--claudeai"]
+            subprocess.Popen(cmd, creationflags=0x00000010)  # CREATE_NEW_CONSOLE
+            return {"launched": True}
+        # non-Windows host: no reliable terminal to open; give the command
+        return {"launched": False, "hint": "ターミナルで `claude auth login` を実行してください。"}
+    except Exception as exc:  # noqa: BLE001
+        return {"launched": False, "error": str(exc)[:200],
+                "hint": "ターミナルで `claude auth login` を実行してください。"}
+
+
+def logout() -> dict:
+    """`claude auth logout`. Never raises."""
+    resolved = shutil.which(settings.claude_cli_path)
+    if not resolved:
+        return {"ok": False, "error": "claude CLI 未検出"}
+    try:
+        proc = subprocess.run([*_exec_argv(resolved), "auth", "logout"],
+                              capture_output=True, timeout=20)
+        return {"ok": proc.returncode == 0}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)[:200]}
+
+
 class ClaudeCliProvider(LLMProvider):
     name = "claude-cli"
 

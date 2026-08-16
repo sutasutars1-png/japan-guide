@@ -6,7 +6,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { fetchJSON, streamExecution, streamAgent, streamFlow, streamOrchestrate, fetchPlan, API_BASE,
   fetchConnections, fetchModels, setConnKey, refreshConn, clearConnKey, addManualModel,
-  fetchManualPending, submitManual, deleteAgent } from "@/lib/api";
+  fetchManualPending, submitManual, deleteAgent,
+  fetchClaudeAuth, claudeLogin, claudeLogout } from "@/lib/api";
 import { SKILL_SEED, CONNECTION_SEED } from "@/lib/seed";
 
 /* ============================================================
@@ -1241,6 +1242,49 @@ uvicorn app.main:app --reload   # → http://localhost:8000`}</pre>
     </div>
   );
 }
+// Claude Code CLI subscription login status + login/logout, inside the CLI card.
+function ClaudeAuthPanel(){
+  const [auth,setAuth]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  const check=()=>fetchClaudeAuth().then(setAuth).catch(()=>setAuth({loggedIn:false}));
+  useEffect(()=>{ check(); },[]);
+  const login=async()=>{ setBusy(true); setMsg(null);
+    try{ const r=await claudeLogin();
+      setMsg(r.launched?"別ウィンドウでログインを開きました。サインイン後、下の「再確認」を押してください。"
+                       :(r.hint||r.error||"ログインを開始できませんでした。")); }
+    catch(e){ setMsg(String(e.message||e)); } finally{ setBusy(false); } };
+  const logout=async()=>{ setBusy(true); setMsg(null);
+    try{ await claudeLogout(); await check(); setMsg("ログアウトしました。"); }
+    catch(e){ setMsg(String(e.message||e)); } finally{ setBusy(false); } };
+  const recheck=async()=>{ setBusy(true); await check(); setBusy(false); };
+  const li=auth&&auth.loggedIn;
+  const sub=auth&&(auth.authMethod==="oauth_token"||auth.apiProvider==="firstParty");
+  return (
+    <div style={{marginTop:11,padding:"10px 12px",borderRadius:9,background:"var(--panel2)",border:"1px solid var(--line2)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap"}}>
+        <span style={{width:8,height:8,borderRadius:9,background:li?"var(--live)":"var(--r3)"}}/>
+        <span style={{fontSize:12.5,fontWeight:600,color:"var(--ink)"}}>
+          {auth==null?"ログイン状態を確認中…":li?"ログイン済み":"未ログイン"}</span>
+        {li && <span className="mono" style={{fontSize:10.5,padding:"2px 7px",borderRadius:6,
+          background:"var(--liveSoft)",color:"var(--live)"}}>{sub?"サブスク":auth.authMethod||"—"}</span>}
+        <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+          {!li && <button onClick={login} disabled={busy} style={{...btnPrimary,padding:"6px 12px",fontSize:12,
+            background:"var(--ai)"}}>ログイン</button>}
+          {li && <button onClick={logout} disabled={busy} style={{fontSize:12,color:"var(--ink2)",
+            padding:"6px 11px",borderRadius:7,border:"1px solid var(--line2)"}}>ログアウト</button>}
+          <button onClick={recheck} disabled={busy} style={{fontSize:12,color:"var(--ink2)",
+            padding:"6px 11px",borderRadius:7,border:"1px solid var(--line2)"}}>再確認</button>
+        </div>
+      </div>
+      <div style={{marginTop:6,fontSize:11,color:"var(--ink3)",lineHeight:1.5}}>
+        ログインは一度だけ。保存され、再起動後もそのまま使えます（毎回は不要）。
+        {li?"" : " ボタンでログイン用ウィンドウが開きます。"}</div>
+      {msg && <div style={{marginTop:7,fontSize:11.5,color:"var(--ai)"}}>{msg}</div>}
+      {auth&&auth.error && <div style={{marginTop:6,fontSize:11,color:"var(--r3)"}}>{auth.error}</div>}
+    </div>
+  );
+}
 function ConnectionCard({c,online=true,onChange}){
   const [editing,setEditing]=useState(false);
   const [key,setKey]=useState("");
@@ -1286,6 +1330,7 @@ function ConnectionCard({c,online=true,onChange}){
         <div style={{marginTop:8,fontSize:11.5,color:"var(--ink3)",lineHeight:1.5}}>
           バックエンドが、あなたのログイン済み <span className="mono">claude</span> を実行します。
           APIキー不要・課金なし。バックエンドを <b>Claude Codeにログイン済みのPC</b> で起動してください。</div>}
+      {isCli && on && <ClaudeAuthPanel/>}
 
       {editing && !noKey &&
         <div style={{marginTop:12,display:"flex",gap:8,alignItems:"center"}}>

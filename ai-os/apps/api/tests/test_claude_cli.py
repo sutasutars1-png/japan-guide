@@ -84,6 +84,16 @@ async def test_cli_missing_binary(monkeypatch):
         await prov.complete([LLMMessage(role="user", content="x")], model="claude-cli")
 
 
+async def test_auth_status_parses_json(monkeypatch):
+    from app.core.llm.claude_cli_provider import auth_status
+    monkeypatch.setattr(ccp.shutil, "which", lambda _c: "/usr/bin/claude")
+    monkeypatch.setattr(ccp.subprocess, "run",
+                        lambda *a, **k: _FakeProc(out=b'{"loggedIn": true, "authMethod": "oauth_token"}'))
+    st = auth_status()
+    assert st["loggedIn"] is True
+    assert st["authMethod"] == "oauth_token"
+
+
 def test_routing_and_connection(monkeypatch):
     monkeypatch.setattr(ccp.shutil, "which", lambda _c: "/usr/bin/claude")
     assert isinstance(get_provider_for_model("claude-cli"), ClaudeCliProvider)

@@ -98,6 +98,14 @@ async function jsonReq<T>(path: string, method: string, body?: unknown): Promise
 export const deleteAgent = (id: string) =>
   fetch(`${API_BASE}/agents/${id}`, { method: "DELETE" }).then((r) => r.ok);
 
+// Claude Code CLI subscription login (from the Connections card).
+export type ClaudeAuth = { loggedIn: boolean; authMethod?: string; apiProvider?: string; error?: string };
+export const fetchClaudeAuth = () => fetchJSON<ClaudeAuth>("/connections/claude-cli/auth", { loggedIn: false });
+export const claudeLogin = () =>
+  jsonReq<{ launched: boolean; hint?: string; error?: string }>("/connections/claude-cli/login", "POST");
+export const claudeLogout = () =>
+  jsonReq<{ ok: boolean; error?: string }>("/connections/claude-cli/logout", "POST");
+
 export const fetchConnections = () => fetchJSON<Connection[]>("/connections", []);
 export const fetchModels = () => fetchJSON<ModelInfo[]>("/models", []);
 export const setConnKey = (id: string, key: string) =>
