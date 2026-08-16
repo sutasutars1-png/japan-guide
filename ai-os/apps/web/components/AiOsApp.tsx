@@ -903,6 +903,8 @@ function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,re
   const modelOpts=Array.from(new Set([...(models.length?models:MODELS),agent.model].filter(Boolean)));
   // persisting update: write through to the backend store so the loop sees it.
   const pupdate=(patch)=>{ const next={...agent,...patch}; persist?persist(agent.id,next):update(patch); };
+  const [saved,setSaved]=useState(false);
+  const saveNow=()=>{ persist&&persist(agent.id,agent); setSaved(true); setTimeout(()=>setSaved(false),1600); };
   const toggle=(cap)=>pupdate({caps:agent.caps.includes(cap)?agent.caps.filter(x=>x!==cap):[...agent.caps,cap]});
   const current=agent.skills||[];
   const toggleSkill=(id)=>pupdate({skills:current.includes(id)?current.filter(x=>x!==id):[...current,id]});
@@ -992,8 +994,9 @@ function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,re
       </Field>
 
       <div style={{display:"flex",gap:10,marginTop:8,alignItems:"center"}}>
-        <button style={btnPrimary}>Save changes</button>
-        <span className="mono" style={{fontSize:11,color:"var(--ink3)"}}>edits apply to this session instantly</span>
+        <button onClick={saveNow} style={{...btnPrimary,background:saved?"var(--live)":btnPrimary.background}}>
+          {saved?"保存しました ✓":"変更を保存"}</button>
+        <span className="mono" style={{fontSize:11,color:"var(--ink3)"}}>編集はサーバーに保存され、再起動後も保持されます</span>
         <button onClick={()=>onDelete&&onDelete(agent.id)}
           style={{marginLeft:"auto",padding:"9px 16px",borderRadius:9,background:"rgba(226,75,65,.12)",
             border:"1px solid rgba(226,75,65,.4)",color:"var(--r4)",fontSize:13,fontWeight:600}}>

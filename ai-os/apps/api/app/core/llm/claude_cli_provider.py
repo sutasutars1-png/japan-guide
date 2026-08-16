@@ -27,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
+import subprocess
 import tempfile
 from typing import Any
 
@@ -104,21 +105,23 @@ class ClaudeCliProvider(LLMProvider):
         prompt = render_prompt(messages)  # masked, flattened
         args = [*_exec_argv(resolved), *_build_args()]
         with tempfile.TemporaryDirectory(prefix="aios-claude-") as cwd:
-            proc = await asyncio.create_subprocess_exec(
-                *args,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=cwd,      # empty throwaway dir: nothing here to touch
-                env=_build_env(),  # subscription login only — no metered API key
-            )
+            # Run via subprocess.run in a worker thread rather than
+            # asyncio.create_subprocess_exec: the latter raises NotImplementedError
+            # on Windows event loops that lack subprocess support. to_thread works
+            # on every platform / loop.
             try:
-                out_b, err_b = await asyncio.wait_for(
-                    proc.communicate(input=prompt.encode()), timeout=self._timeout
+                proc = await asyncio.to_thread(
+                    subprocess.run,
+                    args,
+                    input=prompt.encode(),
+                    capture_output=True,
+                    cwd=cwd,           # empty throwaway dir: nothing here to touch
+                    env=_build_env(),  # subscription login only — no metered API key
+                    timeout=self._timeout,
                 )
-            except asyncio.TimeoutError as exc:
-                proc.kill()
+            except subprocess.TimeoutExpired as exc:
                 raise RuntimeError("claude CLI がタイムアウトしました。") from exc
+        out_b, err_b = proc.stdout or b"", proc.stderr or b""
 
         if proc.returncode != 0:
             # claude may print the reason to stderr OR stdout; surface whichever.

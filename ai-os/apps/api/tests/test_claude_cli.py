@@ -13,29 +13,23 @@ from app.core.secrets import store as secret_store  # noqa: E402
 
 
 class _FakeProc:
+    """Stand-in for subprocess.CompletedProcess."""
     def __init__(self, out=b"", err=b"", code=0):
-        self._out, self._err, self.returncode = out, err, code
-        self.captured_stdin = None
-
-    async def communicate(self, input=None):
-        self.captured_stdin = input
-        return self._out, self._err
-
-    def kill(self):
-        pass
+        self.stdout, self.stderr, self.returncode = out, err, code
 
 
 def _patch_cli(monkeypatch, proc, path="/usr/bin/claude"):
     monkeypatch.setattr(ccp.shutil, "which", lambda _c: path)
     captured = {}
 
-    async def fake_exec(*args, **kwargs):
-        captured["args"] = args
+    def fake_run(args, **kwargs):
+        captured["args"] = list(args)
         captured["cwd"] = kwargs.get("cwd")
         captured["env"] = kwargs.get("env")
+        captured["stdin"] = kwargs.get("input")
         return proc
 
-    monkeypatch.setattr(ccp.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(ccp.subprocess, "run", fake_run)
     return captured
 
 
@@ -55,10 +49,10 @@ async def test_cli_returns_stdout(monkeypatch):
 async def test_cli_masks_prompt_before_spawn(monkeypatch):
     secret_store.set("CLITEST", "topsecretxyz")
     proc = _FakeProc(out=b"ok")
-    _patch_cli(monkeypatch, proc)
+    cap = _patch_cli(monkeypatch, proc)
     prov = ClaudeCliProvider()
     await prov.complete([LLMMessage(role="user", content="key topsecretxyz here")], model="claude-cli")
-    assert b"topsecretxyz" not in (proc.captured_stdin or b"")
+    assert b"topsecretxyz" not in (cap["stdin"] or b"")
     secret_store._values.pop("CLITEST", None)
     secret_store._rebuild_pattern()
 

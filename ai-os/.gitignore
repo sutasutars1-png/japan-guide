@@ -1,6 +1,8 @@
 # secrets & local env
 .env
 *.local
+# persisted local UI state (agent config) — machine-specific, never committed
+.aios-agents.json
 
 # node
 node_modules/
