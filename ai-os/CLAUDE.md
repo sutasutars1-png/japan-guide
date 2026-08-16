@@ -279,6 +279,16 @@ exit discarded a valid worker report. `open_session/exec_in/collect_files/
 close_session` in `execution_manager.py`; `app/materials.py`;
 `GET /execution/sandbox-info`. See `docs/phase-4-sandbox-session.md`.
 
+**Done since (web.fetch):** research is done by the **backend**, not the code
+sandbox — a `FETCH: <url>` loop action calls a host-side, SSRF-guarded
+`core/tools/web_fetch.py:safe_fetch` (public-IP-only, redirect-revalidated,
+GET/size/timeout-capped, returns UNTRUSTED text), gated by the `web.fetch`
+capability. So the code sandbox stays Default-Deny and any research domain works
+with no allowlist. `AIOS_WEB_FETCH*` config. See `docs/phase-4-web-fetch.md`.
+**Design rule:** never make the code sandbox the web fetcher; brain(host)/hands
+(sandbox) separation extends to network — intake goes through web.fetch, the
+sandbox keeps no egress.
+
 ### Docs map (`docs/`)
 phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills,
 -skills-layered, -presets, -flows, -connections, -claude-cli, -orchestrate,
@@ -351,6 +361,8 @@ phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills
 - Sandbox session env: `AIOS_PERSISTENT_SANDBOX` (1), `AIOS_COLLECT_FILES` (1),
   `AIOS_WORKSPACE_MOUNT` (materials copy-in dir), `AIOS_DEFAULT_ALLOW_DOMAINS`,
   `AIOS_DELIVERABLE_MAX_FILES`/`_MAX_BYTES`, `AIOS_MATERIALS_MAX_FILES`/`_MAX_BYTES`.
+- web.fetch env: `AIOS_WEB_FETCH` (1), `AIOS_WEB_FETCH_MAX_BYTES`,
+  `AIOS_WEB_FETCH_TIMEOUT`, `AIOS_WEB_FETCH_MAX_REDIRECTS`. Loop action `FETCH: <url>`.
 
 ## Quickstart: the orchestrator flow
 1. `cd ai-os && cp .env.example .env` — set `GEMINI_API_KEY` (free) for workers.

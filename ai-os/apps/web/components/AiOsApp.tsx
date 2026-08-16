@@ -539,6 +539,7 @@ function SandboxPane({lines,running,elapsed,cpu,ram,logRef,model}){
     sbx.persistent_sandbox?"永続SBX":"都度SBX",
     sbx.collect_files?"成果物回収 on":null,
     sbx.materials_present?"資料マウント":null,
+    sbx.web_fetch_enabled?"web.fetch on":null,
   ].filter(Boolean):[];
   return (
     <div style={{position:"relative",flex:1,minHeight:120,borderRadius:13,background:"#05080C",
@@ -1115,15 +1116,15 @@ function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,re
         </div>
       </Field>
 
-      <Field label="許可ドメイン（ネットワーク許可リスト）"
-        hint="サンドボックスは既定で全遮断。ここに列挙したドメインだけ外部通信を許可します（人間が設定。AIは拡張不可）。カンマ区切り。空＝完全オフライン。">
+      <Field label="サンドボックス許可ドメイン（上級者向け・通常は空でOK）"
+        hint="Web調査は web.fetch（ホスト側取得・SSRF対策済み）で行うため、サンドボックスは全遮断のままで構いません。ここはサンドボックス内コマンド自体が外部通信する必要がある特殊ケース用（人間が設定・AIは拡張不可）。カンマ区切り。">
         <input defaultValue={(agent.allow_domains||[]).join(", ")}
           onBlur={e=>pupdate({allow_domains:e.target.value.split(",").map(x=>x.trim()).filter(Boolean)})}
-          placeholder="例: note.com, api.github.com, pypi.org"
+          placeholder="通常は空。例外: pypi.org（sandbox内 pip 用）など"
           className="mono" style={{...inp,fontSize:12.5}}/>
         {(agent.allow_domains||[]).length>0 &&
           <div className="mono" style={{fontSize:10.5,color:"var(--warn)",marginTop:6}}>
-            ⚠ 許可時のegressは現状粗い（許可すると全outbound到達可）。信頼するドメインのみ。
+            ⚠ 許可時のegressは現状粗い（許可すると全outbound到達可）。調査用途なら web.fetch を使い、ここは空推奨。
           </div>}
       </Field>
 

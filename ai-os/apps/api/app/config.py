@@ -60,6 +60,16 @@ class Settings:
     # A network allowlist applied to every agent sandbox on top of each agent's
     # own allow_domains (both human-set; the LLM can never widen them).
     default_allow_domains: list[str] = field(default_factory=lambda: _csv("AIOS_DEFAULT_ALLOW_DOMAINS"))
+    # --- Host-side web.fetch tool (research without opening the sandbox) ---
+    # The backend (not the sandbox) fetches a URL the LLM asks for and returns
+    # text, so the code sandbox stays Default-Deny. SSRF-guarded: private/loopback/
+    # link-local/metadata targets are refused, GET-only, size/redirect capped.
+    web_fetch_enabled: bool = (
+        os.getenv("AIOS_WEB_FETCH", "1").lower() not in ("0", "false", "no")
+    )
+    web_fetch_max_bytes: int = int(os.getenv("AIOS_WEB_FETCH_MAX_BYTES", str(512 * 1024)))
+    web_fetch_timeout: int = int(os.getenv("AIOS_WEB_FETCH_TIMEOUT", "15"))
+    web_fetch_max_redirects: int = int(os.getenv("AIOS_WEB_FETCH_MAX_REDIRECTS", "4"))
 
 
 settings = Settings()

@@ -86,6 +86,7 @@ export type SandboxInfo = {
   runtime: string; persistent_sandbox: boolean; collect_files: boolean;
   materials_mount: string; materials_present: boolean;
   default_allow_domains: string[]; deliverable_max_files: number; deliverable_max_bytes: number;
+  web_fetch_enabled: boolean;
 };
 export const fetchSandboxInfo = () =>
   fetchJSON<SandboxInfo | null>("/execution/sandbox-info", null);

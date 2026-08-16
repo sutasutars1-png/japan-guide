@@ -40,6 +40,7 @@ def sandbox_info() -> dict:
         "default_allow_domains": settings.default_allow_domains,
         "deliverable_max_files": settings.deliverable_max_files,
         "deliverable_max_bytes": settings.deliverable_max_bytes,
+        "web_fetch_enabled": settings.web_fetch_enabled,
     }
 
 
