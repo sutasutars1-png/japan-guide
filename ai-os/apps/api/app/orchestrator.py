@@ -214,7 +214,7 @@ class OrchestratorRunner:
             worker_goal = _with_context(task, reports, goal)
             system = compose_system(stage, agents_store.skills_for(stage))
             report_lines: list[str] = []
-            capturing = halted = errored = False
+            capturing = halted = False
             async for line in self._loop.run(
                 worker_goal, agent_name=stage, system=system, max_iterations=per_worker_iters
             ):
@@ -224,8 +224,6 @@ class OrchestratorRunner:
                     report_lines.append(line.s)
                 if line.t == "halt":
                     halted = True
-                if line.t == "err":
-                    errored = True
                 yield LogLine(line.t, f"[{stage}] {line.s}")
 
             if halted:  # L3/L4 approval — a human decision, never re-planned
@@ -236,8 +234,13 @@ class OrchestratorRunner:
                     yield saved
                 return
 
+            # Success is "the agent emitted a DONE report" — `report` is non-empty
+            # only on the loop's DONE path. A non-zero shell exit mid-exploration
+            # (an `err` line like `exited 1`) is normal and must NOT discard a
+            # valid report; that false-positive used to trigger needless re-plans
+            # and throw away the deliverable.
             report = "\n".join(report_lines).strip()
-            if report and not errored:
+            if report:
                 reports.append((stage, report))
                 artifacts.append({"agent": stage, "task": task, "content": report})
                 continue
