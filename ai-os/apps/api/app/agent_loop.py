@@ -15,6 +15,7 @@ fake provider + the local runtime.
 """
 from __future__ import annotations
 
+import json
 from typing import AsyncIterator
 
 from .config import settings
@@ -81,6 +82,23 @@ def _agent_model(agent_name: str) -> str | None:
         return None
 
 
+def _resolve_domains(agent_name: str, explicit: list[str] | None) -> list[str]:
+    """Network allowlist for this agent = explicit ∪ agent-config ∪ global default.
+    All three are human-set; the LLM can never widen them."""
+    domains: list[str] = list(explicit or [])
+    try:
+        from . import agents_store  # lazy
+        a = agents_store.get_by_name(agent_name)
+        if a:
+            domains += list(a.get("allow_domains") or [])
+    except Exception:  # noqa: BLE001
+        pass
+    domains += list(settings.default_allow_domains)
+    # de-dupe, preserve order
+    seen: set[str] = set()
+    return [d for d in domains if d and not (d in seen or seen.add(d))]
+
+
 class AgentLoop:
     def __init__(self, provider=None, manager=None, model: str | None = None) -> None:
         # None = resolve dynamically per agent (model + provider from Connections);
@@ -88,6 +106,22 @@ class AgentLoop:
         self._provider = provider
         self._manager = manager or get_execution_manager()
         self._model = model
+
+    async def _emit_files(self, session, agent_name: str) -> AsyncIterator[LogLine]:
+        """Collect files the agent created and emit them as `file` log lines so
+        the orchestrator/flow/UI can turn them into downloadable deliverables."""
+        if session is None or not settings.collect_deliverable_files:
+            return
+        try:
+            files = await self._manager.collect_files(session)
+        except Exception as exc:  # noqa: BLE001 — collection never breaks a run
+            yield LogLine("warn", f"生成ファイルの回収に失敗: {exc}")
+            return
+        for f in files:
+            yield LogLine("file", json.dumps(f, ensure_ascii=False))
+        if files:
+            yield LogLine("sys", f"📦 生成ファイル {len(files)} 件を成果物として回収しました")
+            log.append(AuditEvent("agent.files", agent_name, f"{len(files)} files"))
 
     async def run(
         self,
@@ -97,12 +131,14 @@ class AgentLoop:
         system: str | None = None,
         max_iterations: int = 8,
         token_budget: int | None = None,
+        allow_domains: list[str] | None = None,
     ) -> AsyncIterator[LogLine]:
         budget = token_budget if token_budget is not None else settings.llm_token_budget
         # Pick this agent's model, then the provider that serves it (Gemini,
         # Anthropic, OpenAI, or the manual bridge for API-less assistants).
         model = self._model or _agent_model(agent_name) or settings.llm_model
         provider = self._provider or get_provider_for_model(model)
+        domains = _resolve_domains(agent_name, allow_domains)
         history: list[LLMMessage] = [
             LLMMessage(role="system", content=(system or DEFAULT_ROLE) + "\n\n" + LOOP_PROTOCOL),
             LLMMessage(role="user", content=f"Goal: {goal}"),
@@ -111,59 +147,88 @@ class AgentLoop:
         yield LogLine("sys", f"agent '{agent_name}' · model {model} · goal: {goal}")
         log.append(AuditEvent("agent.start", agent_name, goal))
 
-        for i in range(max_iterations):
-            yield LogLine("sys", f"— iteration {i + 1}/{max_iterations} · thinking… —")
-            try:
-                resp = await provider.complete(history, model=model, max_tokens=1024)
-            except Exception as exc:  # noqa: BLE001 — surface LLM/transport errors
-                yield LogLine("err", f"LLM error: {exc}")
-                return
+        # One sandbox for the whole loop so files persist across steps (#2).
+        session = None
+        try:
+            if settings.persistent_agent_sandbox:
+                try:
+                    session, prep = await self._manager.open_session(
+                        actor=agent_name, allow_domains=domains, materials=True,
+                    )
+                    for ln in prep:
+                        yield ln
+                except Exception as exc:  # noqa: BLE001 — fall back to per-command
+                    yield LogLine("warn", f"セッション用サンドボックスを開けませんでした（都度実行に切替）: {exc}")
+                    session = None
 
-            used_tokens += resp.usage.total
-            text = (resp.text or "").strip()
-            history.append(LLMMessage(role="assistant", content=text))
-            kind, payload = parse_agent_action(text)
+            for i in range(max_iterations):
+                yield LogLine("sys", f"— iteration {i + 1}/{max_iterations} · thinking… —")
+                try:
+                    resp = await provider.complete(history, model=model, max_tokens=1024)
+                except Exception as exc:  # noqa: BLE001 — surface LLM/transport errors
+                    yield LogLine("err", f"LLM error: {exc}")
+                    return
 
-            if kind == "done":
-                yield LogLine("ok", "agent finished ✓")
-                for ln in _wrap(payload):
-                    yield LogLine("out", ln)
-                log.append(AuditEvent("agent.done", agent_name, payload[:200]))
-                return
+                used_tokens += resp.usage.total
+                text = (resp.text or "").strip()
+                history.append(LLMMessage(role="assistant", content=text))
+                kind, payload = parse_agent_action(text)
 
-            command = payload
-            if not command:
-                history.append(LLMMessage(role="user", content="Empty command. Reply with RUN: <cmd> or DONE: <report>."))
-                continue
+                if kind == "done":
+                    yield LogLine("ok", "agent finished ✓")
+                    for ln in _wrap(payload):
+                        yield LogLine("out", ln)
+                    log.append(AuditEvent("agent.done", agent_name, payload[:200]))
+                    async for fl in self._emit_files(session, agent_name):
+                        yield fl
+                    return
 
-            decision = evaluate(command)
-            if not decision.allowed:
-                yield LogLine("err", f"blocked: {decision.reason} → {command}")
-                log.append(AuditEvent("policy.block", agent_name, decision.reason, int(decision.risk)))
-                history.append(LLMMessage(role="user", content=f"That command was blocked by policy ({decision.reason}). Choose a safer approach."))
-                continue
-            if decision.requires_approval:
-                yield LogLine("halt", f"agent stopped for safety — high-risk command (L{int(decision.risk)}) needs your approval: {command}")
-                log.append(AuditEvent("agent.halt", agent_name, command, int(decision.risk)))
-                return
+                command = payload
+                if not command:
+                    history.append(LLMMessage(role="user", content="Empty command. Reply with RUN: <cmd> or DONE: <report>."))
+                    continue
 
-            yield LogLine("sys", f"{agent_name} → RUN: {command}")
-            observed: list[str] = []
-            async for line in self._manager.run(command, actor=agent_name):
-                yield line
-                observed.append(f"[{line.t}] {line.s}")
+                decision = evaluate(command)
+                if not decision.allowed:
+                    yield LogLine("err", f"blocked: {decision.reason} → {command}")
+                    log.append(AuditEvent("policy.block", agent_name, decision.reason, int(decision.risk)))
+                    history.append(LLMMessage(role="user", content=f"That command was blocked by policy ({decision.reason}). Choose a safer approach."))
+                    continue
+                if decision.requires_approval:
+                    yield LogLine("halt", f"agent stopped for safety — high-risk command (L{int(decision.risk)}) needs your approval: {command}")
+                    log.append(AuditEvent("agent.halt", agent_name, command, int(decision.risk)))
+                    return
 
-            # OBSERVE: feed the (tail of the) output back to the agent.
-            tail = "\n".join(observed[-40:]) or "(no output)"
-            history.append(LLMMessage(role="user", content=f"Command output:\n{tail}"))
+                yield LogLine("sys", f"{agent_name} → RUN: {command}")
+                observed: list[str] = []
+                # Run in the persistent session when we have one (files persist);
+                # otherwise fall back to a fresh per-command sandbox.
+                if session is not None:
+                    stream = self._manager.exec_in(session, command, actor=agent_name)
+                else:
+                    stream = self._manager.run(command, actor=agent_name, allow_domains=domains)
+                async for line in stream:
+                    yield line
+                    observed.append(f"[{line.t}] {line.s}")
 
-            if used_tokens > budget:
-                yield LogLine("warn", f"token budget reached (~{used_tokens}/{budget}) — stopping")
-                log.append(AuditEvent("agent.budget", agent_name, f"~{used_tokens} tokens"))
-                return
+                # OBSERVE: feed the (tail of the) output back to the agent.
+                tail = "\n".join(observed[-40:]) or "(no output)"
+                history.append(LLMMessage(role="user", content=f"Command output:\n{tail}"))
 
-        yield LogLine("warn", f"reached max iterations ({max_iterations}) — stopping")
-        log.append(AuditEvent("agent.max_iterations", agent_name, goal))
+                if used_tokens > budget:
+                    yield LogLine("warn", f"token budget reached (~{used_tokens}/{budget}) — stopping")
+                    log.append(AuditEvent("agent.budget", agent_name, f"~{used_tokens} tokens"))
+                    async for fl in self._emit_files(session, agent_name):
+                        yield fl
+                    return
+
+            yield LogLine("warn", f"reached max iterations ({max_iterations}) — stopping")
+            log.append(AuditEvent("agent.max_iterations", agent_name, goal))
+            async for fl in self._emit_files(session, agent_name):
+                yield fl
+        finally:
+            if session is not None:
+                await self._manager.close_session(session)
 
 
 _loop: AgentLoop | None = None

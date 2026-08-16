@@ -8,7 +8,8 @@ import { fetchJSON, streamExecution, streamAgent, streamFlow, streamOrchestrate,
   fetchConnections, fetchModels, setConnKey, refreshConn, clearConnKey, addManualModel,
   fetchManualPending, submitManual, deleteAgent,
   fetchClaudeAuth, claudeLogin, claudeLogout,
-  fetchDeliverables, fetchDeliverable, deleteDeliverable, saveDeliverable, downloadDeliverable } from "@/lib/api";
+  fetchDeliverables, fetchDeliverable, deleteDeliverable, saveDeliverable, downloadDeliverable,
+  fetchSandboxInfo } from "@/lib/api";
 import { SKILL_SEED, CONNECTION_SEED } from "@/lib/seed";
 
 /* ============================================================
@@ -109,7 +110,13 @@ const SCRIPT = [
   { t:"halt",s:"Executor requests approval: write to production database (L4)" },
 ];
 const logColor=(t)=>({sys:"#6f8092",cmd:"#e7edf3",out:"#c3d0db",ok:"#4fd8bd",
-  warn:"#e6b64c",err:"#e8695f",halt:"#b6a4ff"}[t]||"#c3d0db");
+  warn:"#e6b64c",err:"#e8695f",halt:"#b6a4ff",file:"#12C7B9"}[t]||"#c3d0db");
+
+// A `file` log line carries JSON {path,size,content}; render a friendly label.
+function fileLineLabel(s){
+  try{ const m=JSON.parse(s); return `📄 生成ファイル: ${m.path} (${m.size} bytes)`; }
+  catch{ return "📄 生成ファイル"; }
+}
 
 const COMMENTS = [
   { who:"Builder", model:"gemini-2.5-flash", type:"proceed", risk:1,
@@ -512,7 +519,7 @@ function TaskHeader({onAction}){
   );
 }
 function transformLog(lines,mode){
-  if(mode==="clean") return lines.filter(l=>["cmd","ok","warn","err","halt"].includes(l.t));
+  if(mode==="clean") return lines.filter(l=>["cmd","ok","warn","err","halt","file"].includes(l.t));
   if(mode==="compressed"){
     const out=[]; let run=[];
     const flush=()=>{ if(!run.length)return;
@@ -525,7 +532,14 @@ function transformLog(lines,mode){
 function SandboxPane({lines,running,elapsed,cpu,ram,logRef,model}){
   const [mode,setMode]=useState("full");
   const [info,setInfo]=useState(false);
+  const [sbx,setSbx]=useState(null);
+  useEffect(()=>{ let on=true; fetchSandboxInfo().then(s=>{ if(on)setSbx(s); }); return ()=>{on=false;}; },[]);
   const shown=transformLog(lines.filter(Boolean),mode);
+  const sbxChips=sbx?[
+    sbx.persistent_sandbox?"永続SBX":"都度SBX",
+    sbx.collect_files?"成果物回収 on":null,
+    sbx.materials_present?"資料マウント":null,
+  ].filter(Boolean):[];
   return (
     <div style={{position:"relative",flex:1,minHeight:120,borderRadius:13,background:"#05080C",
       border:"1px solid var(--line2)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -533,7 +547,7 @@ function SandboxPane({lines,running,elapsed,cpu,ram,logRef,model}){
       <div style={{display:"flex",alignItems:"center",gap:11,padding:"10px 15px",
         borderBottom:"1px solid var(--line)",background:"var(--bg2)"}}>
         <span className="mono" style={{fontSize:12,color:"#9fb0c0"}}>sandbox · sbx-7f3a</span>
-        {["non-root","net: deny+allow"].map(t=>(
+        {["non-root","net: deny+allow",...sbxChips].map(t=>(
           <span key={t} className="mono" style={{fontSize:10.5,color:"#5f7185",padding:"2px 7px",
             border:"1px solid #243240",borderRadius:6}}>{t}</span>
         ))}
@@ -576,7 +590,7 @@ function SandboxPane({lines,running,elapsed,cpu,ram,logRef,model}){
           <div key={i} className="logline" style={{color:ln.t==="fold"?"#435060":logColor(ln&&ln.t),
             display:"flex",gap:10,whiteSpace:"pre-wrap",fontStyle:ln.t==="fold"?"italic":"normal"}}>
             <span style={{color:"#31404f",userSelect:"none"}}>{String(i+1).padStart(2,"0")}</span>
-            <span>{ln.s}</span>
+            <span>{ln.t==="file"?fileLineLabel(ln.s):ln.s}</span>
           </div>
         ))}
         {running && mode==="full" && <span className="caret" style={{color:"var(--live)"}}>▍</span>}
@@ -1099,6 +1113,18 @@ function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,re
             );
           })}
         </div>
+      </Field>
+
+      <Field label="許可ドメイン（ネットワーク許可リスト）"
+        hint="サンドボックスは既定で全遮断。ここに列挙したドメインだけ外部通信を許可します（人間が設定。AIは拡張不可）。カンマ区切り。空＝完全オフライン。">
+        <input defaultValue={(agent.allow_domains||[]).join(", ")}
+          onBlur={e=>pupdate({allow_domains:e.target.value.split(",").map(x=>x.trim()).filter(Boolean)})}
+          placeholder="例: note.com, api.github.com, pypi.org"
+          className="mono" style={{...inp,fontSize:12.5}}/>
+        {(agent.allow_domains||[]).length>0 &&
+          <div className="mono" style={{fontSize:10.5,color:"var(--warn)",marginTop:6}}>
+            ⚠ 許可時のegressは現状粗い（許可すると全outbound到達可）。信頼するドメインのみ。
+          </div>}
       </Field>
 
       <Field label="Skills（層構造・手動選択）" hint="工程 × 思考 × 専門レンズ × 実行 × 方針。選んだスキルはゴール実行時にAIの指示へ層ごとに組み込まれます。">

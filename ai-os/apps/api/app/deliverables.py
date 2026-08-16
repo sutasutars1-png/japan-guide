@@ -91,35 +91,67 @@ _STEP_RE = re.compile(r"^▶\s*工程\s*\d+\s*[:：]\s*([^\s—-]+)\s*[—-]\s*(
 _TAG_RE = re.compile(r"^\[([^\]]+)\]\s?(.*)$", re.DOTALL)
 
 
-def artifacts_from_lines(lines: list[dict]) -> list[dict]:
-    """Best-effort reconstruction of per-step artifacts from streamed log lines.
+def _try_json(s: str) -> dict | None:
+    try:
+        v = json.loads(s)
+        return v if isinstance(v, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
 
-    Recognises the orchestrator's `▶ 工程 N: <agent> — <task>` markers and groups
-    the `[agent] …` output that follows into that step. Used when the UI saves a
-    run it captured client-side (agent/flow runs, or an orchestrate run the
-    backend didn't auto-save).
+
+def artifacts_from_lines(lines: list[dict]) -> list[dict]:
+    """Best-effort reconstruction of artifacts from streamed log lines.
+
+    Handles three shapes, so the UI can save any run it captured client-side:
+    - orchestrator/flow logs: `▶ 工程 N: <agent> — <task>` markers grouping the
+      `[agent] …` output that follows;
+    - a plain agent run with no step markers: capture the DONE report that follows
+      an `agent finished ✓` line;
+    - `file` lines (JSON {path, size, content}) become their own artifacts.
     """
     steps: list[dict] = []
     cur: dict | None = None
+
+    def push() -> None:
+        nonlocal cur
+        if cur and cur["content"].strip():
+            cur["content"] = cur["content"].strip()
+            steps.append(cur)
+        cur = None
+
     for ln in lines or []:
         t = (ln.get("t") or "").strip()
         s = ln.get("s") or ""
+
+        if t == "file":  # a generated file → its own artifact
+            meta = _try_json(s)
+            if meta and (meta.get("content") or "").strip():
+                steps.append({
+                    "agent": (cur or {}).get("agent", "AI"),
+                    "task": f"ファイル: {meta.get('path', '')}",
+                    "content": meta["content"],
+                })
+            continue
+
         m = _STEP_RE.match(s.strip())
-        if m:
-            if cur and cur["content"].strip():
-                steps.append(cur)
+        if m:  # a new ▶ 工程 step
+            push()
             cur = {"agent": m.group(1).strip(), "task": m.group(2).strip(), "content": ""}
             continue
-        if cur is None or t not in _OUTPUT_TYPES:
-            continue
+
         tag = _TAG_RE.match(s)
         body = tag.group(2) if tag else s
+        if body.strip() == "agent finished ✓":  # begin a default report bucket
+            if cur is None:
+                cur = {"agent": (tag.group(1).strip() if tag else "AI"), "task": "", "content": ""}
+            continue
+
+        if cur is None or t not in _OUTPUT_TYPES:
+            continue
         if body.strip():
             cur["content"] += (body.rstrip() + "\n")
-    if cur and cur["content"].strip():
-        steps.append(cur)
-    for st in steps:
-        st["content"] = st["content"].strip()
+
+    push()
     return _clean_artifacts(steps)
 
 

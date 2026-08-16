@@ -74,9 +74,21 @@ export function streamAgent(
   onDone: () => void,
   goal: string,
   maxIterations = 8,
+  allowDomains?: string[],
 ): () => void {
-  return openStream("/agent/stream", { goal, max_iterations: maxIterations }, onLine, onDone);
+  const payload: Record<string, unknown> = { goal, max_iterations: maxIterations };
+  if (allowDomains && allowDomains.length) payload.allow_domains = allowDomains;
+  return openStream("/agent/stream", payload, onLine, onDone);
 }
+
+// How the sandbox session is configured (persistence, file collection, materials).
+export type SandboxInfo = {
+  runtime: string; persistent_sandbox: boolean; collect_files: boolean;
+  materials_mount: string; materials_present: boolean;
+  default_allow_domains: string[]; deliverable_max_files: number; deliverable_max_bytes: number;
+};
+export const fetchSandboxInfo = () =>
+  fetchJSON<SandboxInfo | null>("/execution/sandbox-info", null);
 
 // ---- Connections (Phase 4): providers, keys, live-discovered models ----
 export type Connection = {

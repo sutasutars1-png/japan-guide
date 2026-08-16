@@ -191,3 +191,50 @@ async def test_orchestrate_no_deliverable_when_no_output():
     runner = OrchestratorRunner(loop=None, provider=FakeProvider("よくわからない"))
     _ = [l async for l in runner.run("ゴール")]
     assert deliverables.list_deliverables() == []
+
+
+async def test_orchestrate_captures_generated_files_as_artifacts():
+    import json
+
+    class FileLoop:
+        async def run(self, goal, *, agent_name, system=None, max_iterations=6):
+            yield LogLine("ok", "agent finished ✓")
+            yield LogLine("out", "テキストレポート")
+            yield LogLine("file", json.dumps({"path": "out.md", "size": 6, "content": "# 見出し"}))
+
+    runner = OrchestratorRunner(loop=FileLoop(), provider=FakeProvider("Builder: A\nDONE"))
+    out = await _collect_lines(runner, "ゴール")
+    joined = "\n".join(out)
+    assert "📄 生成ファイル: out.md" in joined       # friendly display, not raw JSON
+    assert '{"path"' not in joined                    # raw file JSON is swallowed
+    saved = deliverables.get(deliverables.list_deliverables()[0]["id"])
+    tasks = {a["task"]: a["content"] for a in saved["artifacts"]}
+    assert tasks["ファイル: out.md"] == "# 見出し"     # file captured as an artifact
+    assert "テキストレポート" in "".join(saved_contents(saved))
+
+
+def saved_contents(item):
+    return [a["content"] for a in item["artifacts"]]
+
+
+async def _collect_lines(runner, goal, **kw):
+    return [l.s async for l in runner.run(goal, **kw)]
+
+
+def test_artifacts_from_lines_parses_file_lines():
+    import json
+    lines = [
+        {"t": "ok", "s": "agent finished ✓"},
+        {"t": "out", "s": "本文レポート"},
+        {"t": "file", "s": json.dumps({"path": "note.md", "size": 4, "content": "本文だよ"})},
+    ]
+    arts = deliverables.artifacts_from_lines(lines)
+    tasks = {a["task"]: a["content"] for a in arts}
+    assert tasks["ファイル: note.md"] == "本文だよ"
+    assert any("本文レポート" in a["content"] for a in arts if not a["task"].startswith("ファイル"))
+
+
+def test_sandbox_info_endpoint():
+    info = client.get("/execution/sandbox-info").json()
+    assert "runtime" in info and "persistent_sandbox" in info
+    assert "collect_files" in info and "default_allow_domains" in info

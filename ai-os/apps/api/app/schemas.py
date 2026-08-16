@@ -18,6 +18,9 @@ class Agent(BaseModel):
     skills: list[str] = Field(default_factory=list)  # base skill ids (Phase 4)
     preset: str | None = None  # active preset id (resettable)
     role: str = ""
+    # Network allowlist for this agent's sandbox (Default-Deny otherwise). Human-set,
+    # never widened by the LLM. Empty = fully offline sandbox.
+    allow_domains: list[str] = Field(default_factory=list)
 
 
 class Preset(BaseModel):

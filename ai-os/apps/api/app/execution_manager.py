@@ -7,21 +7,61 @@ interface) and provider-agnostic. Phase 4 plugs the LLM loop on top of it.
 """
 from __future__ import annotations
 
+import base64
+import json
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
+from .config import settings
 from .core.audit import AuditEvent, log
 from .core.policy import evaluate
 from .core.sandbox import (
     NetworkPolicy,
     ResourceLimits,
+    SandboxHandle,
     SandboxRuntime,
     SandboxSpec,
     get_sandbox_runtime,
 )
 from .core.secrets import mask_secrets
+
+WORKDIR = "/workspace"
+
+# Trusted in-sandbox walker: collect text files created under the workdir (cwd),
+# excluding the copied-in materials/ and dotdirs, and print them as JSON.
+# base64-encoded before send so quoting/newlines can't break the shell command.
+_WALKER = """
+import os, json
+out, tot = [], 0
+MAXF, MAXB, PERB = {maxf}, {maxb}, {perb}
+for dp, dns, fns in os.walk('.'):
+    dns[:] = [d for d in dns if not d.startswith('.') and d not in ('materials', '__pycache__', 'node_modules')]
+    for fn in sorted(fns):
+        if fn.startswith('.'):
+            continue
+        p = os.path.join(dp, fn)
+        rel = os.path.relpath(p, '.')
+        if rel == 'materials' or rel.startswith('materials/'):
+            continue
+        try:
+            sz = os.path.getsize(p)
+        except OSError:
+            continue
+        if sz > PERB or len(out) >= MAXF or tot >= MAXB:
+            continue
+        try:
+            with open(p, 'rb') as f:
+                data = f.read()
+        except OSError:
+            continue
+        if bytes([0]) in data:
+            continue
+        out.append({{'path': rel, 'size': sz, 'content': data.decode('utf-8', 'replace')}})
+        tot += len(data)
+print(json.dumps(out))
+"""
 
 
 @dataclass
@@ -132,6 +172,132 @@ class ExecutionManager:
         line = LogLine(t, s)
         job.lines.append(line)
         return line
+
+    # ---- persistent session (roadmap: one sandbox per agent loop) -----------
+    # The per-command `run()` above creates and destroys a sandbox each call, so
+    # files never survive between an agent's steps. A *session* keeps one sandbox
+    # alive for the whole loop (open_session → exec_in* → collect_files →
+    # close_session), so an agent can build a file across steps and hand it back
+    # as a deliverable.
+
+    async def open_session(
+        self, *, actor: str = "Builder", allow_domains: list[str] | None = None,
+        materials: bool = True,
+    ) -> tuple[SandboxHandle, list[LogLine]]:
+        """Create one sandbox for a whole agent loop; copy in materials. Returns
+        the handle plus the prep log lines to emit."""
+        allow = [d for d in (allow_domains or []) if d]
+        spec = SandboxSpec(
+            limits=ResourceLimits(),
+            network=NetworkPolicy(default_deny=True, allow_domains=allow),
+        )
+        lines = [LogLine("sys", "preparing sandbox… (first run may download the image)")]
+        handle = await self._runtime.create(spec)
+        log.append(AuditEvent("sandbox.create", actor,
+                              f"{handle.id} · non-root(uid {handle.non_root_uid}) · {handle.backend} · allow={allow}"))
+        lines.append(LogLine("sys", f"sandbox {handle.id} created · non-root(uid {handle.non_root_uid}) · {handle.backend}"))
+        if allow:
+            lines.append(LogLine("warn",
+                f"network ALLOWLIST {allow} · 注意: egressは粗い（許可時は全outbound到達可）。人間が許可した場合のみ有効"))
+        else:
+            lines.append(LogLine("sys", "network DEFAULT DENY · allow[]"))
+        if materials and settings.workspace_mount:
+            try:
+                n = await self._upload_materials(handle, actor)
+                if n:
+                    lines.append(LogLine("sys", f"📥 資料を {n} ファイル コピーしました → {WORKDIR}/materials/（読み取り用）"))
+            except Exception as exc:  # noqa: BLE001 — materials are best-effort
+                lines.append(LogLine("warn", f"資料のコピーに失敗しました: {exc}"))
+        return handle, lines
+
+    async def _upload_materials(self, handle: SandboxHandle, actor: str) -> int:
+        from . import materials as materials_mod
+        items = materials_mod.iter_materials(
+            settings.workspace_mount,
+            max_files=settings.materials_max_files,
+            max_bytes=settings.materials_max_bytes,
+            per_file_bytes=settings.deliverable_max_bytes,
+        )
+        # Local runtime's root IS the workdir; docker extracts at "/" so it needs
+        # the absolute /workspace prefix.
+        prefix = f"{WORKDIR}/materials/" if getattr(self._runtime, "backend", "") == "docker" else "materials/"
+        n = 0
+        for rel, data in items:
+            try:
+                await self._runtime.upload(handle, prefix + rel, data)
+                n += 1
+            except Exception:  # noqa: BLE001 — skip a file we can't place
+                continue
+        if n:
+            log.append(AuditEvent("sandbox.materials", actor, f"{n} files → materials/"))
+        return n
+
+    async def exec_in(
+        self, handle: SandboxHandle, command: str, *, actor: str = "Builder", approved: bool = False,
+    ) -> AsyncIterator[LogLine]:
+        """Run one command in an EXISTING session sandbox (no create/destroy)."""
+        decision = evaluate(command)
+        if not decision.allowed:  # defense-in-depth (the loop also gates)
+            yield LogLine("err", f"policy blocked: {decision.reason}")
+            log.append(AuditEvent("policy.block", actor, decision.reason, int(decision.risk)))
+            return
+        if decision.requires_approval and not approved:
+            yield LogLine("halt", f"approval required · {command} · L{int(decision.risk)}")
+            log.append(AuditEvent("approval.request", actor, command, int(decision.risk)))
+            return
+        started = time.monotonic()
+        argv = ["/bin/sh", "-lc", command]
+        log.append(AuditEvent("command.run", actor, command, int(decision.risk)))
+        async for chunk in self._runtime.execute(handle, argv):
+            if chunk.stream == "system":
+                yield LogLine("cmd", mask_secrets(chunk.text))
+            elif chunk.stream == "stderr":
+                yield LogLine("warn", mask_secrets(chunk.text))
+            else:
+                yield LogLine("out", mask_secrets(chunk.text))
+        result = getattr(self._runtime, "last_result", lambda h: None)(handle)
+        code = result.exit_code if result else 0
+        dur = time.monotonic() - started
+        yield LogLine("ok" if code == 0 else "err", f"exited {code} · {dur:.1f}s")
+
+    async def _run_capture(self, handle: SandboxHandle, command: str) -> tuple[int, str]:
+        """Run a trusted, system-internal command and capture its stdout."""
+        argv = ["/bin/sh", "-lc", command]
+        out: list[str] = []
+        async for chunk in self._runtime.execute(handle, argv):
+            if chunk.stream == "stdout":
+                out.append(chunk.text)
+        result = getattr(self._runtime, "last_result", lambda h: None)(handle)
+        code = result.exit_code if result else 0
+        return code, "\n".join(out)
+
+    async def collect_files(
+        self, handle: SandboxHandle, *, max_files: int | None = None,
+        max_bytes: int | None = None,
+    ) -> list[dict]:
+        """List + read text files the agent created under the workdir (excluding
+        the copied-in `materials/`), returning [{path, size, content}]. Runs one
+        trusted python walker in-sandbox, so it's portable across runtimes and
+        avoids the upload/download path-model differences."""
+        max_files = max_files if max_files is not None else settings.deliverable_max_files
+        max_bytes = max_bytes if max_bytes is not None else settings.deliverable_max_bytes
+        walker = _WALKER.format(maxf=max_files, maxb=max_bytes, perb=max_bytes)
+        b64 = base64.b64encode(walker.encode("utf-8")).decode("ascii")
+        code, stdout = await self._run_capture(handle, f"echo {b64} | base64 -d | python3 -")
+        if code != 0 or not stdout.strip():
+            return []
+        try:
+            data = json.loads(stdout.strip().splitlines()[-1])
+        except Exception:  # noqa: BLE001 — no parseable listing → nothing collected
+            return []
+        return data if isinstance(data, list) else []
+
+    async def close_session(self, handle: SandboxHandle) -> None:
+        try:
+            await self._runtime.destroy(handle)
+            log.append(AuditEvent("sandbox.destroy", "system", handle.id))
+        except Exception:  # noqa: BLE001 — never raise from teardown
+            pass
 
 
 # Lazily-constructed process-wide manager (constructing a runtime may need

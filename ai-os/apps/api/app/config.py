@@ -10,6 +10,11 @@ def _origins() -> list[str]:
     return [o.strip() for o in raw.split(",") if o.strip()]
 
 
+def _csv(name: str) -> list[str]:
+    raw = os.getenv(name, "")
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+
 @dataclass
 class Settings:
     env: str = os.getenv("AIOS_ENV", "development")
@@ -34,6 +39,27 @@ class Settings:
     claude_cli_force_subscription: bool = (
         os.getenv("AIOS_CLAUDE_CLI_FORCE_SUBSCRIPTION", "1").lower() not in ("0", "false", "no")
     )
+    # --- Sandbox session / deliverable-file collection (Phase 4 · deliverables) ---
+    # An agent loop runs all its commands in ONE sandbox so files persist between
+    # steps; at the end, files created under the workdir are collected as
+    # deliverable artifacts (bounded by the caps below).
+    persistent_agent_sandbox: bool = (
+        os.getenv("AIOS_PERSISTENT_SANDBOX", "1").lower() not in ("0", "false", "no")
+    )
+    collect_deliverable_files: bool = (
+        os.getenv("AIOS_COLLECT_FILES", "1").lower() not in ("0", "false", "no")
+    )
+    deliverable_max_files: int = int(os.getenv("AIOS_DELIVERABLE_MAX_FILES", "20"))
+    deliverable_max_bytes: int = int(os.getenv("AIOS_DELIVERABLE_MAX_BYTES", str(256 * 1024)))
+    # Copy-in materials: a host directory whose (filtered) files are uploaded into
+    # each sandbox at <workdir>/materials so agents have source material to work
+    # from. This is a COPY, never a live host mount (the isolation invariant).
+    workspace_mount: str = os.getenv("AIOS_WORKSPACE_MOUNT", "")
+    materials_max_files: int = int(os.getenv("AIOS_MATERIALS_MAX_FILES", "80"))
+    materials_max_bytes: int = int(os.getenv("AIOS_MATERIALS_MAX_BYTES", str(512 * 1024)))
+    # A network allowlist applied to every agent sandbox on top of each agent's
+    # own allow_domains (both human-set; the LLM can never widen them).
+    default_allow_domains: list[str] = field(default_factory=lambda: _csv("AIOS_DEFAULT_ALLOW_DOMAINS"))
 
 
 settings = Settings()

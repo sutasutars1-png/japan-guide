@@ -270,6 +270,15 @@ the manual bridge; `gemini-*` etc. for API workers.
 (`app/deliverables.py`, `routers/deliverables.py`, `DeliverablesView` +
 `SaveDeliverableBar`). See `docs/phase-4-deliverables.md`.
 
+**Done since (sandbox session):** an agent loop now runs in ONE sandbox for its
+whole life (files persist across steps) and its generated files are collected as
+deliverables (`file` log lines → artifacts); the network allowlist is wired
+(`Agent.allow_domains`, human-set, UI-editable) and materials can be **copied in**
+(not mounted) from `AIOS_WORKSPACE_MOUNT`. Fixed the bug where a non-zero shell
+exit discarded a valid worker report. `open_session/exec_in/collect_files/
+close_session` in `execution_manager.py`; `app/materials.py`;
+`GET /execution/sandbox-info`. See `docs/phase-4-sandbox-session.md`.
+
 ### Docs map (`docs/`)
 phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills,
 -skills-layered, -presets, -flows, -connections, -claude-cli, -orchestrate,
@@ -337,7 +346,11 @@ phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills
 - Manual bridge: `GET /manual/pending`, `POST /manual/submit`.
 - Skills/presets/catalog: `GET /skills`, `GET /presets`, `GET/POST/PUT /agents`,
   `POST /agents/{id}/apply-preset|reset-preset`.
-- Execution/safety: `WS /execution/stream`, `GET /execution/audit`, approvals.
+- Execution/safety: `WS /execution/stream`, `GET /execution/audit`,
+  `GET /execution/sandbox-info` (session config), approvals.
+- Sandbox session env: `AIOS_PERSISTENT_SANDBOX` (1), `AIOS_COLLECT_FILES` (1),
+  `AIOS_WORKSPACE_MOUNT` (materials copy-in dir), `AIOS_DEFAULT_ALLOW_DOMAINS`,
+  `AIOS_DELIVERABLE_MAX_FILES`/`_MAX_BYTES`, `AIOS_MATERIALS_MAX_FILES`/`_MAX_BYTES`.
 
 ## Quickstart: the orchestrator flow
 1. `cd ai-os && cp .env.example .env` — set `GEMINI_API_KEY` (free) for workers.

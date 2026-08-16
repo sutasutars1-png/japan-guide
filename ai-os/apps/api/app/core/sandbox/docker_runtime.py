@@ -59,10 +59,14 @@ class DockerSandboxRuntime(SandboxRuntime):
         await asyncio.to_thread(self._ensure_image, spec.image)
         sbx_id = "sbx-" + uuid.uuid4().hex[:6]
 
-        # network: default deny → attach to the isolated "none" network, then
-        # (Phase 2 follow-up) a per-job allowlist bridge is attached for the
-        # granted domains only. Denied-by-default is the safe baseline.
-        network_mode = "none" if spec.network.default_deny else "bridge"
+        # network: default deny → attach to the isolated "none" network (no egress
+        # at all). When the human has granted an allowlist (spec.network.allow_domains,
+        # set from agent config — never by the LLM), attach the bridge so those tasks
+        # can reach the internet. NOTE: egress is currently coarse-grained (bridge =
+        # all outbound), not per-domain filtered; the Execution Manager logs this
+        # clearly. A per-domain egress proxy is the follow-up to tighten it.
+        granted = list(spec.network.allow_domains or [])
+        network_mode = "none" if (spec.network.default_deny and not granted) else "bridge"
 
         def _run():
             return client.containers.create(

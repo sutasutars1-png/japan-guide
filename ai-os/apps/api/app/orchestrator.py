@@ -19,6 +19,7 @@ Blocked commands never run — worker safety carries over from the agent loop.
 """
 from __future__ import annotations
 
+import json
 import re
 from typing import AsyncIterator
 
@@ -107,6 +108,17 @@ def parse_plan(text: str, worker_names: list[str]) -> list[dict]:
         if name and task:
             steps.append({"agent": name, "task": task})
     return steps
+
+
+def _parse_file_line(s: str) -> dict | None:
+    """A `file` log line carries a JSON {path, size, content} payload."""
+    try:
+        meta = json.loads(s)
+        if isinstance(meta, dict) and "path" in meta and "content" in meta:
+            return meta
+    except Exception:  # noqa: BLE001
+        pass
+    return None
 
 
 def _with_context(task: str, reports: list[tuple[str, str]], goal: str) -> str:
@@ -214,10 +226,17 @@ class OrchestratorRunner:
             worker_goal = _with_context(task, reports, goal)
             system = compose_system(stage, agents_store.skills_for(stage))
             report_lines: list[str] = []
+            step_files: list[dict] = []
             capturing = halted = False
             async for line in self._loop.run(
                 worker_goal, agent_name=stage, system=system, max_iterations=per_worker_iters
             ):
+                if line.t == "file":  # a generated file — capture, show a friendly line
+                    meta = _parse_file_line(line.s)
+                    if meta:
+                        step_files.append(meta)
+                        yield LogLine("out", f"[{stage}] 📄 生成ファイル: {meta['path']} ({meta.get('size', 0)} bytes)")
+                    continue
                 if line.t == "ok" and line.s == "agent finished ✓":
                     capturing = True
                 elif capturing and line.t == "out":
@@ -234,15 +253,20 @@ class OrchestratorRunner:
                     yield saved
                 return
 
-            # Success is "the agent emitted a DONE report" — `report` is non-empty
-            # only on the loop's DONE path. A non-zero shell exit mid-exploration
-            # (an `err` line like `exited 1`) is normal and must NOT discard a
-            # valid report; that false-positive used to trigger needless re-plans
-            # and throw away the deliverable.
+            # Success is "the agent produced something" — a DONE report OR a
+            # generated file. `report` is non-empty only on the loop's DONE path.
+            # A non-zero shell exit mid-exploration (an `err` line like `exited 1`)
+            # is normal and must NOT discard a valid result; that false-positive
+            # used to trigger needless re-plans and throw away the deliverable.
             report = "\n".join(report_lines).strip()
-            if report:
-                reports.append((stage, report))
-                artifacts.append({"agent": stage, "task": task, "content": report})
+            if report or step_files:
+                if report:
+                    reports.append((stage, report))
+                    artifacts.append({"agent": stage, "task": task, "content": report})
+                for fa in step_files:
+                    artifacts.append({"agent": stage, "task": f"ファイル: {fa['path']}", "content": fa["content"]})
+                if not report and step_files:  # chain a note so the next step has context
+                    reports.append((stage, "生成ファイル: " + ", ".join(f["path"] for f in step_files)))
                 continue
 
             # failure → ask the orchestrator to re-plan the remainder (bounded)
