@@ -21,13 +21,17 @@ delivered, in order: Gemini adapter → agent loop (PLAN→EXECUTE→OBSERVE) �
 skill DB → presets/overlays → multi-agent flows → Connections (keys + live model
 discovery) → manual bridge → **Claude Code CLI provider (#5)** → **orchestrator**
 (goal→plan→dispatch) → report chaining + re-plan + editable plan review, then UI
-polish + Docker/host run modes and a string of boot-crash fixes. Merged via PRs
-#13–#28. **82 pytest green; `next build` type-checks.**
+polish, Docker/host run modes, a string of Windows/boot-crash fixes, agent-config
+persistence, and a Claude-CLI login UI. Merged via PRs #13–#33. **83 pytest green;
+`next build` type-checks.**
 
-**Verified working end-to-end (user-confirmed):** UI goal → Claude orchestrator
-(subscription CLI, keyless) → Gemini workers, running in **Mode B** (host api). And
-Mode A (all-Docker) with Gemini workers. The whole "type a goal in the 🧭 command
-bar → 統括 → workers" loop runs.
+**Verified working end-to-end (user-confirmed):** UI goal → **Claude orchestrator**
+(`claude-cli`, subscription login, no API charge) → **Gemini workers**, in **Mode B**
+(host api). Also Mode A (all-Docker) with Gemini. The whole "type a goal in the 🧭
+command bar → 統括 → workers" loop runs. Seed defaults are now Planner=`claude-cli`,
+workers=`gemini-2.5-flash` (so it works out of the box; no paid API is touched).
+Claude CLI login is a **one-time** subscription login (`claude auth login`), managed
+from the Connections → Claude Code card; it persists across restarts.
 
 **Dev workflow (do this every stage):**
 - Develop on branch **`claude/ai-execution-platform-o2qef8`**.
@@ -37,12 +41,15 @@ bar → 統括 → workers" loop runs.
   `git fetch origin main && git checkout -B claude/ai-execution-platform-o2qef8 origin/main`
 - Each phase ends with a `docs/phase-*.md` report (Implementation / Tests /
   Security Tests / Known Issues / Next).
-- Never put a model identifier (e.g. `claude-opus-4-8`) in commits/PRs/code.
+- Never put a specific Claude model identifier (the exact `claude-<family>-<ver>`
+  string) in commits/PRs/code/artifacts. Use `claude-cli` (subscription CLI) or a
+  generic label instead.
 
-**State that is NOT persisted:** agent config, skills/presets, flows, connections
-(discovered models), and the manual-bridge queue are **in-memory** (reset on API
-restart). Only **API keys persist** (`.env`, git-ignored). A DB/JSON store behind
-the same functions is a planned slice.
+**Persistence:** **agent config now persists** — `agents_store` saves to a
+git-ignored `.aios-agents.json` next to `.env` and loads it on boot (falls back to
+`seed.AGENTS`). So a model change per agent survives a restart. **API keys persist**
+in `.env`. Still in-memory (reset on restart): skills/presets, flows, and the
+connections' discovered-model lists. A shared DB/JSON store is a later slice.
 
 **Environment note:** this repo's dev environment is itself Claude Code with the
 `claude` binary on PATH — which is exactly what the #5 CLI provider shells out to.
@@ -76,6 +83,15 @@ subscription, no token injection. Set Planner's Model to `claude-cli`. Mounting
   keep launcher echoes to plain text.
 - **The api loads `.env` at boot** (`main.py` → `load_env_file()`), so keys saved
   via the UI survive a restart in host mode (Docker injects env itself).
+- **Windows subprocess:** `asyncio.create_subprocess_exec` raises
+  `NotImplementedError` on Windows uvicorn loops — run external CLIs via
+  `subprocess.run` inside `asyncio.to_thread` (see `claude_cli_provider`). Also, the
+  `claude` shim may be `claude.cmd` (exec it via `%COMSPEC% /c`, see `_exec_argv`)
+  or `claude.EXE` (direct). Surface the CLI's stderr **or** stdout on failure so the
+  real reason (e.g. "Not logged in · run /login") reaches the UI.
+- **Seed agent models decide routing + billing.** A `claude-*` API model id routes
+  to the metered `anthropic` provider (needs a key). Use `claude-cli` for the
+  keyless subscription orchestrator; keep paid model ids out of the seed.
 
 ## Layout
 
@@ -231,11 +247,22 @@ the manual bridge; `gemini-*` etc. for API workers.
     (`max_replans`); an L3/L4 halt still stops (human decision, never re-planned).
   - **Plan-first UI:** `POST /orchestrate/plan` + `run(steps=…)` / WS `steps` field;
     a 「計画を確認してから実行」 toggle shows an editable `PlanReview` checklist.
+- **Agent config persistence:** `agents_store` ↔ `.aios-agents.json` (per-agent
+  model/skills/preset survive restart). Delete agent = `DELETE /agents/{id}` + UI
+  button; the AgentDetail 「変更を保存」 button is wired.
+- **Claude CLI login UI:** Connections → Claude Code card shows login status
+  (`claude auth status`) + ログイン/ログアウト/再確認 (`GET/POST
+  /connections/claude-cli/auth|login|logout`); login opens a console on Windows.
+- **UI honesty:** ⚠サンプル badges mark still-mock sections (Projects, Task header,
+  AI-decisions, Instruments/Risk meters, Data); skills render from an embedded seed
+  (`lib/seed.ts`) so they show without the backend; a SetupBanner / BackendDownBanner
+  guide when no key / no backend.
 
-### Next (not yet built)
+### Next (not yet built — candidate slices)
 - Surface iteration/worker/re-plan budgets in the UI.
 - Optional `→NEXT:`-style conditional routing inside a single plan.
-- Optional durable stores (flows/presets/connections are in-memory; keys persist).
+- Durable stores for flows/presets/connections (agents + keys already persist).
+- Deliverable save/download flow; wire the remaining sample panels to real data.
 
 ### Docs map (`docs/`)
 phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills,
