@@ -79,6 +79,26 @@ def models() -> list[dict]:
     return connections.all_models()
 
 
+# ---- Claude Code CLI auth (subscription login) ----
+
+@router.get("/connections/claude-cli/auth")
+def claude_auth() -> dict:
+    from ..core.llm.claude_cli_provider import auth_status
+    return auth_status()
+
+
+@router.post("/connections/claude-cli/login")
+def claude_login() -> dict:
+    from ..core.llm.claude_cli_provider import login_launch
+    return login_launch()
+
+
+@router.post("/connections/claude-cli/logout")
+def claude_logout() -> dict:
+    from ..core.llm.claude_cli_provider import logout
+    return logout()
+
+
 # ---- manual bridge ----------------------------------------------------------
 
 @router.get("/manual/pending")
