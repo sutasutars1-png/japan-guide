@@ -23,8 +23,8 @@ from .core.audit import log as audit_log
 from .core.secrets import store as secret_store
 from .db import audit_sink, init_db
 from .routers import (
-    agent, approvals, catalog, connections, execution, flow, llm, orchestrate,
-    skills, tools,
+    agent, approvals, catalog, connections, deliverables, execution, flow, llm,
+    orchestrate, skills, tools,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -72,6 +72,7 @@ app.include_router(skills.router)
 app.include_router(flow.router)
 app.include_router(connections.router)
 app.include_router(orchestrate.router)
+app.include_router(deliverables.router)
 
 
 @app.get("/", tags=["meta"])

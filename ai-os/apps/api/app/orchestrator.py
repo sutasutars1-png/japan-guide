@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 from typing import AsyncIterator
 
-from . import agents_store
+from . import agents_store, deliverables
 from .agent_loop import AgentLoop, get_agent_loop
 from .config import settings
 from .core.audit import AuditEvent, log
@@ -137,6 +137,23 @@ class OrchestratorRunner:
         )
         return (resp.text or "").strip()
 
+    def _persist(self, goal, orchestrator, artifacts, status) -> LogLine | None:
+        """Save the run's accumulated artifacts as a downloadable deliverable."""
+        if not artifacts:
+            return None
+        try:
+            item = deliverables.save(
+                goal=goal, artifacts=artifacts, source="orchestrate",
+                orchestrator=orchestrator, status=status,
+            )
+        except Exception as exc:  # noqa: BLE001 — persistence never breaks a run
+            return LogLine("warn", f"成果物の保存に失敗しました: {exc}")
+        log.append(AuditEvent("orchestrate.deliverable", orchestrator, item["id"]))
+        return LogLine(
+            "ok",
+            f"📦 成果物を保存しました · {item['id']} · {len(artifacts)} 件 · Deliverables からダウンロードできます",
+        )
+
     async def make_plan(self, goal: str, orchestrator: str = "Planner") -> dict:
         """Ask the orchestrator for a plan and return {text, plan}. Plan-first UI."""
         workers = worker_roster(orchestrator)
@@ -182,6 +199,7 @@ class OrchestratorRunner:
 
         # --- 2) dispatch, chaining reports; re-plan on failure ---
         reports: list[tuple[str, str]] = []
+        artifacts: list[dict] = []  # accumulated deliverable (agent/task/content)
         queue = list(steps)
         replans = 0
         runs = 0
@@ -213,17 +231,24 @@ class OrchestratorRunner:
             if halted:  # L3/L4 approval — a human decision, never re-planned
                 yield LogLine("halt", f"工程 {stage} が承認待ちで停止。オーケストレーションを止めます。")
                 log.append(AuditEvent("orchestrate.halt", stage, task))
+                saved = self._persist(goal, orchestrator, artifacts, "partial")
+                if saved:
+                    yield saved
                 return
 
             report = "\n".join(report_lines).strip()
             if report and not errored:
                 reports.append((stage, report))
+                artifacts.append({"agent": stage, "task": task, "content": report})
                 continue
 
             # failure → ask the orchestrator to re-plan the remainder (bounded)
             if replans >= max_replans:
                 yield LogLine("warn", f"再計画の上限（{max_replans}）に達したため停止します。")
                 log.append(AuditEvent("orchestrate.replan_limit", orchestrator, stage))
+                saved = self._persist(goal, orchestrator, artifacts, "partial")
+                if saved:
+                    yield saved
                 return
             replans += 1
             yield LogLine("warn", f"工程 {stage} が成果を出せませんでした。統括に再計画を依頼します（{replans}/{max_replans}）")
@@ -240,12 +265,19 @@ class OrchestratorRunner:
             new_steps = parse_plan(revised, worker_names)
             if not new_steps:
                 yield LogLine("warn", "再計画を解析できませんでした。停止します。")
+                saved = self._persist(goal, orchestrator, artifacts, "partial")
+                if saved:
+                    yield saved
                 return
             queue = new_steps  # replace the remaining plan with the revision
             log.append(AuditEvent("orchestrate.replan", orchestrator, f"{len(new_steps)} steps"))
 
-        if queue:
+        partial = bool(queue)
+        if partial:
             yield LogLine("warn", f"最大工程数（{max_workers}）に達したため停止しました。")
+        saved = self._persist(goal, orchestrator, artifacts, "partial" if partial else "complete")
+        if saved:
+            yield saved
         yield LogLine("ok", "オーケストレーション完了 ✓")
         log.append(AuditEvent("orchestrate.done", "human", goal))
 

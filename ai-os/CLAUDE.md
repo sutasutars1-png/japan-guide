@@ -261,8 +261,14 @@ the manual bridge; `gemini-*` etc. for API workers.
 ### Next (not yet built — candidate slices)
 - Surface iteration/worker/re-plan budgets in the UI.
 - Optional `→NEXT:`-style conditional routing inside a single plan.
-- Durable stores for flows/presets/connections (agents + keys already persist).
-- Deliverable save/download flow; wire the remaining sample panels to real data.
+- Durable stores for flows/presets/connections **and deliverables** (agents +
+  keys already persist; deliverables persist to a local JSON file like agents).
+- ZIP bundling / per-artifact download; wire the remaining sample panels to real data.
+
+**Done since:** Deliverable save/download flow — an orchestrate run auto-saves its
+成果物; a Deliverables view lists/previews them and downloads as md/txt/json
+(`app/deliverables.py`, `routers/deliverables.py`, `DeliverablesView` +
+`SaveDeliverableBar`). See `docs/phase-4-deliverables.md`.
 
 ### Docs map (`docs/`)
 phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills,
@@ -322,6 +328,9 @@ phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills
 - Flows: `GET /flows`, `POST /flow/run`, `WS /flow/stream`.
 - **Orchestrate:** `POST /orchestrate/plan` (plan only), `POST /orchestrate`,
   `WS /orchestrate/stream` (both accept optional pre-approved `steps`).
+- **Deliverables:** `GET /deliverables`, `GET /deliverables/{id}`,
+  `POST /deliverables` (artifacts or captured `lines`),
+  `GET /deliverables/{id}/download?format=md|txt|json`, `DELETE /deliverables/{id}`.
 - Connections: `GET /connections`, `PUT /connections/{id}/key`,
   `POST /connections/{id}/refresh`, `DELETE /connections/{id}/key`,
   `POST /connections/{id}/models` (manual), `GET /models`.

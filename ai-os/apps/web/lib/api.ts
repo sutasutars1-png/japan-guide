@@ -160,3 +160,43 @@ export function streamOrchestrate(
 // Ask the orchestrator for a plan without running it (for an editable checklist).
 export const fetchPlan = (goal: string, orchestrator = "Planner") =>
   jsonReq<{ text: string; plan: PlanStep[] }>("/orchestrate/plan", "POST", { goal, orchestrator });
+
+// ---- Deliverables (成果物): save a run's output, list, download -------------
+export type Artifact = { agent: string; task: string; content: string };
+export type DeliverableMeta = {
+  id: string; title: string; goal: string; source: string;
+  orchestrator: string | null; status: string; created: number; artifact_count: number;
+};
+export type Deliverable = DeliverableMeta & { artifacts: Artifact[] };
+
+export const fetchDeliverables = () => fetchJSON<DeliverableMeta[]>("/deliverables", []);
+export const fetchDeliverable = (id: string) =>
+  jsonReq<Deliverable>(`/deliverables/${id}`, "GET");
+export const deleteDeliverable = (id: string) =>
+  fetch(`${API_BASE}/deliverables/${id}`, { method: "DELETE" }).then((r) => r.ok);
+
+// Save a deliverable — either explicit artifacts, or raw log lines the store
+// reconstructs into per-step artifacts (used to save agent/flow runs).
+export const saveDeliverable = (body: {
+  goal?: string; title?: string; source?: string; orchestrator?: string;
+  artifacts?: Artifact[]; lines?: LogLine[];
+}) => jsonReq<Deliverable>("/deliverables", "POST", body);
+
+// The download URL (md | txt | json) — a plain link the browser can fetch.
+export const deliverableDownloadUrl = (id: string, format: "md" | "txt" | "json" = "md") =>
+  `${API_BASE}/deliverables/${id}/download?format=${format}`;
+
+// Trigger a browser download of a deliverable in the given format.
+export async function downloadDeliverable(id: string, format: "md" | "txt" | "json" = "md") {
+  const res = await fetch(deliverableDownloadUrl(id, format));
+  if (!res.ok) throw new Error(res.statusText);
+  const blob = await res.blob();
+  const cd = res.headers.get("content-disposition") || "";
+  const m = /filename\*=UTF-8''([^;]+)/.exec(cd) || /filename="([^"]+)"/.exec(cd);
+  const name = m ? decodeURIComponent(m[1]) : `${id}.${format}`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}

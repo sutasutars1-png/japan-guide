@@ -7,7 +7,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { fetchJSON, streamExecution, streamAgent, streamFlow, streamOrchestrate, fetchPlan, API_BASE,
   fetchConnections, fetchModels, setConnKey, refreshConn, clearConnKey, addManualModel,
   fetchManualPending, submitManual, deleteAgent,
-  fetchClaudeAuth, claudeLogin, claudeLogout } from "@/lib/api";
+  fetchClaudeAuth, claudeLogin, claudeLogout,
+  fetchDeliverables, fetchDeliverable, deleteDeliverable, saveDeliverable, downloadDeliverable } from "@/lib/api";
 import { SKILL_SEED, CONNECTION_SEED } from "@/lib/seed";
 
 /* ============================================================
@@ -143,6 +144,7 @@ const NAV = [
   { id:"exec",   label:"Execution", icon:"exec" },
   { id:"agents", label:"Agents",    icon:"agents" },
   { id:"flow",   label:"Flow",      icon:"flow" },
+  { id:"deliv",  label:"Deliverables", icon:"deliv" },
   { id:"data",   label:"Data",      icon:"data" },
   { id:"conns",  label:"Connections", icon:"key" },
   { id:"guards", label:"Guardrails", icon:"shield" },
@@ -168,6 +170,7 @@ export default function App(){
   const [flows,setFlows]=useState([]); // available multi-agent pipelines (Phase 4 · 3c)
   const [plan,setPlan]=useState(null); // {goal, steps} awaiting user review before dispatch
   const [planBusy,setPlanBusy]=useState(false);
+  const [lastRun,setLastRun]=useState(null); // {goal, source} of the current/last run — for saving a deliverable
   const [apiReady,setApiReady]=useState(true); // any API provider key registered?
   const logRef=useRef(null);
   const runCleanup=useRef(null);
@@ -232,6 +235,7 @@ export default function App(){
     setLive(true);
     setLines([]);
     setRunning(true);
+    setLastRun({goal:goal.trim(),source:"agent"});
     runCleanup.current=streamAgent(
       (line)=>setLines(p=>[...p,line]),
       ()=>setRunning(false),
@@ -248,6 +252,7 @@ export default function App(){
     setLive(true);
     setLines([]);
     setRunning(true);
+    setLastRun({goal:goal.trim(),source:"flow"});
     runCleanup.current=streamFlow(
       (line)=>setLines(p=>[...p,line]),
       ()=>setRunning(false),
@@ -265,6 +270,7 @@ export default function App(){
     setLive(true);
     setLines([]);
     setRunning(true);
+    setLastRun({goal:goal.trim(),source:"orchestrate"});
     runCleanup.current=streamOrchestrate(
       (line)=>setLines(p=>[...p,line]),
       ()=>setRunning(false),
@@ -333,9 +339,11 @@ export default function App(){
             {view==="exec" && <ExecView {...{proj,setProj,lines,running,elapsed:fmt(elapsed),
               cpu,ram,net,tokens,agents,comments,logRef,askApproval,activeAgent,onRun:runCommand,onGoal:runGoal,onFlow:runFlow,
               onOrchestrate:runOrchestrate,onReviewPlan:reviewPlan,plan,planBusy,onConfirmPlan:confirmPlan,onCancelPlan:()=>setPlan(null),flows,live,
+              lastRun,onGotoDeliverables:()=>setView("deliv"),
               apiReady,onGotoConnections:()=>setView("conns")}}/>}
             {view==="agents" && <AgentsView agents={agents} setAgents={setAgents}/>}
             {view==="flow" && <FlowView agents={agents}/>}
+            {view==="deliv" && <DeliverablesView/>}
             {view==="data" && <DataView proj={proj} setProj={setProj}/>}
             {view==="conns" && <ConnectionsView/>}
             {view==="guards" && <GuardrailsView/>}
@@ -441,6 +449,8 @@ function ExecView(p){
         <SandboxPane lines={p.lines} running={p.running} elapsed={p.elapsed}
           cpu={p.cpu} ram={p.ram} logRef={p.logRef} model={p.activeAgent.model}/>
         <AiComments comments={p.comments}/>
+        <SaveDeliverableBar lines={p.lines} live={p.live} running={p.running}
+          lastRun={p.lastRun} onGoto={p.onGotoDeliverables}/>
         <ManualBridgePanel/>
         {p.plan && <PlanReview plan={p.plan.steps} onConfirm={p.onConfirmPlan} onCancel={p.onCancelPlan}/>}
         <CommandBar disabled={p.running} onRun={p.onRun} onGoal={p.onGoal} onFlow={p.onFlow}
@@ -707,6 +717,134 @@ function ManualBridgePanel(){
     </div>
   );
 }
+/* Save-a-run bar: once a run finishes with output, offer to save it as a
+   downloadable 成果物 (deliverable). Orchestrate runs already auto-save on the
+   backend; this also captures agent/flow runs from the client-side log. */
+function SaveDeliverableBar({lines,live,running,lastRun,onGoto}){
+  const [state,setState]=useState("idle"); // idle | saving | done | error
+  const [saved,setSaved]=useState(null);
+  useEffect(()=>{ setState("idle"); setSaved(null); },[lastRun]); // reset on a new run
+  const hasOutput=(lines||[]).some(l=>l&&l.t==="out"&&(l.s||"").trim());
+  if(!live||running||!hasOutput)return null;
+  const save=async()=>{
+    setState("saving");
+    try{
+      const item=await saveDeliverable({
+        goal:lastRun?.goal||"", source:lastRun?.source||"manual", lines,
+      });
+      setSaved(item); setState("done");
+    }catch{ setState("error"); }
+  };
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:11,padding:"10px 13px",background:"var(--panel)",
+      border:"1px solid var(--line2)",borderRadius:12}}>
+      <span style={{fontSize:16}}>📦</span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:13,fontWeight:600}}>この実行の成果物を保存</div>
+        <div style={{fontSize:11.5,color:"var(--ink2)"}}>
+          {state==="done"&&saved
+            ? <>保存しました · <span className="mono">{saved.id}</span> · {saved.artifact_count} 件</>
+            : state==="error" ? "保存に失敗しました（APIに接続できません）"
+            : "実行ログから成果物を抽出し、あとでダウンロードできる形で保存します。"}
+        </div>
+      </div>
+      {state==="done"&&saved ? (
+        <>
+          <button onClick={()=>downloadDeliverable(saved.id,"md")} style={{padding:"8px 13px",borderRadius:9,
+            background:"var(--live)",color:"#04120f",fontSize:12.5,fontWeight:600}}>Markdownをダウンロード</button>
+          <button onClick={onGoto} style={{padding:"8px 13px",borderRadius:9,background:"var(--panel2)",
+            border:"1px solid var(--line2)",fontSize:12.5,color:"var(--ink)"}}>成果物一覧へ</button>
+        </>
+      ) : (
+        <button onClick={save} disabled={state==="saving"} style={{padding:"9px 15px",borderRadius:9,
+          background:"var(--live)",color:"#04120f",fontSize:13,fontWeight:600,opacity:state==="saving"?.5:1}}>
+          {state==="saving"?"保存中…":"成果物として保存"}</button>
+      )}
+    </div>
+  );
+}
+
+/* Deliverables view: list saved 成果物, preview one, download (md/txt/json),
+   delete. Reads from the API; empty state guides the user to run something. */
+function DeliverablesView(){
+  const [items,setItems]=useState([]);
+  const [sel,setSel]=useState(null);       // full deliverable of the open row
+  const [loading,setLoading]=useState(true);
+  const [openId,setOpenId]=useState(null);
+  const load=()=>{ setLoading(true); fetchDeliverables().then(d=>{ setItems(Array.isArray(d)?d:[]); setLoading(false); }); };
+  useEffect(load,[]);
+  const open=(id)=>{ if(openId===id){ setOpenId(null); setSel(null); return; }
+    setOpenId(id); setSel(null); fetchDeliverable(id).then(setSel).catch(()=>setSel(null)); };
+  const del=async(id)=>{ if(!confirm("この成果物を削除しますか？"))return;
+    await deleteDeliverable(id); if(openId===id){setOpenId(null);setSel(null);} load(); };
+  const stamp=(ts)=>{ try{ return new Date(ts*1000).toLocaleString(); }catch{ return ""; } };
+  const srcLabel={orchestrate:"統括",flow:"フロー",agent:"エージェント",manual:"手動"};
+  return (
+    <main style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",padding:"18px 22px",gap:14,overflowY:"auto"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <h1 className="disp" style={{margin:0,fontSize:19,fontWeight:600}}>Deliverables · 成果物</h1>
+        <span style={{fontSize:12.5,color:"var(--ink2)"}}>実行が生成した成果物を保存・ダウンロード</span>
+        <div style={{flex:1}}/>
+        <button onClick={load} className="mono" style={{fontSize:11,padding:"6px 12px",borderRadius:8,
+          background:"var(--panel)",border:"1px solid var(--line2)",color:"var(--ink2)"}}>再読み込み</button>
+      </div>
+      {loading ? <div style={{fontSize:13,color:"var(--ink3)"}}>読み込み中…</div>
+       : items.length===0 ? (
+        <div style={{padding:"30px 20px",textAlign:"center",borderRadius:12,border:"1px dashed var(--line2)",
+          background:"var(--panel)",color:"var(--ink2)",fontSize:13}}>
+          まだ成果物がありません。Execution で 🧭 統括AI にゴールを渡すと、完了時に自動で保存されます。
+        </div>
+       ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:9}}>
+          {items.map(d=>(
+            <div key={d.id} style={{borderRadius:12,border:"1px solid var(--line2)",background:"var(--panel)",overflow:"hidden"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px"}}>
+                <button onClick={()=>open(d.id)} style={{flex:1,minWidth:0,textAlign:"left"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                    <span style={{fontSize:14,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.title||"無題"}</span>
+                    {d.status==="partial" && <span className="mono" style={{fontSize:10,color:"var(--warn)",padding:"1px 7px",
+                      border:"1px solid rgba(231,162,58,.4)",borderRadius:6}}>partial</span>}
+                  </div>
+                  <div className="mono" style={{fontSize:10.5,color:"var(--ink3)"}}>
+                    {srcLabel[d.source]||d.source} · {d.artifact_count} 件 · {stamp(d.created)} · {d.id}
+                  </div>
+                </button>
+                <button onClick={()=>downloadDeliverable(d.id,"md")} title="Markdown" className="mono" style={{fontSize:10.5,
+                  padding:"6px 10px",borderRadius:7,background:"var(--liveSoft)",border:"1px solid rgba(18,199,185,.4)",color:"var(--live)"}}>MD</button>
+                <button onClick={()=>downloadDeliverable(d.id,"txt")} title="Plain text" className="mono" style={{fontSize:10.5,
+                  padding:"6px 10px",borderRadius:7,background:"var(--panel2)",border:"1px solid var(--line2)",color:"var(--ink2)"}}>TXT</button>
+                <button onClick={()=>downloadDeliverable(d.id,"json")} title="JSON" className="mono" style={{fontSize:10.5,
+                  padding:"6px 10px",borderRadius:7,background:"var(--panel2)",border:"1px solid var(--line2)",color:"var(--ink2)"}}>JSON</button>
+                <button onClick={()=>del(d.id)} title="削除" className="mono" style={{fontSize:12,
+                  padding:"6px 10px",borderRadius:7,background:"transparent",border:"1px solid var(--line2)",color:"var(--r4)"}}>✕</button>
+              </div>
+              {openId===d.id && (
+                <div style={{borderTop:"1px solid var(--line)",padding:"12px 14px",background:"#070B10"}}>
+                  {!sel ? <div style={{fontSize:12.5,color:"var(--ink3)"}}>読み込み中…</div> : (
+                    <div style={{display:"flex",flexDirection:"column",gap:11}}>
+                      {sel.goal && <div style={{fontSize:12,color:"var(--ink2)"}}>ゴール: {sel.goal}</div>}
+                      {(sel.artifacts||[]).map((a,i)=>(
+                        <div key={i}>
+                          <div style={{fontSize:12.5,fontWeight:600,color:"var(--ai)",marginBottom:4}}>
+                            {i+1}. {a.agent}{a.task?` — ${a.task}`:""}
+                          </div>
+                          <pre className="mono" style={{margin:0,maxHeight:220,overflow:"auto",padding:"9px 11px",
+                            borderRadius:9,background:"var(--panel2)",border:"1px solid var(--line2)",
+                            fontSize:11.5,color:"var(--ink2)",whiteSpace:"pre-wrap"}}>{a.content}</pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+       )}
+    </main>
+  );
+}
+
 function CommandBar({disabled,onRun,onGoal,onFlow,onOrchestrate,onReviewPlan,planBusy,flows}){
   const [v,setV]=useState("");
   const [mode,setMode]=useState("orchestrate"); // orchestrate | goal | flow | cmd
@@ -1665,6 +1803,7 @@ function Icon({name,c="currentColor",s=18}){
     spark:<><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2"/></>,
     db:<><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.6 3 3 7 3s7-1.4 7-3V6"/></>,
     box:<><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></>,
+    deliv:<><path d="M12 3v11m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></>,
   };
   return <svg {...p}>{paths[name]||null}</svg>;
 }
