@@ -113,6 +113,24 @@ async def test_report_chaining_feeds_prior_output():
     assert "Builder の成果物" in seen[1]
 
 
+async def test_nonzero_exit_does_not_discard_a_valid_report():
+    # A worker whose shell command exited non-zero (an `err` line) but still
+    # produced a DONE report must count as SUCCESS — not trigger a re-plan.
+    class ExitOneThenDoneLoop:
+        async def run(self, goal, *, agent_name, system=None, max_iterations=6):
+            yield LogLine("cmd", f"{agent_name} → RUN: ls /missing")
+            yield LogLine("err", "exited 1 · 0.1s")   # normal during exploration
+            yield LogLine("ok", "agent finished ✓")
+            yield LogLine("out", f"{agent_name} の成果物レポート")
+
+    r = OrchestratorRunner(loop=ExitOneThenDoneLoop(), provider=FakeProvider("Builder: A\nDONE"))
+    out = await _collect(r, "ゴール")
+    joined = "\n".join(s for _, s in out)
+    assert "成果を出せませんでした" not in joined  # not treated as a failure
+    assert "再計画" not in joined
+    assert "オーケストレーション完了 ✓" in joined
+
+
 async def test_replan_on_worker_failure():
     # worker always fails (never emits 'agent finished ✓' → no report). The
     # orchestrator replans once, the revision also fails → stops at the limit.

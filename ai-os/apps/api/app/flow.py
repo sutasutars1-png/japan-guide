@@ -12,6 +12,7 @@ high-risk (L3/L4) command halts — the flow stops rather than auto-destruct.
 """
 from __future__ import annotations
 
+import json
 import re
 from typing import AsyncIterator
 
@@ -106,6 +107,15 @@ class FlowRunner:
             async for line in self._loop.run(
                 context, agent_name=stage, system=system, max_iterations=per_agent_iters
             ):
+                if line.t == "file":  # generated file — note it, show a friendly line
+                    try:
+                        meta = json.loads(line.s)
+                        note = f"生成ファイル: {meta['path']} ({meta.get('size', 0)}B)"
+                    except Exception:  # noqa: BLE001
+                        note = "生成ファイル"
+                    report_lines.append(note)
+                    yield LogLine("out", f"[{stage}] 📄 {note}")
+                    continue
                 if line.t == "ok" and line.s == "agent finished ✓":
                     capturing = True
                 elif capturing and line.t == "out":

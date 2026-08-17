@@ -3,6 +3,8 @@
 *.local
 # persisted local UI state (agent config) — machine-specific, never committed
 .aios-agents.json
+# saved deliverables (run 成果物) — machine-specific, never committed
+.aios-deliverables.json
 
 # node
 node_modules/

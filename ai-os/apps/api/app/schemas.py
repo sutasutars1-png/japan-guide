@@ -18,6 +18,9 @@ class Agent(BaseModel):
     skills: list[str] = Field(default_factory=list)  # base skill ids (Phase 4)
     preset: str | None = None  # active preset id (resettable)
     role: str = ""
+    # Network allowlist for this agent's sandbox (Default-Deny otherwise). Human-set,
+    # never widened by the LLM. Empty = fully offline sandbox.
+    allow_domains: list[str] = Field(default_factory=list)
 
 
 class Preset(BaseModel):
@@ -116,3 +119,26 @@ class ToolSpec(BaseModel):
 class Capabilities(BaseModel):
     capabilities: list[str]
     models: list[str]
+
+
+class Artifact(BaseModel):
+    agent: str = "AI"
+    task: str = ""
+    content: str
+
+
+class DeliverableMeta(BaseModel):
+    """List-view shape — no artifact bodies."""
+    id: str
+    title: str
+    goal: str
+    source: str
+    orchestrator: str | None = None
+    status: str = "complete"
+    created: float
+    artifact_count: int
+
+
+class Deliverable(DeliverableMeta):
+    """Full deliverable, with the saved artifacts."""
+    artifacts: list[Artifact] = Field(default_factory=list)

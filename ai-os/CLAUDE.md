@@ -261,8 +261,33 @@ the manual bridge; `gemini-*` etc. for API workers.
 ### Next (not yet built — candidate slices)
 - Surface iteration/worker/re-plan budgets in the UI.
 - Optional `→NEXT:`-style conditional routing inside a single plan.
-- Durable stores for flows/presets/connections (agents + keys already persist).
-- Deliverable save/download flow; wire the remaining sample panels to real data.
+- Durable stores for flows/presets/connections **and deliverables** (agents +
+  keys already persist; deliverables persist to a local JSON file like agents).
+- ZIP bundling / per-artifact download; wire the remaining sample panels to real data.
+
+**Done since:** Deliverable save/download flow — an orchestrate run auto-saves its
+成果物; a Deliverables view lists/previews them and downloads as md/txt/json
+(`app/deliverables.py`, `routers/deliverables.py`, `DeliverablesView` +
+`SaveDeliverableBar`). See `docs/phase-4-deliverables.md`.
+
+**Done since (sandbox session):** an agent loop now runs in ONE sandbox for its
+whole life (files persist across steps) and its generated files are collected as
+deliverables (`file` log lines → artifacts); the network allowlist is wired
+(`Agent.allow_domains`, human-set, UI-editable) and materials can be **copied in**
+(not mounted) from `AIOS_WORKSPACE_MOUNT`. Fixed the bug where a non-zero shell
+exit discarded a valid worker report. `open_session/exec_in/collect_files/
+close_session` in `execution_manager.py`; `app/materials.py`;
+`GET /execution/sandbox-info`. See `docs/phase-4-sandbox-session.md`.
+
+**Done since (web.fetch):** research is done by the **backend**, not the code
+sandbox — a `FETCH: <url>` loop action calls a host-side, SSRF-guarded
+`core/tools/web_fetch.py:safe_fetch` (public-IP-only, redirect-revalidated,
+GET/size/timeout-capped, returns UNTRUSTED text), gated by the `web.fetch`
+capability. So the code sandbox stays Default-Deny and any research domain works
+with no allowlist. `AIOS_WEB_FETCH*` config. See `docs/phase-4-web-fetch.md`.
+**Design rule:** never make the code sandbox the web fetcher; brain(host)/hands
+(sandbox) separation extends to network — intake goes through web.fetch, the
+sandbox keeps no egress.
 
 ### Docs map (`docs/`)
 phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills,
@@ -322,13 +347,22 @@ phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills
 - Flows: `GET /flows`, `POST /flow/run`, `WS /flow/stream`.
 - **Orchestrate:** `POST /orchestrate/plan` (plan only), `POST /orchestrate`,
   `WS /orchestrate/stream` (both accept optional pre-approved `steps`).
+- **Deliverables:** `GET /deliverables`, `GET /deliverables/{id}`,
+  `POST /deliverables` (artifacts or captured `lines`),
+  `GET /deliverables/{id}/download?format=md|txt|json`, `DELETE /deliverables/{id}`.
 - Connections: `GET /connections`, `PUT /connections/{id}/key`,
   `POST /connections/{id}/refresh`, `DELETE /connections/{id}/key`,
   `POST /connections/{id}/models` (manual), `GET /models`.
 - Manual bridge: `GET /manual/pending`, `POST /manual/submit`.
 - Skills/presets/catalog: `GET /skills`, `GET /presets`, `GET/POST/PUT /agents`,
   `POST /agents/{id}/apply-preset|reset-preset`.
-- Execution/safety: `WS /execution/stream`, `GET /execution/audit`, approvals.
+- Execution/safety: `WS /execution/stream`, `GET /execution/audit`,
+  `GET /execution/sandbox-info` (session config), approvals.
+- Sandbox session env: `AIOS_PERSISTENT_SANDBOX` (1), `AIOS_COLLECT_FILES` (1),
+  `AIOS_WORKSPACE_MOUNT` (materials copy-in dir), `AIOS_DEFAULT_ALLOW_DOMAINS`,
+  `AIOS_DELIVERABLE_MAX_FILES`/`_MAX_BYTES`, `AIOS_MATERIALS_MAX_FILES`/`_MAX_BYTES`.
+- web.fetch env: `AIOS_WEB_FETCH` (1), `AIOS_WEB_FETCH_MAX_BYTES`,
+  `AIOS_WEB_FETCH_TIMEOUT`, `AIOS_WEB_FETCH_MAX_REDIRECTS`. Loop action `FETCH: <url>`.
 
 ## Quickstart: the orchestrator flow
 1. `cd ai-os && cp .env.example .env` — set `GEMINI_API_KEY` (free) for workers.

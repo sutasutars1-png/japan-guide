@@ -22,6 +22,7 @@ class GoalRequest(BaseModel):
     system: str | None = None
     overlays: list[str] = []  # run-scope 副スキル: extra skill ids for this run only
     max_iterations: int = 8
+    allow_domains: list[str] | None = None  # run-scope network allowlist (human-set)
 
 
 def _system_for(agent_name: str, explicit: str | None, overlays: list[str] | None) -> str | None:
@@ -43,6 +44,7 @@ async def run(body: GoalRequest) -> list[dict]:
             agent_name=body.agent_name,
             system=system,
             max_iterations=body.max_iterations,
+            allow_domains=body.allow_domains,
         ):
             lines.append({"t": line.t, "s": line.s})
     except Exception as exc:  # noqa: BLE001
@@ -63,11 +65,14 @@ async def stream(ws: WebSocket) -> None:
         loop: AgentLoop = get_agent_loop()
         agent_name = (msg or {}).get("agent_name", "Builder")
         system = _system_for(agent_name, (msg or {}).get("system"), (msg or {}).get("overlays"))
+        raw_domains = (msg or {}).get("allow_domains")
+        allow_domains = [str(d) for d in raw_domains if str(d).strip()] if isinstance(raw_domains, list) else None
         async for line in loop.run(
             goal,
             agent_name=agent_name,
             system=system,
             max_iterations=int((msg or {}).get("max_iterations", 8)),
+            allow_domains=allow_domains,
         ):
             await ws.send_json({"t": line.t, "s": line.s})
     except WebSocketDisconnect:

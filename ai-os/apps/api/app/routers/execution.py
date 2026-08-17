@@ -16,12 +16,32 @@ import asyncio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from .. import seed
+from ..config import settings
 from ..core.audit import log as audit_log
 from ..core.policy import evaluate
 from ..execution_manager import get_execution_manager
 from ..schemas import LogLine, PolicyCheck, PolicyCheckResult, RunCommand
 
 router = APIRouter(prefix="/execution", tags=["execution"])
+
+
+@router.get("/sandbox-info")
+def sandbox_info() -> dict:
+    """How the sandbox session is configured — surfaced in the UI so the user can
+    see whether files persist, get collected, and what materials/network apply."""
+    import os
+    mount = settings.workspace_mount
+    return {
+        "runtime": settings.sandbox_runtime,
+        "persistent_sandbox": settings.persistent_agent_sandbox,
+        "collect_files": settings.collect_deliverable_files,
+        "materials_mount": mount,
+        "materials_present": bool(mount) and os.path.isdir(os.path.expanduser(mount)),
+        "default_allow_domains": settings.default_allow_domains,
+        "deliverable_max_files": settings.deliverable_max_files,
+        "deliverable_max_bytes": settings.deliverable_max_bytes,
+        "web_fetch_enabled": settings.web_fetch_enabled,
+    }
 
 
 @router.get("/demo", response_model=list[LogLine])
