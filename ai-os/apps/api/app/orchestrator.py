@@ -42,6 +42,16 @@ def worker_roster(exclude: str) -> list[dict]:
     return [a for a in agents_store.list_agents() if a["name"] != exclude]
 
 
+ENV_CONSTRAINTS = (
+    "# 実行環境の制約（計画時に厳守）\n"
+    "各ワーカーはネット遮断のサンドボックスで動きます。`pip`等の追加インストールは不可で、"
+    "Python標準ライブラリと既存コマンドのみ使えます（PIL/numpy/matplotlib等は無い前提）。"
+    "計画は次を守ってください：まず確実なテキスト成果物（Markdown/テキスト原稿）を作らせる工程を先に置く。"
+    "画像・図は SVG（テキストで直接生成・ライブラリ不要）で作らせる。"
+    "実現不可能な作業（外部からの画像ライブラリ導入、PNG生成のための外部依存など）を工程に含めない。"
+)
+
+
 def _format_spec(names: list[str]) -> str:
     joined = " / ".join(names)
     return (
@@ -63,7 +73,7 @@ def _roster_block(workers: list[dict]) -> str:
 def compose_orchestration_prompt(goal: str, workers: list[dict]) -> str:
     names = [a["name"] for a in workers]
     return (
-        f"{_roster_block(workers)}\n\n{_format_spec(names)}\n\n"
+        f"{_roster_block(workers)}\n\n{ENV_CONSTRAINTS}\n\n{_format_spec(names)}\n\n"
         f"# ユーザーのゴール\n{goal}"
     )
 
@@ -76,7 +86,7 @@ def compose_replan_prompt(
     done_txt = "\n".join(f"- {a}: 完了" for a, _ in done) or "（なし）"
     rem_txt = "\n".join(f"- {s['agent']}: {s['task']}" for s in remaining) or "（なし）"
     return (
-        f"{_roster_block(workers)}\n\n{_format_spec(names)}\n\n"
+        f"{_roster_block(workers)}\n\n{ENV_CONSTRAINTS}\n\n{_format_spec(names)}\n\n"
         "# 状況\n"
         f"ゴール: {goal}\n"
         f"完了した工程:\n{done_txt}\n"

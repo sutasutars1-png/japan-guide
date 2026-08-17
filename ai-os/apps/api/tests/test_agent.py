@@ -54,6 +54,26 @@ def test_parse_strips_fences_and_falls_back_to_done():
 
 # ---- loop behaviour ----
 
+async def test_system_prompt_carries_sandbox_notes():
+    # the worker must be told: no network, write text first, images as SVG
+    seen = {}
+
+    class SpyProvider:
+        name = "fake"
+
+        async def complete(self, messages, *, model, tools=None, max_tokens=1024):
+            seen["system"] = messages[0].content
+            return LLMResponse(text="DONE: ok", usage=LLMUsage(input_tokens=1, output_tokens=1))
+
+    loop = AgentLoop(provider=SpyProvider(),
+                     manager=ExecutionManager(LocalSubprocessRuntime()), model="fake")
+    await _collect(loop, "画像付き記事を作って")
+    sysmsg = seen["system"]
+    assert "SVG" in sysmsg
+    assert "pip install" in sysmsg          # told installs will fail
+    assert "テキスト成果物" in sysmsg        # write the core text first
+
+
 async def test_loop_runs_command_then_finishes():
     out = await _collect(_loop(["RUN: echo hello-agent", "DONE: all good"]), "say hello")
     joined = "\n".join(s for _, s in out)

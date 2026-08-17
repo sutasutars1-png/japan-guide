@@ -45,6 +45,22 @@ LOOP_PROTOCOL = (
     "outside the RUN:/FETCH:/DONE: line, and do not use code fences."
 )
 
+# System-owned environment facts, appended after the protocol so they always apply
+# regardless of which skills are selected. These stop agents from burning their whole
+# budget on impossible setup (pip with no network, missing image libs) and from
+# finishing empty-handed.
+SANDBOX_NOTES = (
+    "# 実行環境（重要・厳守）\n"
+    "- サンドボックスはネット遮断です。`pip install` / `apt` / ダウンロードは必ず失敗します。"
+    "試さないでください。Python3 標準ライブラリと既存コマンドだけを使うこと"
+    "（PIL/Pillow・numpy・matplotlib・pandas は無いものと想定）。\n"
+    "- 成果物は必ず作業ディレクトリ配下にファイルとして保存すること（保存されたファイルが成果物として回収されます）。\n"
+    "- まず確実なテキスト成果物（.md / .txt など本文）を最初に書き出してください。"
+    "任意の追加要素はその後に。本文ファイルを書かずに終了しないこと。\n"
+    "- 画像・図が必要なときは SVG ファイル（`<svg>…</svg>` のテキスト）を"
+    "標準ライブラリだけで直接書き出すこと。画像生成にライブラリ（PIL/matplotlib/cairo 等）を使わない。"
+)
+
 
 def parse_agent_action(text: str) -> tuple[str, str]:
     """Return ("run", command) | ("fetch", url) | ("done", report) from a reply.
@@ -198,7 +214,8 @@ class AgentLoop:
         provider = self._provider or get_provider_for_model(model)
         domains = _resolve_domains(agent_name, allow_domains)
         history: list[LLMMessage] = [
-            LLMMessage(role="system", content=(system or DEFAULT_ROLE) + "\n\n" + LOOP_PROTOCOL),
+            LLMMessage(role="system",
+                       content=(system or DEFAULT_ROLE) + "\n\n" + LOOP_PROTOCOL + "\n\n" + SANDBOX_NOTES),
             LLMMessage(role="user", content=f"Goal: {goal}"),
         ]
         used_tokens = 0

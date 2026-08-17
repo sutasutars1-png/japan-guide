@@ -265,6 +265,13 @@ the manual bridge; `gemini-*` etc. for API workers.
 - Wire the remaining sample panels (Projects/Data) to real data.
 - Bundle custom presets/flows into the environment Template export; `web.search`.
 
+**Done since (sandbox-aware prompts):** workers and the orchestrator are now told
+the sandbox truth up front — no network (`pip`/`apt`/downloads fail; stdlib only),
+**write the core text deliverable first**, and **make images as SVG** (plain text,
+no PIL/matplotlib). `SANDBOX_NOTES` (system-owned, appended in `agent_loop`) +
+`ENV_CONSTRAINTS` (in the orchestration/replan prompts). This stops agents burning
+their whole iteration budget on impossible setup and finishing empty-handed.
+
 **Done since (deliverable ZIP):** a deliverable downloads as a ZIP
 (`export_zip` → `deliverable.md` + `artifacts/…`) and any single artifact
 downloads on its own (`export_artifact`; `GET /deliverables/{id}/download?format=zip`,

@@ -61,6 +61,14 @@ def test_compose_prompt_lists_workers_and_goal():
     assert "DONE" in p
 
 
+def test_orchestration_prompt_carries_env_constraints():
+    # plans must be told the sandbox is offline, prefer text-first + SVG images
+    p = compose_orchestration_prompt("画像付き記事を作って", [{"name": "Builder", "role": "code"}])
+    assert "SVG" in p
+    assert "テキスト成果物" in p
+    assert "ネット遮断" in p
+
+
 # ---- full run ----
 
 async def test_orchestrate_dispatches_all_steps():
