@@ -8,7 +8,7 @@ import { fetchJSON, streamExecution, streamAgent, streamFlow, streamOrchestrate,
   fetchConnections, fetchModels, setConnKey, refreshConn, clearConnKey, addManualModel,
   fetchManualPending, submitManual, deleteAgent,
   fetchClaudeAuth, claudeLogin, claudeLogout,
-  fetchDeliverables, fetchDeliverable, deleteDeliverable, saveDeliverable, downloadDeliverable,
+  fetchDeliverables, fetchDeliverable, deleteDeliverable, saveDeliverable, downloadDeliverable, downloadArtifact,
   fetchSandboxInfo, removeManualModel,
   createPreset, deletePreset, isCustomPreset, createFlow, deleteFlow, isCustomFlow, fetchFlows } from "@/lib/api";
 import { SKILL_SEED, CONNECTION_SEED } from "@/lib/seed";
@@ -831,6 +831,8 @@ function DeliverablesView(){
                   padding:"6px 10px",borderRadius:7,background:"var(--panel2)",border:"1px solid var(--line2)",color:"var(--ink2)"}}>TXT</button>
                 <button onClick={()=>downloadDeliverable(d.id,"json")} title="JSON" className="mono" style={{fontSize:10.5,
                   padding:"6px 10px",borderRadius:7,background:"var(--panel2)",border:"1px solid var(--line2)",color:"var(--ink2)"}}>JSON</button>
+                <button onClick={()=>downloadDeliverable(d.id,"zip")} title="全ファイルをZIPで" className="mono" style={{fontSize:10.5,
+                  padding:"6px 10px",borderRadius:7,background:"var(--aiSoft)",border:"1px solid rgba(140,125,242,.4)",color:"var(--ai)"}}>ZIP</button>
                 <button onClick={()=>del(d.id)} title="削除" className="mono" style={{fontSize:12,
                   padding:"6px 10px",borderRadius:7,background:"transparent",border:"1px solid var(--line2)",color:"var(--r4)"}}>✕</button>
               </div>
@@ -841,8 +843,12 @@ function DeliverablesView(){
                       {sel.goal && <div style={{fontSize:12,color:"var(--ink2)"}}>ゴール: {sel.goal}</div>}
                       {(sel.artifacts||[]).map((a,i)=>(
                         <div key={i}>
-                          <div style={{fontSize:12.5,fontWeight:600,color:"var(--ai)",marginBottom:4}}>
-                            {i+1}. {a.agent}{a.task?` — ${a.task}`:""}
+                          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                            <span style={{fontSize:12.5,fontWeight:600,color:"var(--ai)"}}>
+                              {i+1}. {a.agent}{a.task?` — ${a.task}`:""}</span>
+                            <button onClick={()=>downloadArtifact(sel.id,i)} title="このファイルをダウンロード"
+                              className="mono" style={{marginLeft:"auto",fontSize:10,padding:"3px 9px",borderRadius:6,
+                              background:"var(--panel2)",border:"1px solid var(--line2)",color:"var(--ink2)"}}>⤓ DL</button>
                           </div>
                           <pre className="mono" style={{margin:0,maxHeight:220,overflow:"auto",padding:"9px 11px",
                             borderRadius:9,background:"var(--panel2)",border:"1px solid var(--line2)",

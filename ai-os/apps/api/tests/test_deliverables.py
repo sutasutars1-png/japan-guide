@@ -238,3 +238,55 @@ def test_sandbox_info_endpoint():
     info = client.get("/execution/sandbox-info").json()
     assert "runtime" in info and "persistent_sandbox" in info
     assert "collect_files" in info and "default_allow_domains" in info
+
+
+# ---- ZIP + per-artifact export ---------------------------------------------
+
+def _sample():
+    return deliverables.save(goal="バンドル確認", artifacts=[
+        {"agent": "Builder", "task": "レポート", "content": "本文レポート"},
+        {"agent": "Builder", "task": "ファイル: docs/out.md", "content": "# 生成ファイル"},
+    ])
+
+
+def test_export_zip_contains_combined_md_and_each_artifact():
+    import io
+    import zipfile
+    item = _sample()
+    body, mtype, fname = deliverables.export_zip(item)
+    assert mtype == "application/zip" and fname.endswith(".zip")
+    with zipfile.ZipFile(io.BytesIO(body)) as z:
+        names = set(z.namelist())
+        assert "deliverable.md" in names
+        assert "artifacts/docs/out.md" in names               # file keeps its path
+        assert any(n.startswith("artifacts/01-") for n in names)  # report → NN-agent.md
+        assert z.read("artifacts/docs/out.md").decode() == "# 生成ファイル"
+
+
+def test_export_artifact_by_index():
+    item = _sample()
+    # file artifact (index 1) keeps its basename + inferred type
+    body, mtype, fname = deliverables.export_artifact(item, 1)
+    assert body == "# 生成ファイル" and fname == "out.md"
+    # report artifact (index 0) → NN-agent.md, markdown
+    _, _, fname0 = deliverables.export_artifact(item, 0)
+    assert fname0.endswith(".md")
+    # txt coercion
+    _, mtxt, ftxt = deliverables.export_artifact(item, 1, "txt")
+    assert ftxt.endswith(".txt") and "text/plain" in mtxt
+    with pytest.raises(IndexError):
+        deliverables.export_artifact(item, 9)
+
+
+def test_zip_and_artifact_endpoints():
+    saved = client.post("/deliverables", json={
+        "goal": "DLエンドポイント", "artifacts": [
+            {"agent": "Builder", "task": "ファイル: a/b.txt", "content": "中身"}]})
+    did = saved.json()["id"]
+    z = client.get(f"/deliverables/{did}/download", params={"format": "zip"})
+    assert z.status_code == 200 and z.headers["content-type"] == "application/zip"
+    assert "attachment" in z.headers["content-disposition"]
+
+    a = client.get(f"/deliverables/{did}/artifacts/0/download")
+    assert a.status_code == 200 and a.text == "中身"
+    assert client.get(f"/deliverables/{did}/artifacts/9/download").status_code == 404

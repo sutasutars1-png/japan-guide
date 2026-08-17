@@ -216,21 +216,32 @@ export const saveDeliverable = (body: {
   artifacts?: Artifact[]; lines?: LogLine[];
 }) => jsonReq<Deliverable>("/deliverables", "POST", body);
 
-// The download URL (md | txt | json) — a plain link the browser can fetch.
-export const deliverableDownloadUrl = (id: string, format: "md" | "txt" | "json" = "md") =>
+export type DeliverableFormat = "md" | "txt" | "json" | "zip";
+
+// The download URL — a plain link the browser can fetch.
+export const deliverableDownloadUrl = (id: string, format: DeliverableFormat = "md") =>
   `${API_BASE}/deliverables/${id}/download?format=${format}`;
 
-// Trigger a browser download of a deliverable in the given format.
-export async function downloadDeliverable(id: string, format: "md" | "txt" | "json" = "md") {
-  const res = await fetch(deliverableDownloadUrl(id, format));
+// Fetch a URL and trigger a browser download, honoring the server's filename.
+async function downloadFrom(url: string, fallbackName: string) {
+  const res = await fetch(url);
   if (!res.ok) throw new Error(res.statusText);
   const blob = await res.blob();
   const cd = res.headers.get("content-disposition") || "";
   const m = /filename\*=UTF-8''([^;]+)/.exec(cd) || /filename="([^"]+)"/.exec(cd);
-  const name = m ? decodeURIComponent(m[1]) : `${id}.${format}`;
-  const url = URL.createObjectURL(blob);
+  const name = m ? decodeURIComponent(m[1]) : fallbackName;
+  const objUrl = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = name;
+  a.href = objUrl; a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
+  URL.revokeObjectURL(objUrl);
 }
+
+// Download a whole deliverable (md | txt | json | zip).
+export const downloadDeliverable = (id: string, format: DeliverableFormat = "md") =>
+  downloadFrom(deliverableDownloadUrl(id, format), `${id}.${format}`);
+
+// Download a single artifact (file or report) of a deliverable.
+export const downloadArtifact = (id: string, index: number, format: "raw" | "txt" = "raw") =>
+  downloadFrom(`${API_BASE}/deliverables/${id}/artifacts/${index}/download?format=${format}`,
+    `${id}-${index}`);
