@@ -72,29 +72,46 @@ def save(body: SaveDeliverable) -> dict:
     return item
 
 
+def _attachment(body, media_type: str, filename: str, ascii_stem: str) -> Response:
+    # HTTP headers are latin-1; a Japanese filename needs RFC 5987 encoding, with
+    # an ASCII fallback for old clients.
+    ext = filename.rsplit(".", 1)[-1] if "." in filename else "bin"
+    disposition = (
+        f"attachment; filename=\"{ascii_stem}.{ext}\"; "
+        f"filename*=UTF-8''{quote(filename)}"
+    )
+    return Response(content=body, media_type=media_type,
+                    headers={"Content-Disposition": disposition})
+
+
 @router.get("/deliverables/{deliverable_id}/download")
 def download(deliverable_id: str, format: str = "md") -> Response:
     item = deliverables.get(deliverable_id)
     if item is None:
         raise HTTPException(status_code=404, detail="no such deliverable")
+    log.append(AuditEvent("deliverable.download", "human", f"{deliverable_id} · {format}"))
+    if (format or "").lower() == "zip":  # whole bundle as a ZIP (bytes)
+        body, media_type, filename = deliverables.export_zip(item)
+        return _attachment(body, media_type, filename, deliverable_id)
     try:
         body, media_type, filename = deliverables.export(item, format)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    log.append(AuditEvent("deliverable.download", "human", f"{deliverable_id} · {format}"))
-    # HTTP headers are latin-1; a Japanese filename needs RFC 5987 encoding, with
-    # an ASCII fallback (the id + extension) for old clients.
-    ext = filename.rsplit(".", 1)[-1]
-    ascii_fallback = f"{deliverable_id}.{ext}"
-    disposition = (
-        f"attachment; filename=\"{ascii_fallback}\"; "
-        f"filename*=UTF-8''{quote(filename)}"
-    )
-    return Response(
-        content=body,
-        media_type=media_type,
-        headers={"Content-Disposition": disposition},
-    )
+    return _attachment(body, media_type, filename, deliverable_id)
+
+
+@router.get("/deliverables/{deliverable_id}/artifacts/{index}/download")
+def download_artifact(deliverable_id: str, index: int, format: str = "raw") -> Response:
+    """Download ONE artifact (file or report) of a deliverable."""
+    item = deliverables.get(deliverable_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="no such deliverable")
+    try:
+        body, media_type, filename = deliverables.export_artifact(item, index, format)
+    except IndexError:
+        raise HTTPException(status_code=404, detail="no such artifact")
+    log.append(AuditEvent("deliverable.download_artifact", "human", f"{deliverable_id}#{index}"))
+    return _attachment(body, media_type, filename, f"{deliverable_id}-{index}")
 
 
 @router.delete("/deliverables/{deliverable_id}")

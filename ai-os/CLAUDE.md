@@ -262,8 +262,14 @@ the manual bridge; `gemini-*` etc. for API workers.
 ### Next (not yet built — candidate slices)
 - Surface iteration/worker/re-plan budgets in the UI.
 - Optional `→NEXT:`-style conditional routing inside a single plan.
-- ZIP bundling / per-artifact download; wire the remaining sample panels to real data.
+- Wire the remaining sample panels (Projects/Data) to real data.
 - Bundle custom presets/flows into the environment Template export; `web.search`.
+
+**Done since (deliverable ZIP):** a deliverable downloads as a ZIP
+(`export_zip` → `deliverable.md` + `artifacts/…`) and any single artifact
+downloads on its own (`export_artifact`; `GET /deliverables/{id}/download?format=zip`,
+`GET /deliverables/{id}/artifacts/{i}/download`). UI: ZIP + per-artifact ⤓ buttons.
+See `docs/phase-4-deliverable-zip.md`.
 
 **Done since:** Deliverable save/download flow — an orchestrate run auto-saves its
 成果物; a Deliverables view lists/previews them and downloads as md/txt/json

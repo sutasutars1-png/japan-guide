@@ -15,14 +15,19 @@ download format is chosen at export time, not baked in at save time.
 """
 from __future__ import annotations
 
+import io
 import json
 import logging
+import mimetypes
 import re
 import time
+import zipfile
 from copy import deepcopy
 from uuid import uuid4
 
 from .env_file import env_path
+
+_FILE_TASK_PREFIX = "ファイル: "
 
 log = logging.getLogger("aios")
 
@@ -279,3 +284,62 @@ def export(item: dict, fmt: str) -> tuple[str, str, str]:
         body = json.dumps(item, ensure_ascii=False, indent=2)
         return body, "application/json; charset=utf-8", f"{stem}.json"
     raise ValueError(f"unsupported format: {fmt}")
+
+
+# ---- per-artifact + ZIP export ---------------------------------------------
+
+def _safe_member(name: str) -> str:
+    """A zip/download-safe relative path: no leading '/', no '..' traversal."""
+    name = (name or "").replace("\\", "/").lstrip("/")
+    parts = [p for p in name.split("/") if p not in ("", ".", "..")]
+    return "/".join(parts) or "artifact"
+
+
+def artifact_filename(a: dict, index: int) -> str:
+    """Filename for one artifact. File-artifacts keep their original path; a text
+    report becomes `NN-<agent>.md`."""
+    task = a.get("task", "") or ""
+    if task.startswith(_FILE_TASK_PREFIX):
+        path = task[len(_FILE_TASK_PREFIX):].strip()
+        if path:
+            return _safe_member(path)
+    return f"{index:02d}-{_slug(a.get('agent', 'AI'))}.md"
+
+
+def _artifact_media_type(name: str) -> str:
+    mt = mimetypes.guess_type(name)[0] or "text/plain"
+    if mt.startswith("text/") or mt in ("application/json", "application/xml"):
+        mt += "; charset=utf-8"
+    return mt
+
+
+def export_artifact(item: dict, index: int, fmt: str = "raw") -> tuple[str, str, str]:
+    """Return (body, media_type, filename) for ONE artifact of a deliverable."""
+    arts = item.get("artifacts", [])
+    if index < 0 or index >= len(arts):
+        raise IndexError("artifact index out of range")
+    a = arts[index]
+    content = a.get("content", "")
+    name = artifact_filename(a, index + 1).rsplit("/", 1)[-1]  # basename for a single file
+    fmt = (fmt or "raw").lower()
+    if fmt in ("txt", "text"):
+        stem = name.rsplit(".", 1)[0]
+        return content.rstrip() + "\n", "text/plain; charset=utf-8", f"{stem}.txt"
+    return content, _artifact_media_type(name), name
+
+
+def export_zip(item: dict) -> tuple[bytes, str, str]:
+    """Bundle the whole deliverable as a ZIP: a combined `deliverable.md` plus each
+    artifact as its own file under `artifacts/`."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("deliverable.md", render_markdown(item))
+        used: set[str] = set()
+        for i, a in enumerate(item.get("artifacts", []), 1):
+            member = _safe_member(artifact_filename(a, i))
+            if member in used:  # de-dupe collisions
+                member = f"{i:02d}-{member}"
+            used.add(member)
+            z.writestr(f"artifacts/{member}", a.get("content", ""))
+    stem = _slug(item.get("title") or item.get("goal") or item["id"], item["id"])
+    return buf.getvalue(), "application/zip", f"{stem}.zip"
