@@ -6,9 +6,10 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Response, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from .. import flow as flow_mod
 from ..flow import get_flow, get_flow_runner, list_flows
 from ..schemas import LogLine
 
@@ -22,6 +23,12 @@ class Flow(BaseModel):
     stations: list[dict]
 
 
+class FlowBody(BaseModel):
+    name: str
+    stations: list[dict]
+    max_iterations: int = 10
+
+
 class FlowRunRequest(BaseModel):
     goal: str
     flow_id: str = "flow.default"
@@ -30,6 +37,28 @@ class FlowRunRequest(BaseModel):
 @router.get("/flows", response_model=list[Flow])
 def flows() -> list[dict]:
     return list_flows()
+
+
+@router.post("/flows", response_model=Flow, status_code=201)
+def create_flow(body: FlowBody) -> dict:
+    if not body.stations:
+        raise HTTPException(status_code=400, detail="a flow needs at least one station")
+    return flow_mod.add_flow(body.name, body.stations, body.max_iterations)
+
+
+@router.put("/flows/{flow_id}", response_model=Flow)
+def update_flow(flow_id: str, body: FlowBody) -> dict:
+    updated = flow_mod.update_flow(flow_id, body.model_dump())
+    if updated is None:
+        raise HTTPException(status_code=400, detail="flow not found or read-only (seed flow)")
+    return updated
+
+
+@router.delete("/flows/{flow_id}")
+def delete_flow(flow_id: str) -> Response:
+    if not flow_mod.remove_flow(flow_id):
+        raise HTTPException(status_code=400, detail="flow not found or read-only (seed flow)")
+    return Response(status_code=204)
 
 
 @router.post("/flow/run", response_model=list[LogLine])
