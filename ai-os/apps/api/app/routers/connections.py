@@ -74,6 +74,14 @@ def add_model(provider_id: str, body: ModelBody) -> dict:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@router.delete("/connections/{provider_id}/models")
+def remove_model(provider_id: str, body: ModelBody) -> dict:
+    try:
+        return connections.remove_manual_model(provider_id, body.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @router.get("/models")
 def models() -> list[dict]:
     return connections.all_models()

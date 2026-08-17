@@ -15,14 +15,19 @@ from __future__ import annotations
 import json
 import re
 from typing import AsyncIterator
+from uuid import uuid4
 
 from . import agents_store
 from .agent_loop import AgentLoop, get_agent_loop
 from .core.audit import AuditEvent, log
 from .execution_manager import LogLine
+from .json_store import load_json, save_json
 from .skills import compose_system
 
-FLOWS: list[dict] = [
+_STORE_FILE = ".aios-flows.json"
+_CUSTOM_PREFIX = "flow.custom."
+
+SEED_FLOWS: list[dict] = [
     {"id": "flow.default", "name": "標準フロー", "max_iterations": 10,
      "stations": [
          {"agent": "Planner", "next": "Builder"},
@@ -38,15 +43,92 @@ FLOWS: list[dict] = [
      ]},
 ]
 
-_BY_ID = {f["id"]: f for f in FLOWS}
+
+def _load_custom() -> list[dict]:
+    data = load_json(_STORE_FILE, [])
+    return [f for f in data if isinstance(f, dict) and f.get("id")] if isinstance(data, list) else []
+
+
+# User-created flows are persisted (git-ignored `.aios-flows.json`) and survive a
+# restart; the seed flows above are read-only defaults.
+_custom: list[dict] = _load_custom()
+
+
+def _save() -> None:
+    save_json(_STORE_FILE, _custom)
+
+
+def is_custom(flow_id: str) -> bool:
+    return str(flow_id).startswith(_CUSTOM_PREFIX)
+
+
+def _all() -> list[dict]:
+    return SEED_FLOWS + _custom
 
 
 def list_flows() -> list[dict]:
-    return FLOWS
+    return _all()
 
 
 def get_flow(flow_id: str) -> dict | None:
-    return _BY_ID.get(flow_id)
+    return next((f for f in _all() if f["id"] == flow_id), None)
+
+
+def _clean_stations(stations: list[dict]) -> list[dict]:
+    out = []
+    for s in stations or []:
+        agent = str((s or {}).get("agent", "")).strip()
+        if agent:
+            out.append({"agent": agent, "next": str(s.get("next", "DONE")).strip() or "DONE"})
+    return out
+
+
+def add_flow(name: str, stations: list[dict], max_iterations: int = 10) -> dict:
+    flow = {
+        "id": _CUSTOM_PREFIX + uuid4().hex[:8],
+        "name": (name or "カスタムフロー").strip(),
+        "max_iterations": max(1, int(max_iterations or 10)),
+        "stations": _clean_stations(stations),
+    }
+    _custom.append(flow)
+    _save()
+    return flow
+
+
+def update_flow(flow_id: str, changes: dict) -> dict | None:
+    """Edit a CUSTOM flow. Seed flows are read-only (returns None)."""
+    if not is_custom(flow_id):
+        return None
+    for f in _custom:
+        if f["id"] == flow_id:
+            if changes.get("name") is not None:
+                f["name"] = str(changes["name"]).strip() or f["name"]
+            if changes.get("max_iterations") is not None:
+                f["max_iterations"] = max(1, int(changes["max_iterations"]))
+            if changes.get("stations") is not None:
+                f["stations"] = _clean_stations(changes["stations"])
+            _save()
+            return f
+    return None
+
+
+def remove_flow(flow_id: str) -> bool:
+    """Delete a CUSTOM flow. Seed flows can't be deleted."""
+    if not is_custom(flow_id):
+        return False
+    for i, f in enumerate(_custom):
+        if f["id"] == flow_id:
+            del _custom[i]
+            _save()
+            return True
+    return False
+
+
+def reset_to_seed() -> None:
+    """Drop all custom flows (used by tests)."""
+    global _custom
+    _custom = []
+    _save()
 
 
 def flow_handoff_note(stage: str, stages: list[str]) -> str:

@@ -9,7 +9,8 @@ import { fetchJSON, streamExecution, streamAgent, streamFlow, streamOrchestrate,
   fetchManualPending, submitManual, deleteAgent,
   fetchClaudeAuth, claudeLogin, claudeLogout,
   fetchDeliverables, fetchDeliverable, deleteDeliverable, saveDeliverable, downloadDeliverable,
-  fetchSandboxInfo } from "@/lib/api";
+  fetchSandboxInfo, removeManualModel,
+  createPreset, deletePreset, isCustomPreset, createFlow, deleteFlow, isCustomFlow, fetchFlows } from "@/lib/api";
 import { SKILL_SEED, CONNECTION_SEED } from "@/lib/seed";
 
 /* ============================================================
@@ -995,12 +996,19 @@ function AgentsView({agents,setAgents}){
   const [skillLib,setSkillLib]=useState(SKILL_SEED); // embedded fallback → always visible
   const [presets,setPresets]=useState([]);
   const [models,setModels]=useState([]); // live-discovered model ids from Connections
+  const loadPresets=()=>fetchJSON("/presets",[]).then(p=>{ if(Array.isArray(p))setPresets(p); });
   useEffect(()=>{
     // Prefer the live skill DB; keep the embedded seed if the API is unreachable.
     fetchJSON("/skills",[]).then(s=>{ if(Array.isArray(s)&&s.length)setSkillLib(s); });
-    fetchJSON("/presets",[]).then(p=>{ if(Array.isArray(p))setPresets(p); });
+    loadPresets();
     fetchModels().then(m=>{ if(Array.isArray(m))setModels(m.map(x=>x.model)); });
   },[]);
+  // Save the agent's current skill selection as a new custom preset (persisted).
+  const savePreset=(a)=>{ const name=window.prompt("プリセット名",`${a.name} / カスタム`); if(!name)return;
+    createPreset(name,a.name,a.skills||[]).then(p=>{ loadPresets(); applyPreset(a.id,p.id); }).catch(()=>{}); };
+  const removePreset=(pid)=>{ if(!isCustomPreset(pid)){ window.alert("初期プリセットは削除できません"); return; }
+    if(!window.confirm("このカスタムプリセットを削除しますか？"))return;
+    deletePreset(pid).then(()=>loadPresets()).catch(()=>{}); };
   const sync=(a)=>setAgents(as=>as.map(x=>x.id===a.id?a:x));
   // Persist edits to the backend store so the agent loop composes from them.
   const persist=(id,agent)=>{ setAgents(as=>as.map(x=>x.id===id?agent:x));
@@ -1045,12 +1053,12 @@ function AgentsView({agents,setAgents}){
         {adding ? <AddAgent onCancel={()=>setAdding(false)} onCreate={add} models={models}/>
                 : <AgentDetail agent={agent} update={update} skillLib={skillLib} models={models}
                     presets={presets} persist={persist} applyPreset={applyPreset} resetPreset={resetPreset}
-                    onDelete={del}/>}
+                    savePreset={savePreset} removePreset={removePreset} onDelete={del}/>}
       </main>
     </>
   );
 }
-function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,resetPreset,models=[],onDelete}){
+function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,resetPreset,savePreset,removePreset,models=[],onDelete}){
   const c={run:"var(--live)",done:"var(--live)",idle:"var(--ink3)"}[agent.state];
   // Model options come from live discovery; fall back to constants when the API
   // is unreachable, and always include the agent's current model.
@@ -1075,17 +1083,20 @@ function AgentDetail({agent,update,skillLib=[],presets=[],persist,applyPreset,re
         </span>
       </div>
 
-      {stagePresets.length>0 &&
-        <Field label="プリセット（主スキルの束）" hint="この工程のスキルセットを切替。編集しても「戻す」で復元できます。">
-          <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-            <select value={agent.preset||""} onChange={e=>applyPreset&&applyPreset(agent.id,e.target.value)}
-              style={{...inp,maxWidth:320}}>
-              {!agent.preset && <option value="">— 未選択 —</option>}
-              {stagePresets.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <button onClick={()=>resetPreset&&resetPreset(agent.id)} style={btnGhost}>プリセットに戻す</button>
-          </div>
-        </Field>}
+      <Field label="プリセット（主スキルの束・保存可）" hint="この工程のスキルセットを切替。「戻す」で復元。現在の選択を新規プリセットとして保存でき、保存は再起動後も保持されます。">
+        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+          <select value={agent.preset||""} onChange={e=>applyPreset&&applyPreset(agent.id,e.target.value)}
+            style={{...inp,maxWidth:300}}>
+            {!agent.preset && <option value="">— 未選択 —</option>}
+            {stagePresets.map(p=><option key={p.id} value={p.id}>{p.name}{isCustomPreset(p.id)?" ★":""}</option>)}
+          </select>
+          <button onClick={()=>resetPreset&&resetPreset(agent.id)} style={btnGhost}>戻す</button>
+          <button onClick={()=>savePreset&&savePreset(agent)} style={btnGhost}>現在の選択を保存</button>
+          {agent.preset&&isCustomPreset(agent.preset)&&
+            <button onClick={()=>removePreset&&removePreset(agent.preset)}
+              style={{...btnGhost,color:"var(--r4)",borderColor:"rgba(226,75,65,.4)"}}>削除</button>}
+        </div>
+      </Field>
 
       <Field label="Model" hint={models.length?"Connectionsで取得した有効なモデル":"Connectionsでキーを設定すると実際のモデルが並びます"}>
         <select value={agent.model} onChange={e=>pupdate({model:e.target.value})}
@@ -1224,6 +1235,16 @@ function FlowView({agents}){
   const [order,setOrder]=useState(names);
   const [dragI,setDragI]=useState(null);
   const [overI,setOverI]=useState(null);
+  const [flows,setFlows]=useState([]);
+  const loadFlows=()=>fetchFlows().then(f=>{ if(Array.isArray(f))setFlows(f); });
+  useEffect(()=>{ loadFlows(); },[]);
+  // Save the current drag order as a persisted custom flow (agent→…→DONE).
+  const saveFlow=()=>{ if(!order.length)return; const name=window.prompt("フロー名","カスタムフロー"); if(!name)return;
+    const stations=order.map((a,i)=>({agent:a,next:i<order.length-1?order[i+1]:"DONE"}));
+    createFlow(name,stations).then(()=>loadFlows()).catch(()=>{}); };
+  const removeFlow=(id)=>{ if(!isCustomFlow(id)){ window.alert("初期フローは削除できません"); return; }
+    if(!window.confirm("このカスタムフローを削除しますか？"))return;
+    deleteFlow(id).then(()=>loadFlows()).catch(()=>{}); };
   useEffect(()=>{ setOrder(prev=>{ const kept=prev.filter(n=>names.includes(n));
     return [...kept,...names.filter(n=>!kept.includes(n))]; }); /* eslint-disable-next-line */ },[agents.length]);
   const move=(from,to)=>setOrder(o=>{ if(from==null||from===to)return o;
@@ -1255,6 +1276,31 @@ function FlowView({agents}){
         ))}
         <Arrow/>
         <FlowNode label="Done" edge/>
+      </div>
+
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
+        <h2 className="disp" style={{margin:0,fontSize:20,fontWeight:600}}>保存済みフロー</h2>
+        <span className="mono" style={{fontSize:11,color:"var(--ink3)"}}>永続化・実行で選択可能</span>
+        <button onClick={saveFlow} className="mono" style={{marginLeft:"auto",fontSize:11,padding:"5px 12px",
+          borderRadius:8,background:"var(--aiSoft)",border:"1px solid rgba(140,125,242,.4)",color:"var(--ai)"}}>
+          + 現在の並びを保存</button>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:30}}>
+        {flows.map(f=>(
+          <div key={f.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,
+            background:"var(--panel)",border:"1px solid var(--line)"}}>
+            <span style={{fontSize:13,fontWeight:600}}>{f.name}</span>
+            {isCustomFlow(f.id)
+              ? <span className="mono" style={{fontSize:9.5,color:"var(--ai)",padding:"1px 6px",border:"1px solid rgba(140,125,242,.4)",borderRadius:5}}>custom</span>
+              : <span className="mono" style={{fontSize:9.5,color:"var(--ink3)",padding:"1px 6px",border:"1px solid var(--line2)",borderRadius:5}}>seed</span>}
+            <span className="mono" style={{fontSize:11,color:"var(--ink2)"}}>
+              {(f.stations||[]).map(s=>s.agent).join(" → ")} · max {f.max_iterations}</span>
+            {isCustomFlow(f.id) &&
+              <button onClick={()=>removeFlow(f.id)} title="削除" className="mono" style={{marginLeft:"auto",
+                fontSize:12,padding:"4px 10px",borderRadius:7,background:"transparent",
+                border:"1px solid var(--line2)",color:"var(--r4)"}}>✕</button>}
+          </div>
+        ))}
       </div>
 
       <h2 className="disp" style={{margin:"0 0 4px",fontSize:20,fontWeight:600}}>Agent loop</h2>
@@ -1475,6 +1521,8 @@ function ConnectionCard({c,online=true,onChange}){
     try{ onChange(await clearConnKey(c.id)); }catch(e){ setErr(String(e.message||e)); }finally{ setBusy(false); } };
   const addModel=async()=>{ if(!newModel.trim())return; setBusy(true);
     try{ onChange(await addManualModel(c.id,newModel.trim())); setNewModel(""); }catch(e){ setErr(String(e.message||e)); }finally{ setBusy(false); } };
+  const delModel=async(m)=>{ setBusy(true);
+    try{ onChange(await removeManualModel(c.id,m)); }catch(e){ setErr(String(e.message||e)); }finally{ setBusy(false); } };
   return (
     <div style={{padding:"15px 17px",borderRadius:12,background:"var(--panel)",border:"1px solid var(--line)"}}>
       <div style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap"}}>
@@ -1517,8 +1565,12 @@ function ConnectionCard({c,online=true,onChange}){
           {!manual && on && c.models.length===0 && " — Refreshで取得"}</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
           {c.models.map(m=>(
-            <span key={m} className="mono" style={{fontSize:11,padding:"3px 9px",borderRadius:7,
-              background:"var(--panel2)",border:"1px solid var(--line2)",color:"var(--ink2)"}}>{m}</span>
+            <span key={m} className="mono" style={{fontSize:11,padding:"3px 4px 3px 9px",borderRadius:7,
+              background:"var(--panel2)",border:"1px solid var(--line2)",color:"var(--ink2)",
+              display:"inline-flex",alignItems:"center",gap:6}}>{m}
+              {manual && <button onClick={()=>delModel(m)} disabled={busy} title="削除"
+                style={{fontSize:11,lineHeight:1,color:"var(--ink3)",padding:"0 3px"}}>✕</button>}
+            </span>
           ))}
           {c.models.length===0 && <span style={{fontSize:11.5,color:"var(--ink3)"}}>—</span>}
         </div>
@@ -1530,6 +1582,8 @@ function ConnectionCard({c,online=true,onChange}){
                 border:"1px solid var(--line2)",color:"var(--ink)",fontSize:12,outline:"none"}}/>
             <button onClick={addModel} disabled={busy||!newModel.trim()} style={{...btnGhost,opacity:busy||!newModel.trim()?.5:1}}>追加</button>
           </div>}
+        {manual && c.models.length>0 &&
+          <div style={{marginTop:6,fontSize:10.5,color:"var(--ink3)"}}>追加したモデルは保存され、再起動後も残ります。</div>}
       </div>
     </div>
   );

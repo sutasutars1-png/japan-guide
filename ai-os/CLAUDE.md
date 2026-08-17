@@ -45,11 +45,12 @@ from the Connections → Claude Code card; it persists across restarts.
   string) in commits/PRs/code/artifacts. Use `claude-cli` (subscription CLI) or a
   generic label instead.
 
-**Persistence:** **agent config now persists** — `agents_store` saves to a
-git-ignored `.aios-agents.json` next to `.env` and loads it on boot (falls back to
-`seed.AGENTS`). So a model change per agent survives a restart. **API keys persist**
-in `.env`. Still in-memory (reset on restart): skills/presets, flows, and the
-connections' discovered-model lists. A shared DB/JSON store is a later slice.
+**Persistence:** agent config, deliverables, **connections' model lists, custom
+presets, and custom flows** all persist to git-ignored `.aios-*.json` files next
+to `.env` (shared helper `json_store.py`); **API keys persist** in `.env`. Seed
+presets/flows are read-only defaults; only `custom.`/`flow.custom.` entries are
+editable. Still in-memory: the skills DB itself (seed). A shared multi-user DB is
+a later slice.
 
 **Environment note:** this repo's dev environment is itself Claude Code with the
 `claude` binary on PATH — which is exactly what the #5 CLI provider shells out to.
@@ -261,9 +262,8 @@ the manual bridge; `gemini-*` etc. for API workers.
 ### Next (not yet built — candidate slices)
 - Surface iteration/worker/re-plan budgets in the UI.
 - Optional `→NEXT:`-style conditional routing inside a single plan.
-- Durable stores for flows/presets/connections **and deliverables** (agents +
-  keys already persist; deliverables persist to a local JSON file like agents).
 - ZIP bundling / per-artifact download; wire the remaining sample panels to real data.
+- Bundle custom presets/flows into the environment Template export; `web.search`.
 
 **Done since:** Deliverable save/download flow — an orchestrate run auto-saves its
 成果物; a Deliverables view lists/previews them and downloads as md/txt/json
@@ -352,7 +352,9 @@ phase-0..3, phase-4-design, -skill-layers, -gemini-adapter, -agent-loop, -skills
   `GET /deliverables/{id}/download?format=md|txt|json`, `DELETE /deliverables/{id}`.
 - Connections: `GET /connections`, `PUT /connections/{id}/key`,
   `POST /connections/{id}/refresh`, `DELETE /connections/{id}/key`,
-  `POST /connections/{id}/models` (manual), `GET /models`.
+  `POST`/`DELETE /connections/{id}/models` (manual, persisted), `GET /models`.
+- Presets CRUD (custom only): `POST /presets`, `PUT/DELETE /presets/{id}`.
+- Flows CRUD (custom only): `POST /flows`, `PUT/DELETE /flows/{id}`.
 - Manual bridge: `GET /manual/pending`, `POST /manual/submit`.
 - Skills/presets/catalog: `GET /skills`, `GET /presets`, `GET/POST/PUT /agents`,
   `POST /agents/{id}/apply-preset|reset-preset`.

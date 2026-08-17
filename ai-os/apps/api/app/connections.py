@@ -21,6 +21,9 @@ from typing import Any, Callable
 
 from .core.secrets import store as secret_store
 from .env_file import set_env_value, unset_env_value
+from .json_store import load_json, save_json
+
+_STATE_FILE = ".aios-connections.json"
 
 # ---- provider catalog -------------------------------------------------------
 
@@ -38,12 +41,31 @@ PROVIDERS: list[dict[str, Any]] = [
 ]
 _BY_ID = {p["id"]: p for p in PROVIDERS}
 
-# In-memory per-provider state (discovered models, manual model lists, errors).
-# Keys/values never live here — only model ids and status.
+# Per-provider state (discovered models, manual model lists, errors).
+# Keys/values never live here — only model ids and status. The model lists are
+# **persisted** (git-ignored `.aios-connections.json`) so a manually-curated model
+# (e.g. for claude-web) and the last discovered list survive a restart instead of
+# resetting to defaults; api providers still re-discover on boot via `bootstrap`.
 _state: dict[str, dict[str, Any]] = {
     p["id"]: {"models": list(p.get("default_models", [])), "error": None}
     for p in PROVIDERS
 }
+
+
+def _load_state() -> None:
+    saved = load_json(_STATE_FILE, {})
+    if not isinstance(saved, dict):
+        return
+    for pid, models in saved.items():
+        if pid in _state and isinstance(models, list):
+            _state[pid]["models"] = [str(m) for m in models if m]
+
+
+def _persist_state() -> None:
+    save_json(_STATE_FILE, {pid: st["models"] for pid, st in _state.items()})
+
+
+_load_state()
 
 
 def _env_names(p: dict) -> list[str]:
@@ -152,6 +174,7 @@ def refresh_models(provider_id: str) -> dict[str, Any]:
         models = discover(key)
         st["models"] = models
         st["error"] = None
+        _persist_state()
     except Exception as exc:  # noqa: BLE001 — surface as status, never crash
         st["error"] = f"モデル取得に失敗: {exc}"
     return connection(provider_id)
@@ -184,6 +207,7 @@ def clear_key(provider_id: str) -> dict[str, Any]:
     secret_store._rebuild_pattern()        # noqa: SLF001
     _state[provider_id]["models"] = []
     _state[provider_id]["error"] = None
+    _persist_state()
     return connection(provider_id)
 
 
@@ -194,6 +218,18 @@ def add_manual_model(provider_id: str, model: str) -> dict[str, Any]:
     model = (model or "").strip()
     if model and model not in _state[provider_id]["models"]:
         _state[provider_id]["models"].append(model)
+        _persist_state()
+    return connection(provider_id)
+
+
+def remove_manual_model(provider_id: str, model: str) -> dict[str, Any]:
+    p = _BY_ID.get(provider_id)
+    if p is None or p["kind"] != "manual":
+        raise ValueError("not a manual provider")
+    models = _state[provider_id]["models"]
+    if model in models:
+        models.remove(model)
+        _persist_state()
     return connection(provider_id)
 
 

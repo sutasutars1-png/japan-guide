@@ -5,6 +5,10 @@
 .aios-agents.json
 # saved deliverables (run 成果物) — machine-specific, never committed
 .aios-deliverables.json
+# persisted local stores (connections' model lists, custom presets/flows)
+.aios-connections.json
+.aios-presets.json
+.aios-flows.json
 
 # node
 node_modules/

@@ -7,6 +7,7 @@ API today, before any database wiring.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Response
+from pydantic import BaseModel, Field
 
 from .. import agents_store, presets, seed
 from ..schemas import (
@@ -21,6 +22,12 @@ from ..schemas import (
 )
 
 router = APIRouter(tags=["catalog"])
+
+
+class PresetBody(BaseModel):
+    name: str
+    stage: str
+    skills: list[str] = Field(default_factory=list)
 
 
 @router.get("/capabilities", response_model=Capabilities)
@@ -58,6 +65,26 @@ def delete_agent(agent_id: str) -> Response:
 @router.get("/presets", response_model=list[Preset])
 def list_presets(stage: str | None = None) -> list[dict]:
     return presets.list_presets(stage)
+
+
+@router.post("/presets", response_model=Preset, status_code=201)
+def create_preset(body: PresetBody) -> dict:
+    return presets.add_preset(body.name, body.stage, body.skills)
+
+
+@router.put("/presets/{preset_id}", response_model=Preset)
+def update_preset(preset_id: str, body: PresetBody) -> dict:
+    updated = presets.update_preset(preset_id, body.model_dump())
+    if updated is None:
+        raise HTTPException(status_code=400, detail="preset not found or read-only (seed preset)")
+    return updated
+
+
+@router.delete("/presets/{preset_id}")
+def delete_preset(preset_id: str) -> Response:
+    if not presets.remove_preset(preset_id):
+        raise HTTPException(status_code=400, detail="preset not found or read-only (seed preset)")
+    return Response(status_code=204)
 
 
 @router.post("/agents/{agent_id}/apply-preset", response_model=Agent)

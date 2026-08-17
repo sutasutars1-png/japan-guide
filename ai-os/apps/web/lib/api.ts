@@ -129,6 +129,27 @@ export const clearConnKey = (id: string) =>
   jsonReq<Connection>(`/connections/${id}/key`, "DELETE");
 export const addManualModel = (id: string, model: string) =>
   jsonReq<Connection>(`/connections/${id}/models`, "POST", { model });
+export const removeManualModel = (id: string, model: string) =>
+  jsonReq<Connection>(`/connections/${id}/models`, "DELETE", { model });
+
+// Presets (persisted): seed presets are read-only; custom ones (id "custom.*")
+// can be edited/deleted and survive a restart.
+export type Preset = { id: string; name: string; stage: string; skills: string[] };
+export const createPreset = (name: string, stage: string, skills: string[]) =>
+  jsonReq<Preset>("/presets", "POST", { name, stage, skills });
+export const deletePreset = (id: string) =>
+  fetch(`${API_BASE}/presets/${id}`, { method: "DELETE" }).then((r) => r.ok);
+export const isCustomPreset = (id: string) => (id || "").startsWith("custom.");
+
+// Flows (persisted): seed flows are read-only; custom ones (id "flow.custom.*")
+// can be created/deleted.
+export type Station = { agent: string; next: string };
+export const createFlow = (name: string, stations: Station[], maxIterations = 10) =>
+  jsonReq<Flow>("/flows", "POST", { name, stations, max_iterations: maxIterations });
+export const deleteFlow = (id: string) =>
+  fetch(`${API_BASE}/flows/${id}`, { method: "DELETE" }).then((r) => r.ok);
+export const isCustomFlow = (id: string) => (id || "").startsWith("flow.custom.");
+export const fetchFlows = () => fetchJSON<Flow[]>("/flows", []);
 
 // Manual bridge: prompts waiting for a human to paste in/out of an API-less AI.
 export type ManualPending = { id: string; title: string; prompt: string; created: number };
