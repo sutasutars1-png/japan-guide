@@ -72,6 +72,27 @@ async def test_session_persists_files_and_collects_them():
     assert "part1" in by_path["out.txt"]["content"] and "part2" in by_path["out.txt"]["content"]
 
 
+async def test_seed_files_land_in_inputs_and_are_not_recollected():
+    # prior-step outputs are handed to the next worker under inputs/ and must NOT
+    # be re-collected as this step's deliverables
+    mgr = _mgr()
+    handle, prep = await mgr.open_session(
+        actor="Reviewer", materials=False,
+        seed_files=[{"path": "report.md", "content": "前工程の成果"}],
+    )
+    try:
+        assert any("inputs/" in l.s for l in prep)
+        code, out = await mgr._run_capture(handle, "cat inputs/report.md")
+        assert "前工程の成果" in out
+        _ = [l async for l in mgr.exec_in(handle, "printf 'レビュー済み' > review.txt", actor="Reviewer")]
+        files = await mgr.collect_files(handle)
+    finally:
+        await mgr.close_session(handle)
+    paths = {f["path"] for f in files}
+    assert "review.txt" in paths
+    assert not any(p.startswith("inputs/") for p in paths)
+
+
 async def test_collect_excludes_materials_dir(tmp_path, monkeypatch):
     # point the live settings at a materials dir (no module reload needed —
     # execution_manager reads settings.* at call time)

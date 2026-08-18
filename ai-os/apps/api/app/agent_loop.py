@@ -54,11 +54,16 @@ SANDBOX_NOTES = (
     "- サンドボックスはネット遮断です。`pip install` / `apt` / ダウンロードは必ず失敗します。"
     "試さないでください。Python3 標準ライブラリと既存コマンドだけを使うこと"
     "（PIL/Pillow・numpy・matplotlib・pandas は無いものと想定）。\n"
-    "- 成果物は必ず作業ディレクトリ配下にファイルとして保存すること（保存されたファイルが成果物として回収されます）。\n"
+    "- ネットワークを必要とするスクリプトを書かないこと。内容は自分の知識から直接ファイルに書き出す"
+    "（外部データ取得を前提にして空ファイルを作らない）。\n"
+    "- 前工程の成果物は `inputs/` にあります。まず `ls inputs/` で確認し、それを読んで作業・レビューすること。\n"
+    "- 成果物は必ず作業ディレクトリ直下（カレント）にファイルとして保存すること（保存されたファイルが回収されます）。\n"
     "- まず確実なテキスト成果物（.md / .txt など本文）を最初に書き出してください。"
     "任意の追加要素はその後に。本文ファイルを書かずに終了しないこと。\n"
     "- 画像・図が必要なときは SVG ファイル（`<svg>…</svg>` のテキスト）を"
-    "標準ライブラリだけで直接書き出すこと。画像生成にライブラリ（PIL/matplotlib/cairo 等）を使わない。"
+    "標準ライブラリだけで直接書き出すこと。画像生成にライブラリ（PIL/matplotlib/cairo 等）を使わない。\n"
+    "- 作業ディレクトリと `inputs/` の外（`/usr`,`/lib` などシステム領域）を検索・走査しないこと。"
+    "必要なファイルが見つからないときは、その旨を DONE で報告して終了する（延々と探し回らない）。"
 )
 
 
@@ -206,6 +211,7 @@ class AgentLoop:
         max_iterations: int = 8,
         token_budget: int | None = None,
         allow_domains: list[str] | None = None,
+        seed_files: list[dict] | None = None,
     ) -> AsyncIterator[LogLine]:
         budget = token_budget if token_budget is not None else settings.llm_token_budget
         # Pick this agent's model, then the provider that serves it (Gemini,
@@ -229,6 +235,7 @@ class AgentLoop:
                 try:
                     session, prep = await self._manager.open_session(
                         actor=agent_name, allow_domains=domains, materials=True,
+                        seed_files=seed_files,
                     )
                     for ln in prep:
                         yield ln
