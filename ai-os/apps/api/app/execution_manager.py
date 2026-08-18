@@ -245,6 +245,15 @@ class ExecutionManager:
                 continue
         return n
 
+    async def write_file(self, handle: SandboxHandle, path: str, content: str) -> int:
+        """Write a text file into the session workdir (deterministic, no shell
+        quoting/heredoc). Returns bytes written; raises on total failure."""
+        data = (content or "").encode("utf-8")
+        n = await self._upload_files(handle, [(path, data)], "")
+        if not n:
+            raise RuntimeError(f"could not write {path}")
+        return len(data)
+
     async def exec_in(
         self, handle: SandboxHandle, command: str, *, actor: str = "Builder", approved: bool = False,
     ) -> AsyncIterator[LogLine]:
