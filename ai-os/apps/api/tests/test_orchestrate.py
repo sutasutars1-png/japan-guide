@@ -109,7 +109,7 @@ async def test_report_chaining_feeds_prior_output():
     seen = []  # the goal each worker step actually received
 
     class SpyLoop:
-        async def run(self, goal, *, agent_name, system=None, max_iterations=6):
+        async def run(self, goal, *, agent_name, system=None, max_iterations=6, **_kw):
             seen.append(goal)
             yield LogLine("ok", "agent finished ✓")
             yield LogLine("out", f"{agent_name} の成果物")
@@ -125,7 +125,7 @@ async def test_nonzero_exit_does_not_discard_a_valid_report():
     # A worker whose shell command exited non-zero (an `err` line) but still
     # produced a DONE report must count as SUCCESS — not trigger a re-plan.
     class ExitOneThenDoneLoop:
-        async def run(self, goal, *, agent_name, system=None, max_iterations=6):
+        async def run(self, goal, *, agent_name, system=None, max_iterations=6, **_kw):
             yield LogLine("cmd", f"{agent_name} → RUN: ls /missing")
             yield LogLine("err", "exited 1 · 0.1s")   # normal during exploration
             yield LogLine("ok", "agent finished ✓")
@@ -139,13 +139,32 @@ async def test_nonzero_exit_does_not_discard_a_valid_report():
     assert "オーケストレーション完了 ✓" in joined
 
 
+async def test_orchestrator_hands_files_to_next_worker():
+    import json
+    seen_seeds = []
+
+    class Loop:
+        async def run(self, goal, *, agent_name, system=None, max_iterations=6, seed_files=None, **_kw):
+            seen_seeds.append(list(seed_files or []))
+            yield LogLine("ok", "agent finished ✓")
+            if agent_name == "Builder":
+                yield LogLine("file", json.dumps({"path": "out.md", "size": 6, "content": "本文"}))
+            yield LogLine("out", f"{agent_name} done")
+
+    r = OrchestratorRunner(loop=Loop(), provider=FakeProvider("Builder: 作る\nReviewer: 見る\nDONE"))
+    await _collect(r, "ゴール")
+    assert seen_seeds[0] == []  # first worker gets nothing
+    # the second worker receives the Builder's generated file under seed_files
+    assert any(f["path"] == "out.md" and f["content"] == "本文" for f in seen_seeds[1])
+
+
 async def test_replan_on_worker_failure():
     # worker always fails (never emits 'agent finished ✓' → no report). The
     # orchestrator replans once, the revision also fails → stops at the limit.
     plans = ["Builder: 最初", "Reviewer: 立て直し"]
 
     class FailLoop:
-        async def run(self, goal, *, agent_name, system=None, max_iterations=6):
+        async def run(self, goal, *, agent_name, system=None, max_iterations=6, **_kw):
             yield LogLine("warn", "reached max iterations")
 
     r = OrchestratorRunner(loop=FailLoop(), provider=FakeProvider(plans))

@@ -37,13 +37,13 @@ import os, json
 out, tot = [], 0
 MAXF, MAXB, PERB = {maxf}, {maxb}, {perb}
 for dp, dns, fns in os.walk('.'):
-    dns[:] = [d for d in dns if not d.startswith('.') and d not in ('materials', '__pycache__', 'node_modules')]
+    dns[:] = [d for d in dns if not d.startswith('.') and d not in ('materials', 'inputs', '__pycache__', 'node_modules')]
     for fn in sorted(fns):
         if fn.startswith('.'):
             continue
         p = os.path.join(dp, fn)
         rel = os.path.relpath(p, '.')
-        if rel == 'materials' or rel.startswith('materials/'):
+        if rel.split('/', 1)[0] in ('materials', 'inputs'):
             continue
         try:
             sz = os.path.getsize(p)
@@ -182,10 +182,11 @@ class ExecutionManager:
 
     async def open_session(
         self, *, actor: str = "Builder", allow_domains: list[str] | None = None,
-        materials: bool = True,
+        materials: bool = True, seed_files: list[dict] | None = None,
     ) -> tuple[SandboxHandle, list[LogLine]]:
-        """Create one sandbox for a whole agent loop; copy in materials. Returns
-        the handle plus the prep log lines to emit."""
+        """Create one sandbox for a whole agent loop; copy in materials and any
+        prior-step outputs (`seed_files` → `inputs/`). Returns the handle plus the
+        prep log lines to emit."""
         allow = [d for d in (allow_domains or []) if d]
         spec = SandboxSpec(
             limits=ResourceLimits(),
@@ -203,33 +204,45 @@ class ExecutionManager:
             lines.append(LogLine("sys", "network DEFAULT DENY · allow[]"))
         if materials and settings.workspace_mount:
             try:
-                n = await self._upload_materials(handle, actor)
+                from . import materials as materials_mod
+                items = materials_mod.iter_materials(
+                    settings.workspace_mount,
+                    max_files=settings.materials_max_files,
+                    max_bytes=settings.materials_max_bytes,
+                    per_file_bytes=settings.deliverable_max_bytes,
+                )
+                n = await self._upload_files(handle, items, "materials/")
                 if n:
+                    log.append(AuditEvent("sandbox.materials", actor, f"{n} files → materials/"))
                     lines.append(LogLine("sys", f"📥 資料を {n} ファイル コピーしました → {WORKDIR}/materials/（読み取り用）"))
             except Exception as exc:  # noqa: BLE001 — materials are best-effort
                 lines.append(LogLine("warn", f"資料のコピーに失敗しました: {exc}"))
+        if seed_files:  # prior-step outputs so this worker can build on / review them
+            try:
+                items = [(f["path"], (f.get("content") or "").encode("utf-8"))
+                         for f in seed_files if f.get("path")]
+                n = await self._upload_files(handle, items, "inputs/")
+                if n:
+                    log.append(AuditEvent("sandbox.inputs", actor, f"{n} files → inputs/"))
+                    lines.append(LogLine("sys", f"📎 前工程の成果物 {n} 件を {WORKDIR}/inputs/ に配置しました"))
+            except Exception as exc:  # noqa: BLE001 — best-effort
+                lines.append(LogLine("warn", f"前工程成果物の配置に失敗: {exc}"))
         return handle, lines
 
-    async def _upload_materials(self, handle: SandboxHandle, actor: str) -> int:
-        from . import materials as materials_mod
-        items = materials_mod.iter_materials(
-            settings.workspace_mount,
-            max_files=settings.materials_max_files,
-            max_bytes=settings.materials_max_bytes,
-            per_file_bytes=settings.deliverable_max_bytes,
-        )
-        # Local runtime's root IS the workdir; docker extracts at "/" so it needs
-        # the absolute /workspace prefix.
-        prefix = f"{WORKDIR}/materials/" if getattr(self._runtime, "backend", "") == "docker" else "materials/"
+    async def _upload_files(self, handle: SandboxHandle, items, subdir: str) -> int:
+        """Write (relpath, bytes) files into <workdir>/<subdir>. Local runtime's
+        root IS the workdir; docker extracts at "/" so it needs the /workspace prefix."""
+        base = (f"{WORKDIR}/{subdir}" if getattr(self._runtime, "backend", "") == "docker" else subdir)
         n = 0
         for rel, data in items:
+            safe = "/".join(p for p in str(rel).replace("\\", "/").split("/") if p not in ("", ".", ".."))
+            if not safe:
+                continue
             try:
-                await self._runtime.upload(handle, prefix + rel, data)
+                await self._runtime.upload(handle, base + safe, data)
                 n += 1
             except Exception:  # noqa: BLE001 — skip a file we can't place
                 continue
-        if n:
-            log.append(AuditEvent("sandbox.materials", actor, f"{n} files → materials/"))
         return n
 
     async def exec_in(

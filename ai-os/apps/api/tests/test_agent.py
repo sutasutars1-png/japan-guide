@@ -72,6 +72,8 @@ async def test_system_prompt_carries_sandbox_notes():
     assert "SVG" in sysmsg
     assert "pip install" in sysmsg          # told installs will fail
     assert "テキスト成果物" in sysmsg        # write the core text first
+    assert "inputs/" in sysmsg              # prior-step outputs handoff location
+    assert "システム領域" in sysmsg          # told not to scan the whole filesystem
 
 
 async def test_loop_runs_command_then_finishes():

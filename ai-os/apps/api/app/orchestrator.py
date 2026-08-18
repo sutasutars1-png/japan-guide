@@ -235,11 +235,19 @@ class OrchestratorRunner:
 
             worker_goal = _with_context(task, reports, goal)
             system = compose_system(stage, agents_store.skills_for(stage))
+            # Hand every file produced by earlier steps to this worker's sandbox
+            # (under inputs/) so it can build on / review them — each worker runs
+            # in its own fresh sandbox, so without this the files are invisible.
+            seed_files = [
+                {"path": a["task"][len("ファイル: "):].strip(), "content": a["content"]}
+                for a in artifacts if a["task"].startswith("ファイル: ")
+            ]
             report_lines: list[str] = []
             step_files: list[dict] = []
             capturing = halted = False
             async for line in self._loop.run(
-                worker_goal, agent_name=stage, system=system, max_iterations=per_worker_iters
+                worker_goal, agent_name=stage, system=system,
+                max_iterations=per_worker_iters, seed_files=seed_files,
             ):
                 if line.t == "file":  # a generated file — capture, show a friendly line
                     meta = _parse_file_line(line.s)

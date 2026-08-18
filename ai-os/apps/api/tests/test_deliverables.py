@@ -167,7 +167,7 @@ def test_download_unknown_format_400():
 
 def _spy_runner(plan_text):
     class SpyLoop:
-        async def run(self, goal, *, agent_name, system=None, max_iterations=6):
+        async def run(self, goal, *, agent_name, system=None, max_iterations=6, **_kw):
             yield LogLine("ok", "agent finished ✓")
             yield LogLine("out", f"{agent_name} の成果物")
 
@@ -197,7 +197,7 @@ async def test_orchestrate_captures_generated_files_as_artifacts():
     import json
 
     class FileLoop:
-        async def run(self, goal, *, agent_name, system=None, max_iterations=6):
+        async def run(self, goal, *, agent_name, system=None, max_iterations=6, **_kw):
             yield LogLine("ok", "agent finished ✓")
             yield LogLine("out", "テキストレポート")
             yield LogLine("file", json.dumps({"path": "out.md", "size": 6, "content": "# 見出し"}))

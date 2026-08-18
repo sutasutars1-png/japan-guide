@@ -265,6 +265,14 @@ the manual bridge; `gemini-*` etc. for API workers.
 - Wire the remaining sample panels (Projects/Data) to real data.
 - Bundle custom presets/flows into the environment Template export; `web.search`.
 
+**Done since (inter-step file handoff):** each worker runs in its OWN fresh
+sandbox, so a later step (e.g. Reviewer) couldn't see files an earlier step
+(Builder) wrote — it would wander the filesystem looking for them. Now the
+orchestrator hands every file produced so far to the next worker under `inputs/`
+(`open_session(seed_files=…)` → `_upload_files`, excluded from re-collection like
+`materials/`). `SANDBOX_NOTES` tells agents to read `inputs/`, not to scan system
+dirs, and to report-and-stop if expected files are absent.
+
 **Done since (sandbox-aware prompts):** workers and the orchestrator are now told
 the sandbox truth up front — no network (`pip`/`apt`/downloads fail; stdlib only),
 **write the core text deliverable first**, and **make images as SVG** (plain text,
