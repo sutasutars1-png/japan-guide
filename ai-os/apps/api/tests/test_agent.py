@@ -52,6 +52,27 @@ def test_parse_strips_fences_and_falls_back_to_done():
     assert parse_agent_action("just some prose")[0] == "done"
 
 
+def test_parse_write_captures_path_and_multiline_content():
+    kind, payload = parse_agent_action("WRITE: docs/a.md\n# 見出し\n本文")
+    assert kind == "write"
+    path, _, content = payload.partition("\n")
+    assert path == "docs/a.md"
+    assert content == "# 見出し\n本文"
+
+
+async def test_write_action_creates_a_collected_file():
+    import json
+    loop = _loop(["WRITE: note.md\n# タイトル\n本文です。", "DONE: 保存しました"])
+    out = []
+    async for l in loop.run("記事を書いて", agent_name="Builder", max_iterations=4):
+        out.append(l)
+    assert any(l.t == "out" and "WROTE note.md" in l.s for l in out)
+    file_lines = [l for l in out if l.t == "file"]
+    assert file_lines, "the written file should be collected as a deliverable"
+    meta = json.loads(file_lines[0].s)
+    assert meta["path"] == "note.md" and "本文です。" in meta["content"]
+
+
 # ---- loop behaviour ----
 
 async def test_system_prompt_carries_sandbox_notes():

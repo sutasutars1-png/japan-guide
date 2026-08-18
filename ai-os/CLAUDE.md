@@ -265,6 +265,13 @@ the manual bridge; `gemini-*` etc. for API workers.
 - Wire the remaining sample panels (Projects/Data) to real data.
 - Bundle custom presets/flows into the environment Template export; `web.search`.
 
+**Done since (WRITE action — heredoc trap fix):** the loop runs one command per
+turn and `parse_agent_action` took only the RUN line, so an agent's `cat > f <<EOF`
+heredoc lost its body and wrote an EMPTY file (then burned its budget debugging).
+Added a first-class `WRITE: <path>` action (content on the following lines,
+multi-line) → `ExecutionManager.write_file` (deterministic base64 upload, no shell
+quoting). `LOOP_PROTOCOL` now mandates WRITE for files and forbids heredocs.
+
 **Done since (inter-step file handoff):** each worker runs in its OWN fresh
 sandbox, so a later step (e.g. Reviewer) couldn't see files an earlier step
 (Builder) wrote — it would wander the filesystem looking for them. Now the
