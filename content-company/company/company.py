@@ -26,6 +26,7 @@ from .memory import CompanyMemory
 from .models import Decision, Hypothesis, Product
 from .router import ModelRouter
 from .runner import AgentRunner
+from .skill_improve import SkillLab
 from .storage import Storage
 from .tasks import TaskManager
 
@@ -41,6 +42,22 @@ class Company:
         self.tasks = TaskManager(self.storage, self.router, self.cost, runner)
         self.kpi = KPI(self.storage, self.config, self.cost)
         self.experiments = ExperimentDesign(self.storage, self.config)
+        self.skills_lab = SkillLab(self.storage, self.approvals, self.memory)
+
+    # ---- ランナー切り替え -------------------------------------------------
+
+    def enable_llm(self, **kwargs: Any) -> bool:
+        """タスク実行を実 LLM (Claude Code CLI) に切り替える (§42)。
+
+        現行採用版の Skill 定義 (§20) をプロンプトに反映する。CLI が無ければ
+        False を返し、既定の TemplateRunner のまま。
+        """
+        from .runner_claude import ClaudeRunner
+
+        if ClaudeRunner.available(kwargs.get("claude_bin", "claude")) is None:
+            return False
+        self.tasks.runner = ClaudeRunner(skill_text=self.skills_lab.text, **kwargs)
+        return True
 
     # ---- 意思決定ログ -----------------------------------------------------
 

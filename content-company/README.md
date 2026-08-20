@@ -21,13 +21,23 @@
 - **ダッシュボード**（§25）静的 HTML 生成
 - **外部 API 不要**。標準ライブラリのみ・ローカルファイル保存（§36, §26）
 
-実際の文章生成 LLM は `AgentRunner` の差し込みで後から接続する構造
-（既定は決定論的な雛形 `TemplateRunner`）。→ [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- **実 LLM 生成**（§42）: Claude Code CLI を使うキーレス・ランナー
+  （`ClaudeRunner`）。`--llm` で有効化。未検出時は雛形にフォールバック。
+- **Skill 自己改善ループ**（§20）: 改善案→評価→承認→新バージョン採用。直接
+  上書き禁止・履歴保存。
+- **ローカル Web GUI**: `python3 -m company gui`（標準ライブラリのみ、npm不要）。
+
+実際の文章生成 LLM は `AgentRunner` の差し込みで接続する構造（既定は決定論的な
+雛形 `TemplateRunner`、`--llm` で `ClaudeRunner`）。→ [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
 ## クイックスタート
 
 ```bash
 cd content-company
+
+# ★ いちばん簡単: GUI を起動（ブラウザで操作）
+python3 -m company gui                    # http://127.0.0.1:8787/
+python3 -m company gui --llm              # 実 LLM 生成を有効化して起動
 
 # 1) 架空データで全ループを実演（企画→承認→公開→実績→評価）
 python3 -m company demo
@@ -36,7 +46,8 @@ python3 -m company demo
 python3 -m company dashboard --out dashboard.html
 
 # 3) 実運用の入口: N商品を公開待ちまで企画
-python3 -m company plan --n 5
+python3 -m company plan --n 5            # 雛形で骨格生成（外部API不要）
+python3 -m company plan --n 5 --llm      # Claude Code CLI で実文章生成 (§42)
 python3 -m company approvals            # 承認待ち一覧 (§21)
 python3 -m company approve <approval_id>
 python3 -m company publish <product_id> --url https://note.com/... --approval <id>
@@ -44,9 +55,21 @@ python3 -m company metrics <product_id> --pv 1200 --purchases 30 --revenue 3000
 python3 -m company evaluate             # 成功/失敗の評価と次アクション (§31)
 python3 -m company report --period 2026-08
 
+# Skill 自己改善 (§20)
+python3 -m company skill list
+python3 -m company skill propose article-writing --guidance "冒頭200字で悩みを言語化"
+python3 -m company skill request-adoption article-writing 2   # 承認申請
+python3 -m company approve <approval_id>
+python3 -m company skill adopt article-writing 2 --approval <approval_id>
+
 # テスト
 python3 -m unittest discover -s tests
 ```
+
+> **`--llm` の前提**: この環境で `claude`（Claude Code CLI）が PATH にあり、
+> サブスクリプションでログイン済みであること。API キーは使わず従量課金は発生
+> しません（§36）。1商品あたり4回の LLM 呼び出し（調査/企画/執筆/レビュー）を
+> 順次行うため数分かかります。未ログイン/未検出時は自動で雛形にフォールバック。
 
 > `demo` は説明用の**架空データ**を書き込みます。実運用データと混ぜたくない
 > 場合は `data_dir` を分けてください（`company.json` の `data_dir`）。

@@ -33,6 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     p_plan = sub.add_parser("plan", help="N商品を企画→記事→レビュー→公開待ちまで")
     p_plan.add_argument("--n", type=int, default=5)
     p_plan.add_argument("--month", default=None)
+    p_plan.add_argument("--llm", action="store_true",
+                        help="Claude Code CLI で実文章を生成 (§42)。未ログイン/未検出時は雛形")
 
     sub.add_parser("status", help="経営KPIサマリ")
     sub.add_parser("approvals", help="承認待ち一覧 (§21)")
@@ -76,14 +78,47 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("demo", help="架空データで全ループを実演 (企画→承認→公開→実績→評価)")
 
+    # Skill 自己改善 (§20)
+    p_skill = sub.add_parser("skill", help="Skill 自己改善ループ (§20)")
+    ssub = p_skill.add_subparsers(dest="skill_cmd", required=True)
+    ssub.add_parser("list", help="全 Skill の現行版一覧")
+    sp_ver = ssub.add_parser("versions", help="ある Skill のバージョン履歴")
+    sp_ver.add_argument("key")
+    sp_prop = ssub.add_parser("propose", help="改善案を新バージョンとして提案")
+    sp_prop.add_argument("key")
+    sp_prop.add_argument("--purpose", default=None)
+    sp_prop.add_argument("--success", default=None)
+    sp_prop.add_argument("--guidance", default=None)
+    sp_prop.add_argument("--forbidden", default=None, help="カンマ区切り")
+    sp_eval = ssub.add_parser("evaluate", help="改善効果を評価（旧版比較）")
+    sp_eval.add_argument("key")
+    sp_eval.add_argument("version", type=int)
+    sp_req = ssub.add_parser("request-adoption", help="採用の承認を申請")
+    sp_req.add_argument("key")
+    sp_req.add_argument("version", type=int)
+    sp_adopt = ssub.add_parser("adopt", help="承認済みバージョンを採用（旧版は退役）")
+    sp_adopt.add_argument("key")
+    sp_adopt.add_argument("version", type=int)
+    sp_adopt.add_argument("--approval", required=True)
+
+    p_gui = sub.add_parser("gui", help="ローカル Web GUI を起動")
+    p_gui.add_argument("--port", type=int, default=8787)
+    p_gui.add_argument("--host", default="127.0.0.1")
+    p_gui.add_argument("--llm", action="store_true", help="実 LLM 生成を有効化")
+
     args = ap.parse_args(argv)
     c = Company()
 
     if args.cmd == "plan":
+        if getattr(args, "llm", False):
+            if c.enable_llm():
+                print("実 LLM (Claude Code CLI) を有効化しました。", file=sys.stderr)
+            else:
+                print("claude CLI 未検出。雛形 (TemplateRunner) で継続します。", file=sys.stderr)
         res = c.plan_products(args.n, month=args.month)
         _print(res)
-        print(f"\n{len(res)}商品を公開待ちまで進めました。"
-              f"承認は `python -m company approvals` で確認。", file=sys.stderr)
+        print(f"\n{len(res)}商品を進めました。承認待ちは "
+              f"`python -m company approvals` で確認。", file=sys.stderr)
     elif args.cmd == "status":
         _print(c.kpi.summary())
     elif args.cmd == "approvals":
@@ -122,6 +157,25 @@ def main(argv: list[str] | None = None) -> int:
         _print(out["summary"])
         print("\n架空データで全ループを実演しました。"
               "`python -m company dashboard` で可視化できます。", file=sys.stderr)
+    elif args.cmd == "skill":
+        lab = c.skills_lab
+        if args.skill_cmd == "list":
+            _print(lab.all_current())
+        elif args.skill_cmd == "versions":
+            _print(lab.versions(args.key))
+        elif args.skill_cmd == "propose":
+            forb = args.forbidden.split(",") if args.forbidden else None
+            _print(lab.propose(args.key, purpose=args.purpose, success=args.success,
+                               guidance=args.guidance, forbidden=forb))
+        elif args.skill_cmd == "evaluate":
+            _print(lab.evaluate(args.key, args.version))
+        elif args.skill_cmd == "request-adoption":
+            _print(lab.request_adoption(args.key, args.version))
+        elif args.skill_cmd == "adopt":
+            _print(lab.adopt(args.key, args.version, args.approval))
+    elif args.cmd == "gui":
+        from .webgui import serve
+        serve(c, host=args.host, port=args.port, llm=args.llm)
     else:  # pragma: no cover
         ap.print_help()
         return 1

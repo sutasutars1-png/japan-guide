@@ -13,3 +13,7 @@ company.local.json
 data/**/*.json
 data/**/*.jsonl
 !data/**/.gitkeep
+
+# デバッグ一時出力
+*.log
+plan.out

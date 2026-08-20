@@ -21,18 +21,22 @@ AI エージェント群で **noteを中心としたデジタルコンテンツ�
 
 ## いまの状態（新しいセッションはここから）
 
-**実装済み（ロードマップ §41 Step 1〜2 の骨格）**
+**実装済み（ロードマップ §41 Step 1〜2 ＋ 実 LLM / 自己改善 / GUI）**
 - OS コア: Storage / Memory / Router / Cost / Approval / Task / KPI / Experiment
 - MVP パイプライン: `Company.plan_products()`（§39）→ 調査→企画→執筆→レビュー→公開待ち
 - 分析・改善: `Company.evaluate()` / `Company.report()`（§31, §39）
+- **実 LLM ランナー**（§42, `runner_claude.ClaudeRunner`）: Claude Code CLI で
+  キーレス生成。`Company.enable_llm()` / `--llm`。未検出時は雛形にフォールバック。
+- **Skill 自己改善ループ**（§20, `skill_improve.SkillLab`）: 改善案→評価→承認→
+  新版採用。直接上書き禁止・履歴保存。
+- **ローカル Web GUI**（`webgui.py`）: `python3 -m company gui`。標準ライブラリのみ。
 - ダッシュボード生成（§25）、デモシード（架空データで全ループ実演）
-- **標準ライブラリのみ・外部 API 不要**（§36）。`python3 -m unittest discover -s tests` が緑（14件）
+- **標準ライブラリのみ・外部 API 不要**（§36）。`python3 -m unittest discover -s tests` が緑（21件）
 
 **未実装 / 次にやること**
-- 実 LLM ランナー（`AgentRunner` 実装で Claude Code / `ai-os/` に接続）→ 雛形を実文章に置換
 - note からの販売/PV データ取り込み経路（付録A #2。当面は `metrics` で手動入力）
 - SNS（X/TikTok）チャネル接続（§32–33）
-- Skill 自己改善ループの実行系（§20。定義と方針はあり）
+- reject 記事の自動再執筆ループ（現在は差し戻しのみ。コスト配慮で既定オフ）
 
 ## 開発ワークフロー
 
@@ -54,6 +58,9 @@ AI エージェント群で **noteを中心としたデジタルコンテンツ�
 | Approval / Permission | `company/approval.py` | §3.2, §21 |
 | Task 管理 | `company/tasks.py` | §18 |
 | Agent 実行の差し込み | `company/runner.py` | §42 |
+| 実 LLM ランナー(Claude CLI) | `company/runner_claude.py` | §42 |
+| Skill 自己改善 | `company/skill_improve.py` | §20 |
+| ローカル Web GUI | `company/webgui.py` | §25, §3.3 |
 | 組織（Agent 定義） | `company/agents.py` | §4, §28, §35 |
 | Skill 定義 | `company/skills.py` | §19 |
 | 実験設計・撤退基準 | `company/experiments.py` | §10, §11, 付録A |
