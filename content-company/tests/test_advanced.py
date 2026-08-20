@@ -230,6 +230,99 @@ class NoteChannelTest(unittest.TestCase):
             self.assertEqual(c.storage.get("products", p.id)["pv"], 0)  # 未更新
 
 
+class SocialChannelTest(unittest.TestCase):
+    def _pub(self, c):
+        from company.models import Product
+        p = Product(title="売れ筋", category="A", theme="AI 副業", status="published",
+                    url="https://note.com/u/n/x", revenue_jpy=5000)
+        c.storage.put("products", p.to_dict())
+        return p
+
+    def test_draft_creates_approval_and_requires_it_before_posting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            p = self._pub(c)
+            d = c.social.draft("x", p.id)
+            self.assertEqual(d["channel"], "x")
+            self.assertTrue(d["approval_id"])
+            # 承認前は投稿記録できない（§32 人間確認）
+            with self.assertRaises(PermissionError_):
+                c.social.mark_posted(d["social_id"], "https://x.com/i/status/1")
+            c.approvals.approve(d["approval_id"])
+            post = c.social.mark_posted(d["social_id"], "https://x.com/i/status/1")
+            self.assertEqual(post.status, "posted")
+            self.assertEqual(post.url, "https://x.com/i/status/1")
+
+    def test_tiktok_draft_and_reject_channel(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            p = self._pub(c)
+            d = c.social.draft("tiktok", p.id)
+            self.assertEqual(d["content"]["channel"], "tiktok")
+            with self.assertRaises(ValueError):
+                c.social.draft("instagram", p.id)
+
+
+class SchedulerTest(unittest.TestCase):
+    def test_default_off_and_safe_jobs_only(self):
+        from company.scheduler import SAFE_JOBS
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            self.assertFalse(c.scheduler.get_state()["enabled"])  # 既定オフ
+            self.assertEqual(set(SAFE_JOBS), {"evaluate", "note_import", "social_draft"})
+            with self.assertRaises(KeyError):
+                c.scheduler.run_job("rm_rf")  # 未登録は実行不可
+
+    def test_run_jobs_are_safe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            self.assertTrue(c.scheduler.run_job("evaluate")["ok"])
+            # note_import: inbox が無ければスキップ（エラーにしない）
+            r = c.scheduler.run_job("note_import")
+            self.assertIn("skipped", r["result"])
+            # social_draft: チャネル無効ならスキップ（投稿もしない）
+            r2 = c.scheduler.run_job("social_draft")
+            self.assertIn("skipped", r2["result"])
+
+    def test_social_draft_job_respects_channel_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            from company.models import Product
+            p = Product(title="P", category="A", status="published", revenue_jpy=100)
+            c.storage.put("products", p.to_dict())
+            c.update_config({"x_enabled": True})
+            r = c.scheduler.run_job("social_draft")
+            self.assertTrue(r["result"]["made"])  # x 下書きが1件作られる
+            self.assertTrue(c.social.has_draft("x", p.id))
+
+    def test_persist_and_reload_schedule(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            c.scheduler.set_job("evaluate", enabled=True, interval_min=60)
+            c.scheduler.set_enabled(True)
+            c.scheduler.stop()
+            c2 = make_company(tmp)
+            st = c2.scheduler.get_state()
+            self.assertTrue(st["enabled"])
+            self.assertTrue(st["jobs"]["evaluate"]["enabled"])
+            self.assertEqual(st["jobs"]["evaluate"]["interval_min"], 60)
+
+
+class ConfigTest(unittest.TestCase):
+    def test_update_rejects_unsafe_fields_and_persists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            out = c.update_config({"x_enabled": "true", "max_rewrites": "9",
+                                   "data_dir": "/etc", "unknown": 1})
+            self.assertTrue(c.config.x_enabled)
+            self.assertEqual(c.config.max_rewrites, 5)  # 上限5にクランプ
+            self.assertEqual(str(c.config.data_dir), tmp)  # data_dir は不変
+            self.assertNotIn("data_dir", out["applied"])
+            # 再構築で永続化を確認
+            c2 = make_company(tmp)
+            self.assertTrue(c2.config.x_enabled)
+
+
 class WebGuiTest(unittest.TestCase):
     def _server(self, c: Company):
         from company.webgui import _Handler
@@ -248,6 +341,28 @@ class WebGuiTest(unittest.TestCase):
             headers={"Content-Type": "application/json"}, method="POST")
         with urllib.request.urlopen(req, timeout=10) as r:
             return json.loads(r.read().decode())
+
+    def test_csrf_blocks_cross_origin_post(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            httpd, port = self._server(c)
+            try:
+                def post(origin):
+                    req = urllib.request.Request(
+                        f"http://127.0.0.1:{port}/api/schedule/master",
+                        data=b'{"enabled":true}',
+                        headers={"Content-Type": "application/json", "Origin": origin},
+                        method="POST")
+                    try:
+                        with urllib.request.urlopen(req, timeout=5) as r:
+                            return r.status
+                    except urllib.error.HTTPError as e:
+                        return e.code
+                self.assertEqual(post("http://evil.example.com"), 403)  # クロスサイトは拒否
+                self.assertEqual(post(f"http://127.0.0.1:{port}"), 200)  # 同一オリジンは許可
+            finally:
+                httpd.shutdown()
+                httpd.server_close()
 
     def test_endpoints(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -273,6 +388,24 @@ class WebGuiTest(unittest.TestCase):
                 self.assertEqual(apr["kind"], "config")
                 st2 = self._get(port, "/api/state")
                 self.assertTrue(any(a["kind"] == "config" for a in st2["pending"]))
+                # config 更新（安全フィールドのみ）
+                cfg = self._post(port, "/api/config", {"x_enabled": True, "data_dir": "/etc"})
+                self.assertTrue(cfg["config"]["x_enabled"])
+                # schedule master + job
+                sm = self._post(port, "/api/schedule/master", {"enabled": False})
+                self.assertFalse(sm["enabled"])
+                sj = self._post(port, "/api/schedule/job",
+                                {"name": "evaluate", "enabled": True, "interval_min": 120})
+                self.assertTrue(sj["jobs"]["evaluate"]["enabled"])
+                # social draft（公開商品を用意）
+                from company.models import Product
+                p = Product(title="pub", category="A", status="published")
+                c.storage.put("products", p.to_dict())
+                sd = self._post(port, "/api/social/draft", {"channel": "x", "product_id": p.id})
+                self.assertEqual(sd["channel"], "x")
+                st3 = self._get(port, "/api/state")
+                self.assertTrue(st3["channels"]["x"])
+                self.assertTrue(len(st3["social"]) >= 1)
             finally:
                 httpd.shutdown()
                 httpd.server_close()

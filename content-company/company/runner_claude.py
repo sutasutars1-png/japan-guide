@@ -36,6 +36,8 @@ TASK_ROLE: dict[str, tuple[str, str]] = {
     "product_plan": ("cpo", "product-planning"),
     "article_write": ("writer", "article-writing"),
     "review_final": ("reviewer", "quality-review"),
+    "x_post": ("marketing", "x-marketing"),
+    "tiktok_script": ("marketing", "tiktok-marketing"),
 }
 
 # task_type → 期待する JSON キー（検証用）と追加指示。
@@ -69,6 +71,22 @@ _CONTRACT: dict[str, dict[str, Any]] = {
             "読者価値を中心に、誇張・誤情報を避ける。プレースホルダ（[ ]）は残さない。"
             "入力に feedback がある場合は、その差し戻し指摘を必ず反映して "
             "previous_body を改稿する（具体例・手順・固有名詞を補い、断定表現を是正）。"
+        ),
+    },
+    "x_post": {
+        "keys": ["channel", "posts", "hashtags", "note"],
+        "instruction": (
+            "無料記事から note の有料記事へ誘導する X 投稿案を作る（§32）。"
+            "posts は3〜4件の短文（各140字以内）の配列で、最後に note への誘導を含める。"
+            "channel は 'x'。誇張・断定（景表法優良誤認）を避ける。自動投稿はしない前提の下書き。"
+        ),
+    },
+    "tiktok_script": {
+        "keys": ["channel", "hook", "script", "captions", "hashtags", "note"],
+        "instruction": (
+            "売れた記事をショート動画化する台本を作る（§33）。channel は 'tiktok'。"
+            "hook は最初の3秒の一言、script は秒数付きの構成配列、captions は字幕案の配列。"
+            "note への導線を含める。誇張・断定を避ける。撮影・投稿は人間が行う前提の下書き。"
         ),
     },
     "review_final": {

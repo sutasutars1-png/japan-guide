@@ -111,6 +111,41 @@ def main(argv: list[str] | None = None) -> int:
     np_imp.add_argument("--dry-run", action="store_true")
     nsub.add_parser("template", help="取り込み用 CSV のサンプル列を表示")
 
+    # X / TikTok チャネル (§32, §33)
+    p_soc = sub.add_parser("social", help="X / TikTok 下書き（投稿は人間, §32）")
+    ssub2 = p_soc.add_subparsers(dest="social_cmd", required=True)
+    sp_d = ssub2.add_parser("draft", help="下書きを生成（承認待ちに追加）")
+    sp_d.add_argument("channel", choices=["x", "tiktok"])
+    sp_d.add_argument("product_id")
+    sp_d.add_argument("--llm", action="store_true")
+    sp_l = ssub2.add_parser("list", help="下書き一覧")
+    sp_l.add_argument("--channel", default=None)
+    sp_p = ssub2.add_parser("posted", help="人間が投稿した URL を記録（要承認）")
+    sp_p.add_argument("social_id")
+    sp_p.add_argument("--url", required=True)
+
+    # 定期スケジュール（既定オフ）
+    p_sch = sub.add_parser("schedule", help="定期スケジュール（既定オフ・安全ジョブのみ）")
+    schsub = p_sch.add_subparsers(dest="sch_cmd", required=True)
+    schsub.add_parser("status", help="状態表示")
+    sc_m = schsub.add_parser("master", help="マスターのオン/オフ")
+    sc_m.add_argument("state", choices=["on", "off"])
+    sc_j = schsub.add_parser("job", help="ジョブのオン/オフ・間隔設定")
+    sc_j.add_argument("name", choices=["evaluate", "note_import", "social_draft"])
+    sc_j.add_argument("--on", dest="on", action="store_true")
+    sc_j.add_argument("--off", dest="off", action="store_true")
+    sc_j.add_argument("--interval", type=int, default=None, help="分")
+    sc_r = schsub.add_parser("run", help="ジョブを今すぐ実行")
+    sc_r.add_argument("name", choices=["evaluate", "note_import", "social_draft"])
+
+    # 設定 (§23, §36)
+    p_cfg = sub.add_parser("config", help="運用パラメータの表示 / 変更")
+    cfgsub = p_cfg.add_subparsers(dest="cfg_cmd", required=True)
+    cfgsub.add_parser("show", help="現在の編集可能な設定を表示")
+    cf_s = cfgsub.add_parser("set", help="設定を変更（例: set x_enabled true）")
+    cf_s.add_argument("key")
+    cf_s.add_argument("value")
+
     p_gui = sub.add_parser("gui", help="ローカル Web GUI を起動")
     p_gui.add_argument("--port", type=int, default=8787)
     p_gui.add_argument("--host", default="127.0.0.1")
@@ -194,6 +229,31 @@ def main(argv: list[str] | None = None) -> int:
         elif args.note_cmd == "template":
             from .note_channel import NoteImporter
             print(NoteImporter.template_csv())
+    elif args.cmd == "social":
+        if args.social_cmd == "draft":
+            if getattr(args, "llm", False):
+                c.enable_llm()
+            _print(c.social.draft(args.channel, args.product_id))
+        elif args.social_cmd == "list":
+            _print(c.social.list(args.channel))
+        elif args.social_cmd == "posted":
+            _print(c.social.mark_posted(args.social_id, args.url).to_dict())
+    elif args.cmd == "schedule":
+        if args.sch_cmd == "status":
+            _print(c.scheduler.get_state())
+        elif args.sch_cmd == "master":
+            _print(c.scheduler.set_enabled(args.state == "on"))
+        elif args.sch_cmd == "job":
+            enabled = True if args.on else (False if args.off else None)
+            _print(c.scheduler.set_job(args.name, enabled=enabled,
+                                       interval_min=args.interval))
+        elif args.sch_cmd == "run":
+            _print(c.scheduler.run_job(args.name))
+    elif args.cmd == "config":
+        if args.cfg_cmd == "show":
+            _print(c.config.editable_snapshot())
+        elif args.cfg_cmd == "set":
+            _print(c.update_config({args.key: args.value}))
     elif args.cmd == "gui":
         from .webgui import serve
         serve(c, host=args.host, port=args.port, llm=args.llm)

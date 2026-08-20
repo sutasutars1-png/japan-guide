@@ -35,6 +35,7 @@ class Company:
     def __init__(self, config: Config | None = None, runner: AgentRunner | None = None):
         self.config = config or load_config()
         self.storage = Storage(self.config.data_dir)
+        self.config.load_overlay()  # data_dir に保存済みの GUI 設定を反映
         self.memory = CompanyMemory(self.storage)
         self.router = ModelRouter()
         self.cost = CostController(self.storage, self.config)
@@ -44,8 +45,19 @@ class Company:
         self.experiments = ExperimentDesign(self.storage, self.config)
         self.skills_lab = SkillLab(self.storage, self.approvals, self.memory)
         from .note_channel import NoteExporter, NoteImporter
+        from .social import SocialChannel
+        from .scheduler import JobScheduler
         self.note_export = NoteExporter(self)
         self.note_import = NoteImporter(self)
+        self.social = SocialChannel(self)
+        self.scheduler = JobScheduler(self)
+
+    # ---- 設定変更（GUI/CLI からの安全な更新, §21 config） ----------------
+
+    def update_config(self, changes: dict[str, Any]) -> dict[str, Any]:
+        applied = self.config.update(changes)
+        self.config.persist()
+        return {"applied": applied, "config": self.config.editable_snapshot()}
 
     # ---- ランナー切り替え -------------------------------------------------
 

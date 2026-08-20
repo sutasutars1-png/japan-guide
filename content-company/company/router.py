@@ -29,6 +29,8 @@ TASK_PROFILE: dict[str, dict[str, object]] = {
     "article_outline": {"difficulty": 2, "importance": 2, "budget": "MEDIUM"},
     "article_write": {"difficulty": 2, "importance": 2, "budget": "MEDIUM"},
     "sns_post": {"difficulty": 2, "importance": 2, "budget": "MEDIUM"},
+    "x_post": {"difficulty": 2, "importance": 2, "budget": "MEDIUM"},
+    "tiktok_script": {"difficulty": 2, "importance": 2, "budget": "MEDIUM"},
     "product_desc": {"difficulty": 2, "importance": 2, "budget": "MEDIUM"},
     "product_plan": {"difficulty": 3, "importance": 3, "budget": "HIGH"},
     "review_final": {"difficulty": 3, "importance": 3, "budget": "HIGH"},

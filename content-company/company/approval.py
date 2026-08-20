@@ -22,6 +22,7 @@ SENSITIVE_OPERATIONS = {
     "payment",  # 支払い
     "delete",  # 削除
     "bulk_post",  # 大量投稿
+    "sns_post",  # SNS投稿（X/TikTok）: 人間確認を通す (§32)
     "config",  # 重要な設定変更
 }
 

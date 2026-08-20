@@ -34,12 +34,17 @@ AI エージェント群で **noteを中心としたデジタルコンテンツ�
   書き直す。上限 `config.max_rewrites`（既定 3）、実 LLM 時のみ作動。
 - **note 連携**（§22, 付録A #2, `note_channel.py`）: 公開用 Markdown エクスポート
   （自動投稿なし）+ 売上/PV **CSV 取り込み**。
+- **X / TikTok**（§32-33, `social.py`）: 下書き生成のみ。投稿は人間、外部通信なし。
+- **定期スケジューラ**（`scheduler.py`）: `SAFE_JOBS` の内部ジョブのみ、既定オフ、
+  GUI/CLI でオンオフ。公開・投稿・承認はしない。
+- **GUI 設定**（`config.py` の `EDITABLE_FIELDS`）: 許可フィールドのみ変更、
+  `data/config.local.json` に永続化。GUI は 127.0.0.1 束縛・CSRF/ボディ上限あり。
 - ダッシュボード生成（§25）、デモシード（架空データで全ループ実演）
-- **標準ライブラリのみ・外部 API 不要**（§36）。`python3 -m unittest discover -s tests` が緑（29件）
+- **標準ライブラリのみ・外部 API 不要**（§36）。`python3 -m unittest discover -s tests` が緑（37件）
 
 **未実装 / 次にやること**
-- SNS（X/TikTok）チャネル接続（§32–33）
-- note 公開の半自動化（公式手段の範囲で）／ CSV 取り込みのスケジュール化
+- SNS 自動投稿（§32「効果と安全性が確認できたら」）は意図的に未実装（安全側）
+- note 公開の半自動化（公式手段の範囲で）／ 効果測定（流入→購入）の可視化強化
 
 ## 開発ワークフロー
 
@@ -65,6 +70,8 @@ AI エージェント群で **noteを中心としたデジタルコンテンツ�
 | Skill 自己改善 | `company/skill_improve.py` | §20 |
 | ローカル Web GUI | `company/webgui.py` | §25, §3.3 |
 | note 連携（出力/CSV取込） | `company/note_channel.py` | §22, 付録A #2 |
+| X / TikTok 下書き | `company/social.py` | §32, §33 |
+| 定期スケジューラ | `company/scheduler.py` | §38, 付録A #2 |
 | 自動再執筆ループ | `company/company.py:_write_and_review` | §4 |
 | 組織（Agent 定義） | `company/agents.py` | §4, §28, §35 |
 | Skill 定義 | `company/skills.py` | §19 |

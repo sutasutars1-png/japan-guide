@@ -98,6 +98,42 @@ class TemplateRunner:
             "cta": "この続きが役に立ったらスキ・フォローをお願いします。",
         }
 
+    # ---- x_post (§32: 無料記事 → X投稿 → note) ---------------------------
+
+    def _x_post(self, p: dict[str, Any]) -> dict[str, Any]:
+        product = p.get("product", {})
+        title = product.get("title", "商品")
+        url = product.get("url", "")
+        return {
+            "channel": "x",
+            "posts": [
+                f"【{title}】の要点を1つ。まずはここだけ押さえればOK。",
+                "続きと具体的な手順は note にまとめました 👇",
+                f"{url}".strip() or "(note URL を貼る)",
+            ],
+            "hashtags": ["#note", "#副業", "#AI活用"],
+            "note": "TemplateRunner の雛形。Marketing(LLM) が実データで置換する。",
+        }
+
+    # ---- tiktok_script (§33: 売れた記事 → ショート動画) ------------------
+
+    def _tiktok_script(self, p: dict[str, Any]) -> dict[str, Any]:
+        product = p.get("product", {})
+        title = product.get("title", "商品")
+        return {
+            "channel": "tiktok",
+            "hook": f"{title}、実はこの順番でやると早いです",
+            "script": [
+                "0-3秒: 結論を先に見せる（フック）",
+                "3-15秒: つまずきポイントを3つ",
+                "15-40秒: 解決の手順を実演",
+                "40-55秒: まとめ + note に詳細がある導線",
+            ],
+            "captions": ["最初の30分でやることだけ", "詳細は note（プロフィールから）"],
+            "hashtags": ["#tiktok", "#勉強", "#副業"],
+            "note": "TemplateRunner の雛形。Marketing(LLM) が実データで置換する。",
+        }
+
     # ---- review_final (§4 の観点 + 付録A #4 法的チェック) ----------------
 
     def _review_final(self, p: dict[str, Any]) -> dict[str, Any]:

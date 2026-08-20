@@ -44,6 +44,7 @@ def _state(c: Company) -> dict:
         "url": p.get("url"), "approval_id": pub_apr.get(p["id"]),
     } for p in products]
     prod_rows.sort(key=lambda r: (r["status"] != "awaiting_approval", r["id"]))
+    social = c.social.list()
     return {
         "summary": c.kpi.summary(),
         "progress": c.experiments.progress(),
@@ -53,6 +54,10 @@ def _state(c: Company) -> dict:
         "tasks_today": c.cost.tasks_today(),
         "max_tasks_per_day": c.config.max_tasks_per_day,
         "runner": type(c.tasks.runner).__name__,
+        "config": c.config.editable_snapshot(),
+        "schedule": c.scheduler.get_state(),
+        "channels": {"x": c.config.x_enabled, "tiktok": c.config.tiktok_enabled},
+        "social": social,
     }
 
 
@@ -76,10 +81,14 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"),
                    "application/json; charset=utf-8")
 
+    MAX_BODY = 1_048_576  # 1MB 上限（メモリ濫用の防止）
+
     def _body(self) -> dict:
         n = int(self.headers.get("Content-Length", 0) or 0)
         if not n:
             return {}
+        if n > self.MAX_BODY:
+            raise ValueError("リクエストボディが大きすぎます")
         try:
             return json.loads(self.rfile.read(n).decode("utf-8") or "{}")
         except json.JSONDecodeError:
@@ -117,11 +126,29 @@ class _Handler(BaseHTTPRequestHandler):
 
     # ---- POST -------------------------------------------------------------
 
+    def _csrf_ok(self) -> bool:
+        """CSRF 対策: ブラウザからのクロスサイト POST を弾く。
+
+        Origin が付いていれば、そのホストがループバックまたは待ち受けホストの
+        場合のみ許可する。curl 等（Origin 無し）は許可（ローカル操作）。
+        """
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        try:
+            host = urlparse(origin).hostname or ""
+        except ValueError:
+            return False
+        allowed = {"127.0.0.1", "localhost", "::1", self.server.server_address[0]}
+        return host in allowed
+
     def do_POST(self):
         u = urlparse(self.path)
         c = self.company
-        b = self._body()
+        if not self._csrf_ok():
+            return self._json({"error": "クロスオリジンの操作は拒否されました"}, 403)
         try:
+            b = self._body()
             if u.path == "/api/plan":
                 if b.get("llm"):
                     enabled = c.enable_llm()
@@ -165,6 +192,20 @@ class _Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/note/import":
                 self._json(c.note_import.import_csv(b.get("csv", ""),
                                                     dry_run=bool(b.get("dry_run"))))
+            elif u.path == "/api/config":
+                self._json(c.update_config(b or {}))
+            elif u.path == "/api/social/draft":
+                self._json(c.social.draft(b["channel"], b["product_id"]))
+            elif u.path == "/api/social/posted":
+                self._json(c.social.mark_posted(b["social_id"], b["url"]).to_dict())
+            elif u.path == "/api/schedule/master":
+                self._json(c.scheduler.set_enabled(bool(b.get("enabled"))))
+            elif u.path == "/api/schedule/job":
+                self._json(c.scheduler.set_job(
+                    b["name"], enabled=b.get("enabled"),
+                    interval_min=b.get("interval_min")))
+            elif u.path == "/api/schedule/run":
+                self._json(c.scheduler.run_job(b["name"]))
             else:
                 self._json({"error": "not found"}, 404)
         except PermissionError_ as exc:
@@ -180,7 +221,14 @@ def serve(company: Company, *, host: str = "127.0.0.1", port: int = 8787,
     if llm:
         ok = company.enable_llm()
         print("実 LLM:", "有効 (Claude Code CLI)" if ok else "無効 (claude 未検出) → 雛形")
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        print(f"⚠ 警告: {host} で待ち受けます。GUI に認証はありません。"
+              " ローカル専用ツールなので 127.0.0.1 での利用を推奨します。")
     _Handler.company = company
+    # 永続化された設定でスケジューラが有効なら起動（既定は無効なので起動しない）。
+    if company.scheduler.get_state()["enabled"]:
+        company.scheduler.start()
+        print("定期スケジューラ: 有効（保存済み設定）")
     httpd = ThreadingHTTPServer((host, port), _Handler)
     print(f"AI会社 GUI 起動: http://{host}:{port}/  (Ctrl+C で停止)")
     try:
@@ -188,6 +236,7 @@ def serve(company: Company, *, host: str = "127.0.0.1", port: int = 8787,
     except KeyboardInterrupt:
         print("\n停止しました。")
     finally:
+        company.scheduler.stop()
         httpd.server_close()
 
 
@@ -252,6 +301,24 @@ iframe{width:100%;height:520px;border:1px solid var(--line);border-radius:10px;b
 
   <details><summary>🧠 Skill 自己改善（§20）</summary>
     <div id="skills" style="margin-top:8px"></div>
+  </details>
+
+  <details><summary>⚙️ 設定（チャネル有効化・運用パラメータ · §23, §36）</summary>
+    <div id="settings" style="margin-top:8px"></div>
+  </details>
+
+  <details><summary>⏱️ 定期スケジュール（既定オフ · 安全な内部ジョブのみ）</summary>
+    <p class="muted" style="margin:8px 0">公開・SNS投稿・承認は自動化しません。
+      有効なのは 評価 / ローカルCSV取込 / SNS下書き生成 のみ（投稿は人間）。</p>
+    <div class="row" style="margin-bottom:8px">
+      <label><input type="checkbox" id="schedMaster"> 定期実行を有効化（マスター）</label>
+      <span class="muted" id="schedRunning"></span>
+    </div>
+    <div id="schedJobs"></div>
+  </details>
+
+  <details><summary>📣 SNS 下書き（X / TikTok · §32-33, 投稿は人間）</summary>
+    <div id="socialList" style="margin-top:8px"></div>
   </details>
 
   <details><summary>📤 note 連携（公開用エクスポート / 実績CSV取込 · §22, 付録A#2）</summary>
@@ -321,6 +388,9 @@ async function refresh(){
       act=`<button class="ghost" onclick="metrics('${p.id}')">実績入力</button>`;
     if(p.status==='published'||p.status==='awaiting_approval')
       act+=` <button class="ghost" onclick="noteExport('${p.id}')">note出力</button>`;
+    if(p.status==='published')
+      act+=` <button class="ghost" onclick="social('x','${p.id}')">X下書き</button>`
+           +` <button class="ghost" onclick="social('tiktok','${p.id}')">TikTok下書き</button>`;
     return `<tr><td>${esc(p.title)}</td><td>${esc(p.category)}</td><td>${st}</td>
       <td>${p.pv}</td><td>${p.purchases}</td><td>${yen(p.revenue_jpy)}</td>
       <td>${p.outcome?esc(p.outcome):'-'}</td><td class="row">${act}</td></tr>`;
@@ -333,8 +403,68 @@ async function refresh(){
         <button class="ghost" onclick="propose('${sk.key}')">改善案</button>
         <button class="ghost" onclick="showVersions('${sk.key}')">履歴</button></td></tr>`).join('')
     +'</tbody></table></div>';
+  renderSettings(s.config); renderSchedule(s.schedule); renderSocial(s.social);
   $('#dash').src='/dashboard?'+Date.now();
 }
+
+const CFG_LABELS={initial_price_jpy:'初期価格(円)',max_tasks_per_day:'1日タスク上限',
+  max_publishes_per_day:'1日公開上限',max_rewrites:'自動再執筆 上限',
+  target_conversion_rate:'目標購入率',breakeven_product_count:'損益分岐 商品数',
+  retreat_zero_purchase_rounds:'撤退ラウンド',x_enabled:'X チャネル有効',tiktok_enabled:'TikTok チャネル有効'};
+function renderSettings(cfg){
+  const rows=Object.keys(cfg).map(k=>{
+    const v=cfg[k];
+    if(typeof v==='boolean')
+      return `<label class="row" style="gap:6px"><input type="checkbox" data-cfg="${k}" ${v?'checked':''}> ${CFG_LABELS[k]||k}</label>`;
+    return `<label class="row" style="gap:6px">${CFG_LABELS[k]||k}
+      <input type="number" step="${k==='target_conversion_rate'?'0.01':'1'}" data-cfg="${k}" value="${v}" style="width:110px"></label>`;
+  }).join('');
+  $('#settings').innerHTML=`<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))">${rows}</div>
+    <div style="margin-top:10px"><button id="btnSaveCfg">設定を保存</button></div>`;
+  $('#btnSaveCfg').onclick=async()=>{
+    const ch={};document.querySelectorAll('[data-cfg]').forEach(el=>{
+      ch[el.dataset.cfg]= el.type==='checkbox'?el.checked:el.value;});
+    try{await api('/api/config','POST',ch);toast('設定を保存しました');refresh();}catch(e){toast(e.message);}
+  };
+}
+function renderSchedule(sc){
+  $('#schedMaster').checked=!!sc.enabled;
+  $('#schedRunning').textContent=sc.enabled?(sc.running?'稼働中':'待機'):'無効';
+  const names={evaluate:'評価の定期実行',note_import:'note CSV 取込 (data/inbox/note.csv)',
+    social_draft:'SNS 下書き生成'};
+  $('#schedJobs').innerHTML='<div class="overflow"><table><thead><tr><th>ジョブ</th><th>有効</th>'
+    +'<th>間隔(分)</th><th>最終実行</th><th></th></tr></thead><tbody>'
+    +Object.entries(sc.jobs).map(([k,j])=>`<tr>
+      <td>${names[k]||k}</td>
+      <td><input type="checkbox" ${j.enabled?'checked':''} onchange="setJob('${k}',{enabled:this.checked})"></td>
+      <td><input type="number" min="1" value="${j.interval_min}" style="width:90px"
+          onchange="setJob('${k}',{interval_min:+this.value})"></td>
+      <td class="muted">${j.last_run?esc(j.last_run.slice(0,16)):'-'}</td>
+      <td><button class="ghost" onclick="runJob('${k}')">今すぐ</button></td></tr>`).join('')
+    +'</tbody></table></div>';
+}
+function renderSocial(list){
+  if(!list||!list.length){$('#socialList').innerHTML='<span class="muted">下書きはまだありません。商品行の「X下書き / TikTok下書き」から。</span>';return;}
+  $('#socialList').innerHTML='<div class="overflow"><table><thead><tr><th>チャネル</th><th>状態</th>'
+    +'<th>操作</th></tr></thead><tbody>'
+    +list.map(p=>`<tr><td>${esc(p.channel)}</td>
+      <td><span class="pill${p.status==='posted'?' pub':''}">${esc(p.status)}</span></td>
+      <td class="row"><button class="ghost" onclick="showSocial('${p.id}')">内容</button>
+      ${p.status!=='posted'?`<button class="ghost" onclick="socialPosted('${p.id}')">投稿URL記録</button>`:esc(p.url||'')}</td></tr>`).join('')
+    +'</tbody></table></div>';
+}
+async function setJob(name,patch){try{await api('/api/schedule/job','POST',{name,...patch});
+  toast('スケジュール更新');refresh();}catch(e){toast(e.message);}}
+async function runJob(name){try{const r=await api('/api/schedule/run','POST',{name});
+  $('#out').textContent=JSON.stringify(r,null,2);toast('実行: '+name+(r.ok?' OK':' 失敗'));refresh();}catch(e){toast(e.message);}}
+async function social(channel,pid){try{const r=await api('/api/social/draft','POST',{channel,product_id:pid});
+  $('#out').textContent=JSON.stringify(r.content,null,2);
+  toast(channel+' 下書きを作成。承認待ち(人間確認)に追加。下部に内容表示。');refresh();}catch(e){toast(e.message);}}
+function showSocial(id){api('/api/state').then(s=>{const p=(s.social||[]).find(x=>x.id===id);
+  $('#out').textContent=p?JSON.stringify(p.content,null,2):'(見つかりません)';toast('下部に内容表示');});}
+async function socialPosted(id){const url=prompt('投稿した X/TikTok の URL を入力（人間確認の承認が前提）:');
+  if(!url)return; try{await api('/api/social/posted','POST',{social_id:id,url});
+  toast('投稿を記録しました');refresh();}catch(e){toast('エラー: '+e.message+'（先に承認待ちで承認が必要です）');}}
 async function approve(id){try{await api('/api/approve','POST',{approval_id:id});
   const url=prompt('公開する場合は note の URL を入力（キャンセルで承認のみ）:');
   if(url){const pid=await findProductFor(id); if(pid) await api('/api/publish','POST',{product_id:pid,url,approval_id:id});}
@@ -377,6 +507,8 @@ $('#btnEval').onclick=async()=>{try{const r=await api('/api/evaluate','POST',{})
 $('#btnRefresh').onclick=refresh;
 $('#btnImport').onclick=()=>noteImport(false);
 $('#btnImportDry').onclick=()=>noteImport(true);
+$('#schedMaster').onchange=async(e)=>{try{await api('/api/schedule/master','POST',{enabled:e.target.checked});
+  toast('定期実行: '+(e.target.checked?'有効':'無効'));refresh();}catch(err){toast(err.message);}};
 $('#btnReport').onclick=async()=>{const r=await api('/api/report');$('#out').textContent=JSON.stringify(r,null,2);};
 $('#btnMem').onclick=async()=>{const r=await api('/api/memory?query='+encodeURIComponent($('#memq').value));
   $('#out').textContent=JSON.stringify(r,null,2);};

@@ -182,5 +182,35 @@ class Approval:
         return _asdict(self)
 
 
+# ---- SNS投稿ドラフト (§32 X, §33 TikTok) ---------------------------------
+
+
+@dataclasses.dataclass
+class SocialPost:
+    id: str = ""
+    channel: str = "x"  # x / tiktok
+    product_id: str = ""
+    content: dict[str, Any] = dataclasses.field(default_factory=dict)  # runner出力
+    status: str = "draft"  # draft→approved→posted（投稿は人間, §32）
+    approval_id: Optional[str] = None
+    url: Optional[str] = None  # 人間が投稿した後の URL
+    inflow: int = 0  # 流入数（§24 効果測定）
+    created_at: str = ""
+    posted_at: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not self.id:
+            self.id = ids.new_id("soc")
+        if not self.created_at:
+            self.created_at = ids.now_iso()
+
+    def to_dict(self) -> dict[str, Any]:
+        return _asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "SocialPost":
+        return cls(**{k: v for k, v in d.items() if k in _field_names(cls)})
+
+
 def _field_names(cls: Any) -> set[str]:
     return {f.name for f in dataclasses.fields(cls)}

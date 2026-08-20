@@ -11,15 +11,17 @@
 | 3 | note 運用の接続 | ✅ 公開用 Markdown エクスポート（§22 準拠、自動投稿なし） |
 | 4 | 販売・アクセスデータの取り込み | ✅ note 売上/PV **CSV 取り込み**（付録A #2）+ 手動 `metrics` |
 | 5 | 自律改善ループの完成 | ✅ 実 LLM（ClaudeRunner）+ **自動再執筆(最大3回)** + 評価/改善 |
-| 6 | X 追加 | ◻️ 未（agent 定義のみ） |
-| 7 | TikTok 追加 | ◻️ 未（agent 定義のみ） |
-| 8 | 自動化範囲の拡大 | ◻️ 段階拡大の途上 |
+| 6 | X 追加 | ✅ 下書き生成（§32, 投稿は人間・自動投稿なし） |
+| 7 | TikTok 追加 | ✅ 台本生成（§33, 投稿は人間） |
+| 8 | 自動化範囲の拡大 | ✅ 定期スケジューラ（安全ジョブのみ・既定オフ・GUIオンオフ） |
 
 **追加実装**
 - 実 LLM ランナー（§42, `ClaudeRunner`）: Claude Code CLI でキーレス生成。→ [`LLM-AND-GUI.md`](LLM-AND-GUI.md)
 - Skill 自己改善ループ（§20, `SkillLab`）: 改善案→評価→承認→新版採用。
 - ローカル Web GUI（§25, §3.3）: `python3 -m company gui`。
 - 自動再執筆ループ（§4, 最大3回）+ note 連携（§22, 付録A #2）。→ [`NOTE-INTEGRATION.md`](NOTE-INTEGRATION.md)
+- X / TikTok 下書き（§32-33, 投稿は人間）+ 定期スケジューラ（既定オフ）+ GUI設定。
+  → [`SOCIAL-AND-SCHEDULER.md`](SOCIAL-AND-SCHEDULER.md)
 
 ## Phase 対応（§27–§34）
 

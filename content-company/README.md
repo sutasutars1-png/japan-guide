@@ -26,6 +26,9 @@
   Reviewer が reject したら指摘を反映して**自動再執筆**（既定 最大3回, §4）。
 - **note 連携**（§22, 付録A #2）: 公開用 Markdown エクスポート（貼り付け用、
   自動投稿はしない）＋ note 売上/PV **CSV 取り込み**。
+- **X / TikTok**（§32-33）: 投稿/台本の**下書き生成**（投稿は人間・自動投稿なし）。
+- **定期スケジューラ**（既定オフ・GUIオンオフ）: 安全な内部ジョブのみ。
+- **GUI 設定**: チャネル有効化・運用パラメータを画面から変更（許可項目のみ）。
 - **Skill 自己改善ループ**（§20）: 改善案→評価→承認→新バージョン採用。直接
   上書き禁止・履歴保存。
 - **ローカル Web GUI**: `python3 -m company gui`（標準ライブラリのみ、npm不要）。
@@ -63,6 +66,21 @@ python3 -m company note export <product_id>        # 公開用 Markdown を書�
 python3 -m company note import note_sales.csv      # note 管理画面の CSV で実績を取り込み
 python3 -m company note import note_sales.csv --dry-run
 python3 -m company note template                   # 取り込み CSV のサンプル列
+
+# X / TikTok 下書き (§32-33, 投稿は人間)
+python3 -m company social draft x <product_id>      # or: tiktok
+python3 -m company social list
+python3 -m company social posted <social_id> --url https://x.com/...   # 要承認
+
+# 定期スケジュール（既定オフ・安全ジョブのみ）
+python3 -m company schedule status
+python3 -m company schedule job note_import --on --interval 1440
+python3 -m company schedule master on            # マスター有効化
+python3 -m company schedule run evaluate         # 今すぐ実行
+
+# 設定（チャネル有効化・運用パラメータ）
+python3 -m company config show
+python3 -m company config set x_enabled true
 
 # Skill 自己改善 (§20)
 python3 -m company skill list
