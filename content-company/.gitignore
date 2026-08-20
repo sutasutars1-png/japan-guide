@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# 生成物
+dashboard.html
+/backups/
+company.local.json
+
+# 実行時に増える台帳データはコミットしない（.gitkeep で構造だけ残す）
+data/**/*.json
+data/**/*.jsonl
+!data/**/.gitkeep

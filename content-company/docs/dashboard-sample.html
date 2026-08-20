@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIコンテンツ販売会社 ダッシュボード</title>
+<style>
+:root{color-scheme:light dark}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;
+background:#0b0e14;color:#e6e9ef;line-height:1.5}
+header{padding:24px 28px;border-bottom:1px solid #232838;background:#111624}
+h1{margin:0;font-size:20px} h2{font-size:15px;margin:28px 0 10px;color:#9fb4d8}
+.sub{color:#7c89a3;font-size:13px;margin-top:4px}
+main{padding:20px 28px 60px;max-width:1100px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.card{background:#151b2b;border:1px solid #232838;border-radius:10px;padding:14px}
+.card .k{font-size:12px;color:#8b97b0} .card .v{font-size:22px;font-weight:650;margin-top:6px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#151b2b;
+border:1px solid #232838;border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid #232838}
+th{background:#1a2133;color:#9fb4d8;font-weight:600}
+.muted{color:#7c89a3;text-align:center;padding:18px}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;background:#1e2a44;
+color:#8fb7ff;font-size:12px;margin-left:8px}
+.overflow{overflow-x:auto}
+footer{color:#5f6b83;font-size:12px;padding:0 28px 40px}
+</style></head>
+<body>
+<header>
+<h1>🏢 AIコンテンツ販売会社 — ダッシュボード</h1>
+<div class="sub">目標購入率 3%
+<span class="badge">未達</span> ·
+損益分岐 20 商品 ·
+実験進捗 5/20</div>
+</header>
+<main>
+<h2>経営 KPI (§25)</h2>
+<div class="grid"><div class="card"><div class="k">総売上 (円)</div><div class="v">14,700</div></div><div class="card"><div class="k">今月売上 (円)</div><div class="v">14,700</div></div><div class="card"><div class="k">商品数</div><div class="v">5</div></div><div class="card"><div class="k">公開数</div><div class="v">5</div></div><div class="card"><div class="k">購入数</div><div class="v">147</div></div><div class="card"><div class="k">PV</div><div class="v">6,600</div></div><div class="card"><div class="k">購入率</div><div class="v">2.23%</div></div><div class="card"><div class="k">AIコスト(units)</div><div class="v">160.0</div></div><div class="card"><div class="k">1商品あたりAIコスト</div><div class="v">32.0</div></div></div>
+
+<h2>商品ランキング (§25)</h2>
+<div class="overflow"><table><thead><tr><th>タイトル</th><th>カテゴリ</th><th>売上(円)</th><th>PV</th><th>購入率</th><th>評価</th></tr></thead><tbody><tr><td>副業・お金 入門ノート</td><td>A</td><td>7,200</td><td>1800</td><td>4.0%</td><td>success</td></tr><tr><td>人間関係・メンタル 入門ノート</td><td>E</td><td>3,600</td><td>1200</td><td>3.0%</td><td>success</td></tr><tr><td>学習・スキル 入門ノート</td><td>C</td><td>2,100</td><td>300</td><td>7.0%</td><td>success</td></tr><tr><td>AI活用・効率化 入門ノート</td><td>B</td><td>1,800</td><td>2400</td><td>0.8%</td><td>learning</td></tr><tr><td>健康・習慣 入門ノート</td><td>D</td><td>0</td><td>900</td><td>0.0%</td><td>fail</td></tr></tbody></table></div>
+
+<h2>AI組織 — タスク状況 (§25)</h2>
+<div class="overflow"><table><thead><tr><th>ステータス</th><th>件数</th></tr></thead><tbody><tr><td>done</td><td>20</td></tr></tbody></table></div>
+
+<h2>承認待ち (§21)</h2>
+<div class="overflow"><table><thead><tr><th>種別</th><th>内容</th><th>ID</th></tr></thead><tbody><tr><td colspan="3" class="muted">データなし</td></tr></tbody></table></div>
+
+<h2>実験カテゴリー (§10, §11)</h2>
+<div class="overflow"><table><thead><tr><th>カテゴリー</th><th>購入数合計</th><th>判定</th></tr></thead><tbody><tr><td>A</td><td>72</td><td>継続</td></tr><tr><td>E</td><td>36</td><td>継続</td></tr><tr><td>C</td><td>21</td><td>継続</td></tr><tr><td>B</td><td>18</td><td>継続</td></tr><tr><td>D</td><td>0</td><td>継続</td></tr></tbody></table></div>
+
+<h2>コスト (§25, §37) — Tier別</h2>
+<div class="overflow"><table><thead><tr><th>Tier</th><th>units</th></tr></thead><tbody><tr><td>Tier 2</td><td>40.0</td></tr><tr><td>Tier 3</td><td>120.0</td></tr></tbody></table></div>
+<h2>コスト — Agent別</h2>
+<div class="overflow"><table><thead><tr><th>Agent</th><th>units</th></tr></thead><tbody><tr><td>cpo</td><td>60.0</td></tr><tr><td>researcher</td><td>20.0</td></tr><tr><td>reviewer</td><td>60.0</td></tr><tr><td>writer</td><td>20.0</td></tr></tbody></table></div>
+</main>
+<footer>ロードマップ §25 に基づく静的ダッシュボード。data/ から生成。</footer>
+</body></html>

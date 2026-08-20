@@ -1,0 +1,290 @@
+"""Company — AI会社 OS のファサード。
+
+各コンポーネント (Memory / Router / Cost / Approval / Tasks / KPI / Experiments)
+を1つに束ね、上位 (CLI / ダッシュボード / 将来のUI) から使う入口にする。
+
+MVP 成功条件 (§39) の 2 つの振る舞いをここに実装する:
+
+* ``plan_products(n)`` — 「今月noteで売れる商品を N 個企画して」
+  → 調査→企画→記事→レビュー→公開待ち まで自律で進める。
+* ``report(period)`` — 「先月の商品はどうだった?」
+  → 売上/PV/購入率/成功/失敗/原因/次回改善案 を返す。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from . import agents as agents_mod
+from . import ids
+from .approval import ApprovalGateway
+from .config import Config, load_config
+from .cost import CostController
+from .experiments import DEFAULT_CATEGORIES, ExperimentDesign
+from .kpi import KPI
+from .memory import CompanyMemory
+from .models import Decision, Hypothesis, Product
+from .router import ModelRouter
+from .runner import AgentRunner
+from .storage import Storage
+from .tasks import TaskManager
+
+
+class Company:
+    def __init__(self, config: Config | None = None, runner: AgentRunner | None = None):
+        self.config = config or load_config()
+        self.storage = Storage(self.config.data_dir)
+        self.memory = CompanyMemory(self.storage)
+        self.router = ModelRouter()
+        self.cost = CostController(self.storage, self.config)
+        self.approvals = ApprovalGateway(self.storage)
+        self.tasks = TaskManager(self.storage, self.router, self.cost, runner)
+        self.kpi = KPI(self.storage, self.config, self.cost)
+        self.experiments = ExperimentDesign(self.storage, self.config)
+
+    # ---- 意思決定ログ -----------------------------------------------------
+
+    def log_decision(
+        self, context: str, decision: str, rationale: str, *, actor: str = "ceo",
+        options: list[str] | None = None, related: list[str] | None = None,
+    ) -> Decision:
+        dec = Decision(
+            actor=actor, context=context, options=options or [], decision=decision,
+            rationale=rationale, related=related or [],
+        )
+        self.storage.append("decisions", dec.to_dict())
+        self.memory.add("decision", context, f"{decision}\n根拠: {rationale}",
+                        related=related or [])
+        return dec
+
+    # ---- 現在のラウンド番号 ----------------------------------------------
+
+    def current_round(self) -> int:
+        rounds = [int(p.get("experiment_round", 0)) for p in self.storage.all("products")]
+        return (max(rounds) + 1) if rounds else 1
+
+    # ==================================================================
+    #  MVP パイプライン (§39): 企画 → 記事 → レビュー → 公開待ち
+    # ==================================================================
+
+    def plan_products(
+        self, n: int = 5, *, month: str | None = None, categories: dict[str, str] | None = None,
+    ) -> list[dict[str, Any]]:
+        cats = categories or DEFAULT_CATEGORIES
+        round_no = self.current_round()
+
+        # CEO: 実験配分を決定 (§4, §11) → 判断根拠を保存 (§44)
+        alloc = self.experiments.round_allocation(round_no)[:n]
+        while len(alloc) < n:  # n が round_size と違う場合の穴埋め
+            alloc.append(list(cats)[len(alloc) % len(cats)])
+        self.log_decision(
+            context=f"Round {round_no}: {n}商品の企画方針",
+            decision=f"カテゴリー配分 {alloc}",
+            rationale="Round1は均等に需要を探索、以降は購入実績上位へ重点配分 (§11)",
+            options=["均等配分", "上位集中"],
+        )
+
+        results: list[dict[str, Any]] = []
+        for idx, cat in enumerate(alloc, start=1):
+            theme = cats.get(cat, cat)
+            results.append(self._plan_one(cat, theme, round_no))
+        return results
+
+    def _plan_one(self, category: str, theme: str, round_no: int) -> dict[str, Any]:
+        # 1) Researcher: 市場調査 (§4)
+        t_res = self.tasks.create(
+            f"調査: {theme}", agent="researcher", task_type="research",
+            skill="market-research", input={"theme": theme, "category": category},
+        )
+        self.tasks.run(t_res.id)
+        self.tasks.review(t_res.id, True)
+        research = self.tasks.get(t_res.id).output  # type: ignore[union-attr]
+        self.storage.put("research", {"id": ids.new_id("res"), "category": category,
+                                      "theme": theme, **research})
+
+        # 2) CPO: 商品企画 (§13) + 仮説 (§9)
+        t_plan = self.tasks.create(
+            f"企画: {theme}", agent="cpo", task_type="product_plan",
+            skill="product-planning", parent_id=t_res.id,
+            input={"theme": theme, "category": category,
+                   "price_jpy": self.config.initial_price_jpy, "research": research},
+        )
+        self.tasks.run(t_plan.id)
+        self.tasks.review(t_plan.id, True)
+        plan = self.tasks.get(t_plan.id).output  # type: ignore[union-attr]
+
+        hyp = Hypothesis(
+            statement=f"{theme} は {category} カテゴリーで購入される",
+            rationale=plan.get("why_sells", ""), action=f"{self.config.initial_price_jpy}円商品を投入",
+            kpi="購入率・購入数", category=category, round=round_no,
+        )
+        self.storage.put("hypotheses", hyp.to_dict())
+        self.memory.add("hypothesis", hyp.statement, hyp.rationale,
+                        tags=[category], related=[hyp.id])
+
+        product = Product(
+            title=plan.get("product_name", theme), theme=theme, category=category,
+            target=plan.get("target", ""), price_jpy=self.config.initial_price_jpy,
+            status="writing", hypothesis_id=hyp.id, experiment_round=round_no,
+        )
+        hyp.product_ids.append(product.id)
+        self.storage.put("hypotheses", hyp.to_dict())
+
+        # 3) Writer: 記事作成 (§4, 単独公開しない)
+        t_write = self.tasks.create(
+            f"執筆: {product.title}", agent="writer", task_type="article_write",
+            skill="article-writing", parent_id=t_plan.id, input={"plan": plan},
+        )
+        self.tasks.run(t_write.id)
+        self.tasks.review(t_write.id, True)
+        article = self.tasks.get(t_write.id).output  # type: ignore[union-attr]
+        article_id = ids.new_id("art")
+        self.storage.put("articles", {"id": article_id, "product_id": product.id, **article})
+
+        # 4) Reviewer: 品質確認 (§4)
+        t_review = self.tasks.create(
+            f"レビュー: {product.title}", agent="reviewer", task_type="review_final",
+            skill="quality-review", parent_id=t_write.id, input={"article": article},
+        )
+        self.tasks.run(t_review.id)
+        review = self.tasks.get(t_review.id).output  # type: ignore[union-attr]
+        passed = review.get("verdict") == "pass"
+        self.tasks.review(t_review.id, passed, notes=review.get("notes", ""))
+        self.memory.add("review", f"レビュー: {product.title}",
+                        review.get("notes", ""), related=[product.id])
+
+        # 5) 公開待ち or 差し戻し
+        approval_id = None
+        if passed:
+            product.status = "awaiting_approval"
+            apr = self.approvals.request(
+                "publish", f"note公開の承認待ち: {product.title}",
+                {"product_id": product.id, "article_id": article_id},
+                requested_by="reviewer",
+            )
+            approval_id = apr.id
+        else:
+            product.status = "review"  # Writerへ差し戻し (§4)
+
+        self.storage.put("products", product.to_dict())
+        self.memory.add("product", f"企画: {product.title}",
+                        f"カテゴリー{category} / {product.status}", tags=[category],
+                        related=[product.id])
+
+        return {
+            "product_id": product.id, "title": product.title, "category": category,
+            "status": product.status, "hypothesis_id": hyp.id,
+            "approval_id": approval_id, "plan": plan, "review": review,
+        }
+
+    # ---- 公開 (§21, §22): 人間承認後にのみ実行 --------------------------
+
+    def publish(self, product_id: str, url: str, approval_id: str) -> Product:
+        self.approvals.guard("publish", approval_id)  # 未承認なら例外
+        raw = self.storage.get("products", product_id)
+        if raw is None:
+            raise KeyError(product_id)
+        product = Product.from_dict(raw)
+        product.status = "published"
+        product.url = url
+        product.published_at = ids.now_iso()
+        self.storage.put("products", product.to_dict())
+        self.memory.add("result", f"公開: {product.title}", url, related=[product_id])
+        return product
+
+    # ---- 実績の取り込み (§30-31, 付録A #2: 当面は手動入力) --------------
+
+    def record_metrics(
+        self, product_id: str, *, pv: int = 0, purchases: int = 0,
+        revenue_jpy: int = 0, likes: int = 0, source: dict[str, int] | None = None,
+        rating: float | None = None,
+    ) -> Product:
+        raw = self.storage.get("products", product_id)
+        if raw is None:
+            raise KeyError(product_id)
+        product = Product.from_dict(raw)
+        product.pv = pv
+        product.purchases = purchases
+        product.revenue_jpy = revenue_jpy
+        product.likes = likes
+        if source:
+            product.source_breakdown = source
+        if rating is not None:
+            product.rating = rating
+        self.storage.put("products", product.to_dict())
+        self.storage.put("analytics", {
+            "id": ids.new_id("anl"), "product_id": product_id, "ts": ids.now_iso(),
+            "pv": pv, "purchases": purchases, "revenue_jpy": revenue_jpy,
+            "conversion_rate": product.conversion_rate,
+        })
+        return product
+
+    # ==================================================================
+    #  分析・改善 (§31, §39 「先月どうだった?」)
+    # ==================================================================
+
+    def evaluate(self) -> dict[str, Any]:
+        """Analytics → Growth: 成功/失敗の評価と次アクションを決める (§6, §31)。"""
+        patterns = self.kpi.patterns()
+        actions: list[dict[str, str]] = []
+
+        for p in self.kpi.products():
+            if int(p.get("pv", 0)) == 0:
+                continue
+            conv = float(p.get("conversion_rate", 0))
+            pid = p.get("id", "")
+            title = p.get("title", "")
+            if conv >= self.config.target_conversion_rate and int(p.get("pv", 0)) > 0:
+                outcome, action = "success", "成功パターンとして横展開 (§4 商品C)"
+                self.memory.add("pattern_success", f"成功: {title}",
+                                f"購入率 {conv:.1%}", related=[pid])
+            elif int(p.get("pv", 0)) > 0 and p.get("purchases", 0) == 0:
+                outcome, action = "fail", "テーマ/タイトル/価格/無料部分を見直し or 撤退検討"
+                self.memory.add("pattern_failure", f"未購入: {title}",
+                                f"PV {p.get('pv')} / 購入0", related=[pid])
+            else:
+                outcome, action = "learning", "集客を増やして再評価 (§4 商品B)"
+            # 商品レコードに評価を反映
+            raw = self.storage.get("products", pid)
+            if raw:
+                raw["outcome"] = outcome
+                raw["improvement"] = action
+                self.storage.put("products", raw)
+            actions.append({"product_id": pid, "title": title,
+                            "outcome": outcome, "next_action": action})
+
+        # 撤退判定 (付録A)
+        retreated = self.experiments.retreated_categories()
+        if retreated:
+            self.log_decision(
+                context="撤退基準チェック", decision=f"打ち切り: {retreated}",
+                rationale=f"{self.config.retreat_zero_purchase_rounds}ラウンド連続 購入0 (付録A)",
+                actor="ceo",
+            )
+
+        return {"summary": self.kpi.summary(), "patterns": patterns,
+                "actions": actions, "retreated": retreated}
+
+    def report(self, period: str | None = None) -> dict[str, Any]:
+        """「先月の商品はどうだった?」への回答 (§39)。"""
+        products = self.kpi.products()
+        if period:
+            products = [p for p in products
+                        if str(p.get("published_at") or "").startswith(period)]
+        summary = self.kpi.summary()
+        winners = [p for p in products if p.get("outcome") == "success"]
+        losers = [p for p in products if p.get("outcome") == "fail"]
+        return {
+            "period": period or "all",
+            "summary": summary,
+            "top_products": self.kpi.ranking("revenue_jpy", 5),
+            "success_products": [{"id": p["id"], "title": p["title"],
+                                  "conversion_rate": p.get("conversion_rate")} for p in winners],
+            "fail_products": [{"id": p["id"], "title": p["title"],
+                               "cause": p.get("improvement", ""),
+                               "pv": p.get("pv")} for p in losers],
+            "next_improvements": [
+                {"id": p["id"], "action": p.get("improvement", "")}
+                for p in products if p.get("improvement")
+            ],
+        }
