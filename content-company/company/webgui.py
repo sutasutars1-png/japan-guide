@@ -160,6 +160,11 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(c.skills_lab.request_adoption(b["key"], int(b["version"])))
             elif u.path == "/api/skill/adopt":
                 self._json(c.skills_lab.adopt(b["key"], int(b["version"]), b["approval_id"]))
+            elif u.path == "/api/note/export":
+                self._json(c.note_export.export(b["product_id"]))
+            elif u.path == "/api/note/import":
+                self._json(c.note_import.import_csv(b.get("csv", ""),
+                                                    dry_run=bool(b.get("dry_run"))))
             else:
                 self._json({"error": "not found"}, 404)
         except PermissionError_ as exc:
@@ -249,6 +254,17 @@ iframe{width:100%;height:520px;border:1px solid var(--line);border-radius:10px;b
     <div id="skills" style="margin-top:8px"></div>
   </details>
 
+  <details><summary>📤 note 連携（公開用エクスポート / 実績CSV取込 · §22, 付録A#2）</summary>
+    <p class="muted" style="margin:8px 0">公開は note エディタに貼り付け（自動投稿はしない, §22）。
+      売上/PV は note 管理画面の CSV をここに貼って取り込む。</p>
+    <textarea id="noteCsv" placeholder="note の売上/アクセス CSV を貼り付け（タイトル,URL,ビュー,購入数,売上金額,スキ …）"
+      style="width:100%;height:90px;background:#0f1422;color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:8px"></textarea>
+    <div class="row" style="margin-top:6px">
+      <button class="ghost" id="btnImportDry">取り込み（下書き確認）</button>
+      <button id="btnImport">取り込み実行</button>
+    </div>
+  </details>
+
   <details><summary>🔎 レポート / メモリ</summary>
     <div class="row" style="margin-top:8px">
       <button class="ghost" id="btnReport">先月レポート</button>
@@ -303,6 +319,8 @@ async function refresh(){
       act='<span class="muted">承認申請へ</span>';
     else if(p.status==='published')
       act=`<button class="ghost" onclick="metrics('${p.id}')">実績入力</button>`;
+    if(p.status==='published'||p.status==='awaiting_approval')
+      act+=` <button class="ghost" onclick="noteExport('${p.id}')">note出力</button>`;
     return `<tr><td>${esc(p.title)}</td><td>${esc(p.category)}</td><td>${st}</td>
       <td>${p.pv}</td><td>${p.purchases}</td><td>${yen(p.revenue_jpy)}</td>
       <td>${p.outcome?esc(p.outcome):'-'}</td><td class="row">${act}</td></tr>`;
@@ -337,6 +355,16 @@ async function propose(key){const guidance=prompt('改善したい手順・ガ�
   catch(e){toast('エラー: '+e.message);}}
 async function showVersions(key){const vs=await api('/api/skill/versions?key='+encodeURIComponent(key));
   $('#out').textContent=JSON.stringify(vs,null,2);toast('履歴を下部に表示');}
+async function noteExport(pid){try{const r=await api('/api/note/export','POST',{product_id:pid});
+  $('#out').textContent=r.markdown;
+  try{await navigator.clipboard.writeText(r.markdown);toast('note本文をコピー＋書き出し: '+r.path);}
+  catch(e){toast('note公開用を書き出し: '+r.path+'（下部に本文表示）');}
+  }catch(e){toast('エラー: '+e.message);}}
+async function noteImport(dry){try{const csv=$('#noteCsv').value;
+  const r=await api('/api/note/import','POST',{csv,dry_run:dry});
+  $('#out').textContent=JSON.stringify(r,null,2);
+  toast((dry?'下書き: ':'取込: ')+'一致 '+r.matched+' 件 / 未一致 '+(r.unmatched||[]).length+' 件');
+  if(!dry) refresh();}catch(e){toast('エラー: '+e.message);}}
 
 $('#btnPlan').onclick=async()=>{const b=$('#btnPlan');b.disabled=true;b.textContent='実行中…';
   try{await api('/api/plan','POST',{n:+$('#planN').value,llm:$('#useLlm').checked});
@@ -347,6 +375,8 @@ $('#btnDemo').onclick=async()=>{if(!confirm('架空デモデータを投入し�
 $('#btnEval').onclick=async()=>{try{const r=await api('/api/evaluate','POST',{});
   $('#out').textContent=JSON.stringify(r.actions,null,2);toast('評価しました');refresh();}catch(e){toast(e.message);}};
 $('#btnRefresh').onclick=refresh;
+$('#btnImport').onclick=()=>noteImport(false);
+$('#btnImportDry').onclick=()=>noteImport(true);
 $('#btnReport').onclick=async()=>{const r=await api('/api/report');$('#out').textContent=JSON.stringify(r,null,2);};
 $('#btnMem').onclick=async()=>{const r=await api('/api/memory?query='+encodeURIComponent($('#memq').value));
   $('#out').textContent=JSON.stringify(r,null,2);};

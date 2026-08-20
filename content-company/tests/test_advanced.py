@@ -109,6 +109,127 @@ class SkillLabTest(unittest.TestCase):
             self.assertIn("検索意図を3分類する", c.skills_lab.text("seo"))
 
 
+class _RewriteStub:
+    """実LLMを模したランナー。指定回の再執筆後に review を pass させる。"""
+    def __init__(self, pass_after_rewrites: int):
+        self.writes = 0
+        self.pass_after = pass_after_rewrites
+
+    def run(self, tt, payload):
+        if tt == "research":
+            return {"theme": payload.get("theme"), "demand_signals": [], "note": ""}
+        if tt == "product_plan":
+            return {"product_name": "P", "why_sells": "x", "target": "t"}
+        if tt == "article_write":
+            self.writes += 1
+            return {"title": "P", "body_markdown": f"body v{self.writes}",
+                    "_llm": True, "outline": [], "cta": ""}
+        if tt == "review_final":
+            passed = self.writes > self.pass_after
+            return {"verdict": "pass" if passed else "reject",
+                    "checklist": {}, "notes": "具体例を追加して"}
+        return {}
+
+
+class RewriteLoopTest(unittest.TestCase):
+    def test_passes_after_one_rewrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp, max_rewrites=3)
+            c.tasks.runner = _RewriteStub(pass_after_rewrites=1)
+            res = c.plan_products(1)[0]
+            self.assertEqual(res["rewrites"], 1)
+            self.assertEqual(res["status"], "awaiting_approval")
+
+    def test_stops_at_cap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp, max_rewrites=3)
+            c.tasks.runner = _RewriteStub(pass_after_rewrites=99)  # 決して通らない
+            res = c.plan_products(1)[0]
+            self.assertEqual(res["rewrites"], 3)  # 上限3で打ち切り
+            self.assertEqual(res["status"], "review")  # 人間へ差し戻し
+            # 上限到達が失敗メモリに残る
+            self.assertTrue(any(m.get("kind") == "failure"
+                                for m in c.storage.read_log("memory")))
+
+    def test_template_runner_does_not_rewrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp, max_rewrites=3)  # 既定 TemplateRunner（雛形）
+            res = c.plan_products(1)[0]
+            self.assertEqual(res["rewrites"], 0)  # 雛形は再執筆しない
+
+
+class NoteChannelTest(unittest.TestCase):
+    def _published_product(self, c, title="テスト商品", url="https://note.com/u/n/abc"):
+        from company.models import Product
+        p = Product(title=title, category="A", theme="AI 副業",
+                    status="published", url=url, published_at="2026-07-01T00:00:00+00:00")
+        c.storage.put("products", p.to_dict())
+        c.storage.put("articles", {"id": "art1", "product_id": p.id,
+                                   "body_markdown": "導入\n\n―― ここから有料 ――\n\n本編"})
+        return p
+
+    def test_export_writes_markdown_with_paid_marker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            p = self._published_product(c)
+            r = c.note_export.export(p.id)
+            self.assertTrue(pathlib.Path(r["path"]).exists())
+            self.assertIn("有料エリア", r["markdown"])
+            self.assertIn("#AI", " ".join("#" + t for t in r["hashtags"]) + " #AI")
+
+    def test_export_no_duplicate_h1(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            from company.models import Product
+            p = Product(title="重複しない見出し", category="A", theme="AI", status="published")
+            c.storage.put("products", p.to_dict())
+            c.storage.put("articles", {"id": "a", "product_id": p.id,
+                                       "body_markdown": "# 重複しない見出し\n\n本文"})
+            md = c.note_export.export(p.id)["markdown"]
+            self.assertEqual(md.count("# 重複しない見出し"), 1)
+
+    def test_import_matches_by_url_and_title(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            p1 = self._published_product(c, title="AIノート", url="https://note.com/u/n/aaa")
+            p2 = self._published_product(c, title="副業ノート", url="https://note.com/u/n/bbb")
+            csv = ("タイトル,URL,ビュー,購入数,売上金額,スキ\n"
+                   "別名でも一致,https://note.com/u/n/aaa,1500,40,4000,60\n"
+                   "副業ノート,,800,10,1000,20\n"
+                   "存在しない,https://note.com/u/n/zzz,10,0,0,0\n")
+            r = c.note_import.import_csv(csv)
+            self.assertEqual(r["matched"], 2)
+            self.assertEqual(len(r["unmatched"]), 1)
+            # URL一致で p1 の実績が更新される
+            up1 = c.storage.get("products", p1.id)
+            self.assertEqual(up1["pv"], 1500)
+            self.assertEqual(up1["purchases"], 40)
+            up2 = c.storage.get("products", p2.id)
+            self.assertEqual(up2["revenue_jpy"], 1000)
+
+    def test_import_handles_yen_and_commas_and_english_headers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            p = self._published_product(c, title="English Title", url="")
+            csv = ("title,views,sales,revenue\n"
+                   "English Title,\"1,200\",30,\"¥3,000\"\n")
+            r = c.note_import.import_csv(csv)
+            self.assertEqual(r["matched"], 1)
+            up = c.storage.get("products", p.id)
+            self.assertEqual(up["pv"], 1200)
+            self.assertEqual(up["revenue_jpy"], 3000)
+
+    def test_import_dry_run_does_not_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            p = self._published_product(c, title="X", url="https://note.com/u/n/x")
+            csv = "タイトル,URL,ビュー\nX,https://note.com/u/n/x,999\n"
+            r = c.note_import.import_csv(csv, dry_run=True)
+            self.assertEqual(r["matched"], 1)
+            self.assertTrue(r["dry_run"])
+            self.assertEqual(c.storage.get("products", p.id)["pv"], 0)  # 未更新
+
+
 class WebGuiTest(unittest.TestCase):
     def _server(self, c: Company):
         from company.webgui import _Handler

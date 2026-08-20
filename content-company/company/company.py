@@ -43,6 +43,9 @@ class Company:
         self.kpi = KPI(self.storage, self.config, self.cost)
         self.experiments = ExperimentDesign(self.storage, self.config)
         self.skills_lab = SkillLab(self.storage, self.approvals, self.memory)
+        from .note_channel import NoteExporter, NoteImporter
+        self.note_export = NoteExporter(self)
+        self.note_import = NoteImporter(self)
 
     # ---- ランナー切り替え -------------------------------------------------
 
@@ -147,28 +150,14 @@ class Company:
         hyp.product_ids.append(product.id)
         self.storage.put("hypotheses", hyp.to_dict())
 
-        # 3) Writer: 記事作成 (§4, 単独公開しない)
-        t_write = self.tasks.create(
-            f"執筆: {product.title}", agent="writer", task_type="article_write",
-            skill="article-writing", parent_id=t_plan.id, input={"plan": plan},
-        )
-        self.tasks.run(t_write.id)
-        self.tasks.review(t_write.id, True)
-        article = self.tasks.get(t_write.id).output  # type: ignore[union-attr]
-        article_id = ids.new_id("art")
-        self.storage.put("articles", {"id": article_id, "product_id": product.id, **article})
-
-        # 4) Reviewer: 品質確認 (§4)
-        t_review = self.tasks.create(
-            f"レビュー: {product.title}", agent="reviewer", task_type="review_final",
-            skill="quality-review", parent_id=t_write.id, input={"article": article},
-        )
-        self.tasks.run(t_review.id)
-        review = self.tasks.get(t_review.id).output  # type: ignore[union-attr]
+        # 3-4) Writer → Reviewer。reject なら指摘を反映して自動再執筆 (§4)。
+        #      上限は config.max_rewrites 回。実 LLM 生成時のみ再執筆する
+        #      （雛形は書き直しても骨格のままで意味がないため）。
+        article, review, rewrites = self._write_and_review(product, plan, t_plan.id)
         passed = review.get("verdict") == "pass"
-        self.tasks.review(t_review.id, passed, notes=review.get("notes", ""))
-        self.memory.add("review", f"レビュー: {product.title}",
-                        review.get("notes", ""), related=[product.id])
+        article_id = ids.new_id("art")
+        self.storage.put("articles", {"id": article_id, "product_id": product.id,
+                                      "rewrites": rewrites, **article})
 
         # 5) 公開待ち or 差し戻し
         approval_id = None
@@ -192,7 +181,63 @@ class Company:
             "product_id": product.id, "title": product.title, "category": category,
             "status": product.status, "hypothesis_id": hyp.id,
             "approval_id": approval_id, "plan": plan, "review": review,
+            "rewrites": rewrites,
         }
+
+    def _write_and_review(self, product: Product, plan: dict, parent_id: str):
+        """執筆→レビューを行い、reject なら自動再執筆する (§4)。
+
+        Returns (article, review, rewrites)。rewrites は再執筆回数。
+        """
+        feedback = ""
+        prev_body = ""
+        article: dict = {}
+        review: dict = {}
+        rewrites = 0
+        # 初回 + 最大 max_rewrites 回の書き直し
+        for attempt in range(self.config.max_rewrites + 1):
+            w_input: dict = {"plan": plan}
+            if feedback:
+                w_input["feedback"] = feedback
+                w_input["previous_body"] = prev_body
+            t_write = self.tasks.create(
+                (f"再執筆{attempt}: " if attempt else "執筆: ") + product.title,
+                agent="writer", task_type="article_write",
+                skill="article-writing", parent_id=parent_id, input=w_input,
+            )
+            self.tasks.run(t_write.id)
+            self.tasks.review(t_write.id, True)
+            article = self.tasks.get(t_write.id).output  # type: ignore[union-attr]
+
+            t_review = self.tasks.create(
+                f"レビュー: {product.title}", agent="reviewer",
+                task_type="review_final", skill="quality-review",
+                parent_id=t_write.id, input={"article": article},
+            )
+            self.tasks.run(t_review.id)
+            review = self.tasks.get(t_review.id).output  # type: ignore[union-attr]
+            passed = review.get("verdict") == "pass"
+            self.tasks.review(t_review.id, passed, notes=review.get("notes", ""))
+            self.memory.add(
+                "review", f"レビュー: {product.title}"
+                + (f" (再執筆{attempt})" if attempt else ""),
+                review.get("notes", ""), related=[product.id])
+
+            if passed:
+                break
+            # 再執筆は「実 LLM が書いた記事」に対してのみ意味がある。
+            if not article.get("_llm"):
+                break
+            if attempt >= self.config.max_rewrites:
+                self.memory.add(
+                    "failure", f"再執筆上限到達: {product.title}",
+                    f"{self.config.max_rewrites}回改稿しても reject。人間対応へ.",
+                    related=[product.id])
+                break
+            feedback = review.get("notes", "")
+            prev_body = article.get("body_markdown", "")
+            rewrites += 1
+        return article, review, rewrites
 
     # ---- 公開 (§21, §22): 人間承認後にのみ実行 --------------------------
 

@@ -43,6 +43,10 @@ class Config:
     # プラットフォーム保護 (§22, 付録A #1)。公開ペースの上限。
     max_publishes_per_day: int = 2
 
+    # 自動再執筆 (§4 の差し戻し→Writer)。Reviewer が reject したとき、指摘を
+    # 反映して書き直す最大回数。0 で自動再執筆オフ。実 LLM 生成時のみ作動する。
+    max_rewrites: int = 3
+
     # 実験の撤退基準 (付録A 任意強化案)。
     # 「Nラウンド連続で購入0のカテゴリは打ち切り」
     retreat_zero_purchase_rounds: int = 2

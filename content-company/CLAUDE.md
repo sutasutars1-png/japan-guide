@@ -30,13 +30,16 @@ AI エージェント群で **noteを中心としたデジタルコンテンツ�
 - **Skill 自己改善ループ**（§20, `skill_improve.SkillLab`）: 改善案→評価→承認→
   新版採用。直接上書き禁止・履歴保存。
 - **ローカル Web GUI**（`webgui.py`）: `python3 -m company gui`。標準ライブラリのみ。
+- **自動再執筆ループ**（§4, `Company._write_and_review`）: reject 時に指摘を反映して
+  書き直す。上限 `config.max_rewrites`（既定 3）、実 LLM 時のみ作動。
+- **note 連携**（§22, 付録A #2, `note_channel.py`）: 公開用 Markdown エクスポート
+  （自動投稿なし）+ 売上/PV **CSV 取り込み**。
 - ダッシュボード生成（§25）、デモシード（架空データで全ループ実演）
-- **標準ライブラリのみ・外部 API 不要**（§36）。`python3 -m unittest discover -s tests` が緑（21件）
+- **標準ライブラリのみ・外部 API 不要**（§36）。`python3 -m unittest discover -s tests` が緑（29件）
 
 **未実装 / 次にやること**
-- note からの販売/PV データ取り込み経路（付録A #2。当面は `metrics` で手動入力）
 - SNS（X/TikTok）チャネル接続（§32–33）
-- reject 記事の自動再執筆ループ（現在は差し戻しのみ。コスト配慮で既定オフ）
+- note 公開の半自動化（公式手段の範囲で）／ CSV 取り込みのスケジュール化
 
 ## 開発ワークフロー
 
@@ -61,6 +64,8 @@ AI エージェント群で **noteを中心としたデジタルコンテンツ�
 | 実 LLM ランナー(Claude CLI) | `company/runner_claude.py` | §42 |
 | Skill 自己改善 | `company/skill_improve.py` | §20 |
 | ローカル Web GUI | `company/webgui.py` | §25, §3.3 |
+| note 連携（出力/CSV取込） | `company/note_channel.py` | §22, 付録A #2 |
+| 自動再執筆ループ | `company/company.py:_write_and_review` | §4 |
 | 組織（Agent 定義） | `company/agents.py` | §4, §28, §35 |
 | Skill 定義 | `company/skills.py` | §19 |
 | 実験設計・撤退基準 | `company/experiments.py` | §10, §11, 付録A |

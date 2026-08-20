@@ -67,6 +67,8 @@ _CONTRACT: dict[str, dict[str, Any]] = {
             "note 記事を書く。outline は配列。body_markdown は Markdown 本文で、"
             "無料部分→『―― ここから有料 ――』→有料部分→まとめ の構成。"
             "読者価値を中心に、誇張・誤情報を避ける。プレースホルダ（[ ]）は残さない。"
+            "入力に feedback がある場合は、その差し戻し指摘を必ず反映して "
+            "previous_body を改稿する（具体例・手順・固有名詞を補い、断定表現を是正）。"
         ),
     },
     "review_final": {

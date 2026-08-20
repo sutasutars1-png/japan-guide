@@ -23,6 +23,9 @@
 
 - **実 LLM 生成**（§42）: Claude Code CLI を使うキーレス・ランナー
   （`ClaudeRunner`）。`--llm` で有効化。未検出時は雛形にフォールバック。
+  Reviewer が reject したら指摘を反映して**自動再執筆**（既定 最大3回, §4）。
+- **note 連携**（§22, 付録A #2）: 公開用 Markdown エクスポート（貼り付け用、
+  自動投稿はしない）＋ note 売上/PV **CSV 取り込み**。
 - **Skill 自己改善ループ**（§20）: 改善案→評価→承認→新バージョン採用。直接
   上書き禁止・履歴保存。
 - **ローカル Web GUI**: `python3 -m company gui`（標準ライブラリのみ、npm不要）。
@@ -54,6 +57,12 @@ python3 -m company publish <product_id> --url https://note.com/... --approval <i
 python3 -m company metrics <product_id> --pv 1200 --purchases 30 --revenue 3000
 python3 -m company evaluate             # 成功/失敗の評価と次アクション (§31)
 python3 -m company report --period 2026-08
+
+# note 連携 (§22, 付録A #2)
+python3 -m company note export <product_id>        # 公開用 Markdown を書き出し（貼り付け用）
+python3 -m company note import note_sales.csv      # note 管理画面の CSV で実績を取り込み
+python3 -m company note import note_sales.csv --dry-run
+python3 -m company note template                   # 取り込み CSV のサンプル列
 
 # Skill 自己改善 (§20)
 python3 -m company skill list

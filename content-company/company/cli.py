@@ -101,6 +101,16 @@ def main(argv: list[str] | None = None) -> int:
     sp_adopt.add_argument("version", type=int)
     sp_adopt.add_argument("--approval", required=True)
 
+    # note 連携 (§22, 付録A #2)
+    p_note = sub.add_parser("note", help="note 連携（公開用エクスポート / 実績CSV取込）")
+    nsub = p_note.add_subparsers(dest="note_cmd", required=True)
+    np_exp = nsub.add_parser("export", help="承認済み記事を note 公開用 Markdown に書き出す")
+    np_exp.add_argument("product_id")
+    np_imp = nsub.add_parser("import", help="note の売上/アクセス CSV を取り込む")
+    np_imp.add_argument("csv", help="CSV ファイルパス")
+    np_imp.add_argument("--dry-run", action="store_true")
+    nsub.add_parser("template", help="取り込み用 CSV のサンプル列を表示")
+
     p_gui = sub.add_parser("gui", help="ローカル Web GUI を起動")
     p_gui.add_argument("--port", type=int, default=8787)
     p_gui.add_argument("--host", default="127.0.0.1")
@@ -173,6 +183,17 @@ def main(argv: list[str] | None = None) -> int:
             _print(lab.request_adoption(args.key, args.version))
         elif args.skill_cmd == "adopt":
             _print(lab.adopt(args.key, args.version, args.approval))
+    elif args.cmd == "note":
+        if args.note_cmd == "export":
+            r = c.note_export.export(args.product_id)
+            print(f"note公開用に書き出しました: {r['path']}")
+            print(f"タイトル: {r['title']} / {r['price_jpy']}円 / "
+                  f"{' '.join('#'+t for t in r['hashtags'])}", file=sys.stderr)
+        elif args.note_cmd == "import":
+            _print(c.note_import.import_csv(args.csv, dry_run=args.dry_run))
+        elif args.note_cmd == "template":
+            from .note_channel import NoteImporter
+            print(NoteImporter.template_csv())
     elif args.cmd == "gui":
         from .webgui import serve
         serve(c, host=args.host, port=args.port, llm=args.llm)
