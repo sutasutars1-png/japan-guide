@@ -4,6 +4,9 @@
 自動生成システム」ではなく、役割・責任・Skill・判断基準を持つ複数の AI
 エージェントを配置した**小さな会社の OS** を作る (ロードマップ §1, §42)。
 
+> 🧭 **開発を引き継ぐ人（AI含む）は [`docs/STATE.md`](docs/STATE.md) から**：
+> 現在地・再開手順・触ってはいけない不変条件・ハマりどころ・次にやること。
+
 > **設計の起点（§41–§42）**: 最初から「note記事を自動生成するプログラム」を
 > 作らない。まず **AI会社を運営する OS**（Agent / Skill / Task / Memory /
 > Model Router / Permission / Approval / KPI）を構築する。note・X・TikTok は
