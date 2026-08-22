@@ -24,6 +24,7 @@ from .cost import CostController
 from .experiments import DEFAULT_CATEGORIES, ExperimentDesign
 from .kpi import KPI
 from .memory import CompanyMemory
+from . import quality as quality_mod
 from .models import Decision, Hypothesis, Product
 from .router import ModelRouter
 from .runner import AgentRunner
@@ -162,6 +163,23 @@ class Company:
                 best = (r, title)
         return best
 
+    def _performance_hints(self, limit: int = 8) -> dict[str, list[str]]:
+        """実績評価(§31)の結果を次の企画・執筆へ渡す（B: 学習の反映）。
+
+        evaluate() が付けた outcome を読み、売れた/外した切り口を LLM に渡して
+        成功パターンへ寄せ、失敗パターンを避けさせる。
+        """
+        win: list[str] = []
+        lose: list[str] = []
+        for p in self.storage.all("products"):
+            label = f"{p.get('title')}（{p.get('theme', '')}）"
+            oc = p.get("outcome")
+            if oc == "success":
+                win.append(label)
+            elif oc == "fail":
+                lose.append(label)
+        return {"winning_angles": win[-limit:], "losing_angles": lose[-limit:]}
+
     def _avoid_list(self, exclude_pid: str | None = None, limit: int = 15) -> list[str]:
         """既に作った切り口の一覧（タイトル（テーマ））。LLM に差別化を促す入力。"""
         seen: list[str] = []
@@ -191,7 +209,8 @@ class Company:
             skill="product-planning", parent_id=t_res.id,
             input={"theme": theme, "category": category,
                    "price_jpy": self.config.initial_price_jpy, "research": research,
-                   "avoid_similar": self._avoid_list()},
+                   "avoid_similar": self._avoid_list(),
+                   "performance_hints": self._performance_hints()},
         )
         self.tasks.run(t_plan.id)
         self.tasks.review(t_plan.id, True)
@@ -260,9 +279,12 @@ class Company:
         rewrites = 0
         existing = self._existing_signatures(exclude_pid=product.id)
         avoid = self._avoid_list(exclude_pid=product.id)
+        hints = self._performance_hints()
+        price_req = quality_mod.price_requirement_text(product.price_jpy)
         # 初回 + 最大 max_rewrites 回の書き直し
         for attempt in range(self.config.max_rewrites + 1):
-            w_input: dict = {"plan": plan, "avoid_similar": avoid}
+            w_input: dict = {"plan": plan, "avoid_similar": avoid,
+                             "performance_hints": hints, "price_requirement": price_req}
             if feedback:
                 w_input["feedback"] = feedback
                 w_input["previous_body"] = prev_body
@@ -283,19 +305,27 @@ class Company:
             self.tasks.run(t_review.id)
             review = self.tasks.get(t_review.id).output  # type: ignore[union-attr]
             passed = review.get("verdict") == "pass"
-            # 重複ガード: 既存記事と似すぎたら差し戻して切り口を変えさせる (付録A #5)。
-            # 実 LLM 記事のみ対象（雛形/デモは差別化できないので対象外）。
-            if passed and existing and article.get("_llm"):
-                sim, sim_title = self._max_similarity(
-                    self._article_signature(article), existing)
-                if sim >= self.config.similarity_threshold:
+            # 以降の自動ガードは実 LLM 記事のみ対象（雛形/デモは対象外）。
+            if passed and article.get("_llm"):
+                # 体裁(C) + 価格連動要件(A): 崩れ・薄さを差し戻す (付録A #4-5)
+                q_issues = quality_mod.quality_issues(article, product.price_jpy)
+                if q_issues:
                     passed = False
-                    review = {**review, "verdict": "reject",
-                              "similar_to": sim_title, "similarity": round(sim, 3),
-                              "notes": (review.get("notes", "")
-                                        + f" / 既存記事『{sim_title}』と類似度が高い"
-                                        f"({sim:.0%})。テーマの切り口・見出し・具体例を"
-                                        "変えて差別化すること。").strip()}
+                    review = {**review, "verdict": "reject", "quality_issues": q_issues,
+                              "notes": (review.get("notes", "") + " / 品質差し戻し: "
+                                        + " / ".join(q_issues)).strip()}
+                # 重複ガード(付録A #5): 既存記事と似すぎたら切り口を変えさせる
+                elif existing:
+                    sim, sim_title = self._max_similarity(
+                        self._article_signature(article), existing)
+                    if sim >= self.config.similarity_threshold:
+                        passed = False
+                        review = {**review, "verdict": "reject",
+                                  "similar_to": sim_title, "similarity": round(sim, 3),
+                                  "notes": (review.get("notes", "")
+                                            + f" / 既存記事『{sim_title}』と類似度が高い"
+                                            f"({sim:.0%})。切り口・見出し・具体例を"
+                                            "変えて差別化すること。").strip()}
             self.tasks.review(t_review.id, passed, notes=review.get("notes", ""))
             self.memory.add(
                 "review", f"レビュー: {product.title}"
@@ -374,7 +404,9 @@ class Company:
             f"修正依頼(人間): {product.title}", agent="writer",
             task_type="article_write", skill="article-writing",
             input={"plan": plan, "feedback": feedback,
-                   "previous_body": prev.get("body_markdown", ""), "human_request": True},
+                   "previous_body": prev.get("body_markdown", ""), "human_request": True,
+                   "price_requirement": quality_mod.price_requirement_text(product.price_jpy),
+                   "performance_hints": self._performance_hints()},
         )
         self.tasks.run(t_write.id)
         self.tasks.review(t_write.id, True)

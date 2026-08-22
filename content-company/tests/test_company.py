@@ -111,6 +111,32 @@ class PipelineTest(unittest.TestCase):
             # 未知の商品では None
             self.assertIsNone(c.article_for("nope"))
 
+    def test_quality_format_and_price_tier(self):
+        from company import quality
+        # 体裁: 見出しなし・プレースホルダ残り
+        bad = {"body_markdown": "本文だけ。[ここに具体例を記入]"}
+        fi = quality.format_issues(bad)
+        self.assertTrue(any("見出し" in x for x in fi))
+        self.assertTrue(any("プレースホルダ" in x for x in fi))
+        # 価格連動: 高価格帯に薄い本文は不足指摘
+        thin = {"body_markdown": "# 見出し\n短い本文。"}
+        ti = quality.tier_issues(thin, 3000)
+        self.assertTrue(ti)  # 文字数・具体例・チェックリスト不足
+        # 十分な入門記事は体裁OK
+        ok = {"body_markdown": "# タイトル\n" + "本文です。" * 80 + "\n- 手順1\nたとえば具体例。"}
+        self.assertEqual(quality.format_issues(ok), [])
+
+    def test_performance_hints_reads_outcome(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            c.storage.put("products", {"id": "p1", "title": "勝ち", "theme": "副業",
+                                       "outcome": "success"})
+            c.storage.put("products", {"id": "p2", "title": "負け", "theme": "健康",
+                                       "outcome": "fail"})
+            h = c._performance_hints()
+            self.assertTrue(any("勝ち" in x for x in h["winning_angles"]))
+            self.assertTrue(any("負け" in x for x in h["losing_angles"]))
+
     def test_similarity_guard_detects_near_duplicate(self):
         with tempfile.TemporaryDirectory() as tmp:
             c = make_company(tmp)

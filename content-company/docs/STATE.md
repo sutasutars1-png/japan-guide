@@ -8,7 +8,7 @@
 
 - **ブランチ**: `claude/content-sales-company-build-n068kg`
 - **場所**: すべて `content-company/` 配下（同リポジトリの `ai-os/` は別物＝汎用実行プレーン）
-- **テスト**: `python3 -m unittest discover -s tests` が緑（**42件**）
+- **テスト**: `python3 -m unittest discover -s tests` が緑（**44件**）
 - **依存**: Python 3.11+、**標準ライブラリのみ**（pip 不要, §36 Pro範囲）
 - **ロードマップ対応**: Phase 0〜8 を一通り実装済み。詳細は
   [`ROADMAP-PHASES.md`](ROADMAP-PHASES.md)。元ロードマップは [`roadmap-source.md`](roadmap-source.md)。
@@ -26,12 +26,13 @@
 | X / TikTok 下書き（投稿は人間・外部通信なし） | `company/social.py` | §32-33 |
 | 定期スケジューラ（安全ジョブのみ・既定オフ） | `company/scheduler.py` | §38 |
 | ローカル Web GUI / GUI設定 | `company/webgui.py`, `company/config.py` | §25, §3.3, §23 |
+| 品質ループ（体裁/価格連動/実績反映/重複） | `company/quality.py`, `company/company.py` | 付録A#4-5, §31 |
 
 ## 5分で再開する
 
 ```bash
 cd content-company
-python3 -m unittest discover -s tests      # まず緑を確認（42件）
+python3 -m unittest discover -s tests      # まず緑を確認（44件）
 python3 -m company demo                     # 架空データで全ループを実演
 python3 -m company gui                      # GUI（http://127.0.0.1:8787/）
 python3 -m company gui --llm                # 実 LLM 生成を有効化して起動

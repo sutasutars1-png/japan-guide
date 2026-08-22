@@ -122,8 +122,12 @@ class _RewriteStub:
             return {"product_name": "P", "why_sells": "x", "target": "t"}
         if tt == "article_write":
             self.writes += 1
-            return {"title": "P", "body_markdown": f"body v{self.writes}",
-                    "_llm": True, "outline": [], "cta": ""}
+            # 体裁・価格連動の品質ゲートを通す本文（見出し/分量/例/箇条書き）。
+            body = ("# 見出し v%d\n" % self.writes
+                    + "この記事では具体的な手順を説明します。たとえば実際のケースを挙げます。" * 20
+                    + "\n- 手順1\n- 手順2\n")
+            return {"title": "P", "body_markdown": body,
+                    "_llm": True, "outline": ["導入", "本論", "まとめ"], "cta": ""}
         if tt == "review_final":
             passed = self.writes > self.pass_after
             return {"verdict": "pass" if passed else "reject",
