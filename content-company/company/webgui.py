@@ -35,15 +35,23 @@ from .company import Company
 def _state(c: Company) -> dict:
     products = c.storage.all("products")
     pending = c.approvals.pending()
-    # product_id → 未処理の publish 承認 id
-    pub_apr = {a["payload"].get("product_id"): a["id"]
-               for a in pending if a.get("kind") == "publish"}
+    # product_id → 最新の publish 承認 {id, status}（pending だけでなく承認済みも）。
+    # 承認後も承認IDを行に残し、「公開URL記録」ボタンを出せるようにする。
+    pub_apr: dict = {}
+    for a in c.storage.all("approvals"):
+        if a.get("kind") != "publish":
+            continue
+        pid = a.get("payload", {}).get("product_id")
+        if pid:
+            pub_apr[pid] = {"id": a["id"], "status": a.get("status", "pending")}
     prod_rows = [{
         "id": p["id"], "title": p.get("title"), "category": p.get("category"),
         "status": p.get("status"), "pv": p.get("pv", 0),
         "purchases": p.get("purchases", 0), "revenue_jpy": p.get("revenue_jpy", 0),
         "conversion_rate": p.get("conversion_rate", 0), "outcome": p.get("outcome"),
-        "url": p.get("url"), "approval_id": pub_apr.get(p["id"]),
+        "url": p.get("url"),
+        "approval_id": (pub_apr.get(p["id"]) or {}).get("id"),
+        "approval_status": (pub_apr.get(p["id"]) or {}).get("status"),
     } for p in products]
     prod_rows.sort(key=lambda r: (r["status"] != "awaiting_approval", r["id"]))
     social = c.social.list()
@@ -221,7 +229,12 @@ class _Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/article":
                 q = parse_qs(u.query)
                 pid = (q.get("product_id") or [""])[0]
-                self._json({"article": c.article_for(pid)})
+                art = c.article_for(pid)
+                if art and art.get("body_markdown"):
+                    from .note_channel import renumber_ordered_lists
+                    art = {**art,
+                           "body_markdown": renumber_ordered_lists(art["body_markdown"])}
+                self._json({"article": art})
             elif u.path == "/api/logs":
                 self._json(_logs(c))
             else:
@@ -263,6 +276,8 @@ class _Handler(BaseHTTPRequestHandler):
                     c.disable_llm()  # チェックOFFなら雛形に戻す（切替を対称に）
                 res = c.plan_products(int(b.get("n", 5)))
                 self._json({"planned": res})
+            elif u.path == "/api/rewrite":
+                self._json(c.request_rewrite(b["product_id"], b.get("feedback", "")))
             elif u.path == "/api/approve":
                 self._json(c.approvals.approve(b["approval_id"]).to_dict())
             elif u.path == "/api/reject":
@@ -497,18 +512,26 @@ async function refresh(){
     const st = p.status==='awaiting_approval'?'<span class="pill await">公開待ち</span>'
       : p.status==='published'?'<span class="pill pub">公開</span>':`<span class="pill">${esc(p.status)}</span>`;
     let act=`<button class="ghost" onclick="viewArticle('${p.id}')">記事を読む</button> `;
-    if(p.status==='awaiting_approval'&&p.approval_id)
-      act+=`<button class="good" onclick="approve('${p.approval_id}')">承認</button>`;
-    else if(p.status==='awaiting_approval')
-      act+='<span class="muted">承認申請へ</span>';
-    else if(p.status==='published')
-      act+=`<button class="ghost" onclick="metrics('${p.id}')">実績入力</button>`;
-    if(p.status==='published'||p.status==='awaiting_approval')
-      act+=` <button class="ghost" onclick="notePreview('${p.id}')">note貼付(書式)</button>`
-           +` <button class="ghost" onclick="noteExport('${p.id}')">MD出力</button>`;
+    // 修正依頼（差し戻し中/公開待ちの記事を書き直す, §4）
+    if(p.status==='review'||p.status==='awaiting_approval')
+      act+=`<button class="ghost" onclick="requestRewrite('${p.id}')">修正依頼</button> `;
+    if(p.status==='awaiting_approval'){
+      if(p.approval_status==='approved')
+        act+=`<button class="good" onclick="recordUrl('${p.id}','${p.approval_id}')">公開URL記録</button> `;
+      else if(p.approval_id)
+        act+=`<button class="good" onclick="approve('${p.approval_id}')">承認</button>`
+            +` <button class="bad" onclick="reject('${p.approval_id}')">却下</button> `;
+    }
     if(p.status==='published')
-      act+=` <button class="ghost" onclick="social('x','${p.id}')">X下書き</button>`
+      act+=`<button class="ghost" onclick="metrics('${p.id}')">実績入力</button> `;
+    if(p.status==='published'||p.status==='awaiting_approval')
+      act+=`<button class="ghost" onclick="notePreview('${p.id}')">note貼付(書式)</button>`
+           +` <button class="ghost" onclick="noteExport('${p.id}')">MD出力</button> `;
+    if(p.status==='published'){
+      if(p.url) act+=`<a href="${esc(p.url)}" target="_blank" class="muted">公開URL↗</a> `;
+      act+=`<button class="ghost" onclick="social('x','${p.id}')">X下書き</button>`
            +` <button class="ghost" onclick="social('tiktok','${p.id}')">TikTok下書き</button>`;
+    }
     return `<tr><td>${esc(p.title)}</td><td>${esc(p.category)}</td><td>${st}</td>
       <td>${p.pv}</td><td>${p.purchases}</td><td>${yen(p.revenue_jpy)}</td>
       <td>${p.outcome?esc(p.outcome):'-'}</td><td class="row">${act}</td></tr>`;
@@ -596,11 +619,18 @@ async function socialPosted(id){const url=prompt('投稿した X/TikTok の URL 
   if(!url)return; try{await api('/api/social/posted','POST',{social_id:id,url});
   toast('投稿を記録しました');refresh();}catch(e){toast('エラー: '+e.message+'（先に承認待ちで承認が必要です）');}}
 async function approve(id){try{await api('/api/approve','POST',{approval_id:id});
-  const url=prompt('公開する場合は note の URL を入力（キャンセルで承認のみ）:');
-  if(url){const pid=await findProductFor(id); if(pid) await api('/api/publish','POST',{product_id:pid,url,approval_id:id});}
-  toast('承認しました');refresh();}catch(e){toast('エラー: '+e.message);}}
-async function findProductFor(aid){const s=await api('/api/state');
-  const p=s.products.find(x=>x.approval_id===aid);return p?p.id:null;}
+  toast('承認しました。noteに貼って公開したら「公開URL記録」を押してください。');refresh();}
+  catch(e){toast('エラー: '+e.message);}}
+async function recordUrl(pid,aid){const url=prompt('公開した note の URL を入力:');
+  if(!url)return; try{await api('/api/publish','POST',{product_id:pid,url,approval_id:aid});
+  toast('公開URLを記録しました');refresh();}catch(e){toast('エラー: '+e.message);}}
+async function requestRewrite(pid){const fb=prompt('修正依頼の内容（例: 冒頭をもっと具体的に／価格の根拠を追加）:');
+  if(fb==null||!fb.trim())return;
+  toast('修正を依頼中…（実LLMだと数分かかります）');
+  try{const r=await api('/api/rewrite','POST',{product_id:pid,feedback:fb});
+  if(r.llm===false) toast('雛形のため書き直しても骨格のままです。実LLM生成をONにしてください。');
+  else toast(r.passed?'修正版がレビュー通過。承認待ちへ。':'修正版はレビューで差し戻し（reviewに戻りました）。');
+  refresh();}catch(e){toast('エラー: '+e.message);}}
 async function reject(id){const note=prompt('却下理由（任意）')||'';
   try{await api('/api/reject','POST',{approval_id:id,note});toast('却下しました');refresh();}
   catch(e){toast('エラー: '+e.message);}}

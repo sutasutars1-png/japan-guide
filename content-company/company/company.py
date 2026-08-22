@@ -261,6 +261,64 @@ class Company:
             rewrites += 1
         return article, review, rewrites
 
+    def request_rewrite(self, product_id: str, feedback: str) -> dict:
+        """人間の修正依頼を反映して記事を書き直し、再レビューする (§4, §21)。
+
+        修正後は承認をやり直す（前の承認は無効化し、pass すれば新しい承認待ちへ）。
+        実 LLM 生成が有効なときに意味を持つ（雛形は書き直しても骨格のまま）。
+        """
+        raw = self.storage.get("products", product_id)
+        if raw is None:
+            raise KeyError(product_id)
+        product = Product.from_dict(raw)
+        arts = self.storage.find("articles", product_id=product_id)
+        if not arts:
+            raise ValueError(f"記事が見つかりません: {product_id}")
+        prev = arts[-1]
+        plan = {
+            "product_name": product.title, "theme": product.theme,
+            "target": product.target, "price_jpy": product.price_jpy,
+            "category": product.category,
+        }
+        t_write = self.tasks.create(
+            f"修正依頼(人間): {product.title}", agent="writer",
+            task_type="article_write", skill="article-writing",
+            input={"plan": plan, "feedback": feedback,
+                   "previous_body": prev.get("body_markdown", ""), "human_request": True},
+        )
+        self.tasks.run(t_write.id)
+        self.tasks.review(t_write.id, True)
+        article = self.tasks.get(t_write.id).output  # type: ignore[union-attr]
+
+        t_review = self.tasks.create(
+            f"レビュー(修正後): {product.title}", agent="reviewer",
+            task_type="review_final", skill="quality-review",
+            parent_id=t_write.id, input={"article": article},
+        )
+        self.tasks.run(t_review.id)
+        review = self.tasks.get(t_review.id).output  # type: ignore[union-attr]
+        passed = review.get("verdict") == "pass"
+        self.tasks.review(t_review.id, passed, notes=review.get("notes", ""))
+
+        article_id = ids.new_id("art")
+        self.storage.put("articles", {"id": article_id, "product_id": product.id,
+                                      "rewrites": int(prev.get("rewrites", 0)) + 1, **article})
+        approval_id = None
+        if passed:
+            product.status = "awaiting_approval"
+            apr = self.approvals.request(
+                "publish", f"note公開の承認待ち(修正後): {product.title}",
+                {"product_id": product.id, "article_id": article_id}, requested_by="writer")
+            approval_id = apr.id
+        else:
+            product.status = "review"
+        self.storage.put("products", product.to_dict())
+        self.memory.add("rewrite", f"修正依頼を反映: {product.title}",
+                        feedback[:200], related=[product.id])
+        return {"product_id": product_id, "status": product.status, "passed": passed,
+                "approval_id": approval_id, "review": review,
+                "llm": bool(article.get("_llm"))}
+
     # ---- 公開 (§21, §22): 人間承認後にのみ実行 --------------------------
 
     def publish(self, product_id: str, url: str, approval_id: str) -> Product:

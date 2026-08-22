@@ -111,6 +111,24 @@ class PipelineTest(unittest.TestCase):
             # 未知の商品では None
             self.assertIsNone(c.article_for("nope"))
 
+    def test_request_rewrite_creates_new_article(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            res = c.plan_products(1)
+            pid = res[0]["product_id"]
+            before = len(c.storage.find("articles", product_id=pid))
+            r = c.request_rewrite(pid, "冒頭を具体的に")
+            after = len(c.storage.find("articles", product_id=pid))
+            self.assertEqual(after, before + 1)          # 新しい記事版が保存される
+            self.assertIn(r["status"], ("awaiting_approval", "review"))
+
+    def test_renumber_ordered_lists(self):
+        from company.note_channel import renumber_ordered_lists
+        out = renumber_ordered_lists("1. a\n\n5. b\n\n2. c")
+        self.assertEqual(out.count("1."), 1)   # 先頭のみ 1.
+        self.assertIn("2. b", out)             # 5. → 2.
+        self.assertIn("3. c", out)             # 2. → 3.
+
     def test_note_render_html_formats_markdown(self):
         from company.note_channel import md_to_html
         html = md_to_html("# 見出し\n本文**太字**\n\n- 箇条書き\n\n―― ここから有料 ――\n有料")

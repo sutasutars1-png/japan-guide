@@ -40,12 +40,50 @@ def _inline_md(text: str) -> str:
     return t
 
 
+def _is_ol(s: str) -> bool:
+    return re.match(r"^\s*\d+[.)]\s+", s) is not None
+
+
+def renumber_ordered_lists(md: str) -> str:
+    """順序付きリスト（1. 2. …）の番号を出現順に振り直す。
+
+    LLM が番号を誤る/重複させることがあるため、連続ブロック内で 1..N に正規化。
+    項目間に空行が1つ入っていても同一リストとして扱う（番号を継続）。
+    """
+    lines = md.split("\n")
+    # 番号項目に挟まれた空行を除去して、リストを連続させる。
+    merged: list[str] = []
+    for i, ln in enumerate(lines):
+        if ln.strip() == "" and merged and _is_ol(merged[-1]):
+            j = i + 1
+            while j < len(lines) and lines[j].strip() == "":
+                j += 1
+            if j < len(lines) and _is_ol(lines[j]):
+                continue
+        merged.append(ln)
+    # 連続ブロックごとに 1..N へ振り直す。
+    result: list[str] = []
+    n = 0
+    for ln in merged:
+        if _is_ol(ln):
+            n += 1
+            num = n
+            ln = re.sub(r"^(\s*)\d+([.)])(\s+)",
+                        lambda m: m.group(1) + str(num) + m.group(2) + m.group(3),
+                        ln, count=1)
+        elif ln.strip() != "":
+            n = 0
+        result.append(ln)
+    return "\n".join(result)
+
+
 def md_to_html(md: str) -> str:
     """最小限の Markdown → HTML 変換（見出し/箇条書き/段落/引用/罫線）。
 
     note エディタは Markdown 記号を解釈しないため、書式付きで貼り付けられるよう
     整形済み HTML を用意する。標準ライブラリのみ。
     """
+    md = renumber_ordered_lists(md)
     out: list[str] = []
     para: list[str] = []
     state = {"ul": False, "ol": False}
@@ -139,7 +177,7 @@ class NoteExporter:
         if not arts:
             raise ValueError(f"記事が見つかりません: {product_id}")
         article = arts[-1]
-        body = article.get("body_markdown", "")
+        body = renumber_ordered_lists(article.get("body_markdown", ""))
         # 有料エリア境界を note 用コメントに置換して明示。
         body_marked = body.replace(
             _PAID_MARK_SRC, "<!-- 👇 ここから下を note の有料エリアに設定 -->")
