@@ -1,25 +1,22 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
 
-rem Python ランチャを検出（py 優先、無ければ python）
+rem Python launcher: prefer py, fall back to python
 where py >nul 2>nul && (set "PY=py") || (set "PY=python")
 
-echo ============================================
-echo   AI会社 OS - ローカル GUI を起動します
+echo ==========================================
+echo   AI Kaisha OS - Local GUI
 echo   URL : http://127.0.0.1:8787/
-echo   実LLM生成: 画面左上の「実LLM生成」チェックで切替
-echo             （ON=本物の記事 / OFF=雛形。claude CLI ログイン要）
-echo   停止: この黒い画面で Ctrl+C / ウィンドウを閉じる
-echo ============================================
+echo   LLM ON/OFF : checkbox at the top-left
+echo   Stop       : close this window
+echo ==========================================
 echo.
 
-rem サーバ起動を少し待ってから既定ブラウザを開く
-start "" /min cmd /c "timeout /t 2 >nul & start "" http://127.0.0.1:8787/"
+rem Open the default browser a couple seconds after the server starts
+start "" /min cmd /c "timeout /t 2 >nul & start http://127.0.0.1:8787/"
 
-rem GUI サーバ起動（127.0.0.1 束縛・標準ライブラリのみ）
+rem Start the GUI server (bound to 127.0.0.1, stdlib only)
 %PY% -m company gui
 
 echo.
-echo GUI を終了しました。
 pause
