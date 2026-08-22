@@ -266,6 +266,15 @@ class Company:
         self.memory.add("result", f"公開: {product.title}", url, related=[product_id])
         return product
 
+    def article_for(self, product_id: str) -> dict | None:
+        """商品に紐づく最新の記事レコードを返す（本文確認用）。
+
+        雛形/実LLMを問わず、生成された記事本文（body_markdown 等）と
+        is_skeleton フラグを GUI/CLI から確認できるようにする。
+        """
+        arts = self.storage.find("articles", product_id=product_id)
+        return arts[-1] if arts else None
+
     # ---- 実績の取り込み (§30-31, 付録A #2: 当面は手動入力) --------------
 
     def record_metrics(

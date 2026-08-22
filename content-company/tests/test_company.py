@@ -97,6 +97,20 @@ class PipelineTest(unittest.TestCase):
             self.assertGreaterEqual(len(list(c.storage.read_log("decisions"))), 1)
             self.assertGreaterEqual(len(c.memory.all()), 5)
 
+    def test_article_for_returns_body(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            res = c.plan_products(1)
+            pid = res[0]["product_id"]
+            art = c.article_for(pid)
+            self.assertIsNotNone(art)
+            self.assertIn("body_markdown", art)
+            self.assertTrue(art["body_markdown"])
+            # 雛形は is_skeleton が立ち、確認できる
+            self.assertTrue(art.get("is_skeleton"))
+            # 未知の商品では None
+            self.assertIsNone(c.article_for("nope"))
+
     def test_publish_requires_approval(self):
         with tempfile.TemporaryDirectory() as tmp:
             c = make_company(tmp)

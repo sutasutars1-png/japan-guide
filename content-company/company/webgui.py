@@ -8,6 +8,7 @@
   GET  /                     コックピット HTML
   GET  /dashboard            §25 ダッシュボード（iframe 埋め込み用）
   GET  /api/state            KPI・進捗・承認待ち・商品・スキル をまとめて返す
+  GET  /api/article?product_id=  記事本文（body_markdown 等）を返す（確認用）
   POST /api/plan             {n, llm}   企画パイプライン実行
   POST /api/approve|reject   {approval_id}
   POST /api/publish          {product_id, url, approval_id}
@@ -119,6 +120,10 @@ class _Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/skill/versions":
                 q = parse_qs(u.query)
                 self._json(c.skills_lab.versions((q.get("key") or [""])[0]))
+            elif u.path == "/api/article":
+                q = parse_qs(u.query)
+                pid = (q.get("product_id") or [""])[0]
+                self._json({"article": c.article_for(pid)})
             else:
                 self._json({"error": "not found"}, 404)
         except Exception as exc:  # noqa: BLE001
@@ -379,7 +384,7 @@ async function refresh(){
   tbody('#products').innerHTML=s.products.length? s.products.map(p=>{
     const st = p.status==='awaiting_approval'?'<span class="pill await">公開待ち</span>'
       : p.status==='published'?'<span class="pill pub">公開</span>':`<span class="pill">${esc(p.status)}</span>`;
-    let act='';
+    let act=`<button class="ghost" onclick="viewArticle('${p.id}')">記事</button> `;
     if(p.status==='awaiting_approval'&&p.approval_id)
       act=`<button class="good" onclick="approve('${p.approval_id}')">承認</button>`;
     else if(p.status==='awaiting_approval')
@@ -485,6 +490,18 @@ async function propose(key){const guidance=prompt('改善したい手順・ガ�
   catch(e){toast('エラー: '+e.message);}}
 async function showVersions(key){const vs=await api('/api/skill/versions?key='+encodeURIComponent(key));
   $('#out').textContent=JSON.stringify(vs,null,2);toast('履歴を下部に表示');}
+async function viewArticle(pid){try{const r=await api('/api/article?product_id='+encodeURIComponent(pid));
+  const a=r.article;
+  if(!a){$('#out').textContent='(この商品の記事はまだ生成されていません)';toast('記事なし');return;}
+  const body=a.body_markdown||a.body||'(本文フィールドが見つかりません)';
+  let head='';
+  if(a.is_skeleton){head='⚠ これは雛形（自動生成のたたき台）です。\n'
+    +'実LLM生成をONにすると本物の記事になり、レビュー通過後に「承認待ち」へ進みます。\n'
+    +'（左上の「実LLM生成」にチェック → 商品を企画。※ claude CLI ログインが必要）\n\n'
+    +'─────────────────────────────\n\n';}
+  $('#out').textContent=head+body;
+  toast(a.is_skeleton?'雛形を下部に表示（実LLM生成OFF）':'記事本文を下部に表示');
+  }catch(e){toast('エラー: '+e.message);}}
 async function noteExport(pid){try{const r=await api('/api/note/export','POST',{product_id:pid});
   $('#out').textContent=r.markdown;
   try{await navigator.clipboard.writeText(r.markdown);toast('note本文をコピー＋書き出し: '+r.path);}

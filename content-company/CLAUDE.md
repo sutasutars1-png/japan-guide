@@ -43,7 +43,7 @@ AI エージェント群で **noteを中心としたデジタルコンテンツ�
 - **GUI 設定**（`config.py` の `EDITABLE_FIELDS`）: 許可フィールドのみ変更、
   `data/config.local.json` に永続化。GUI は 127.0.0.1 束縛・CSRF/ボディ上限あり。
 - ダッシュボード生成（§25）、デモシード（架空データで全ループ実演）
-- **標準ライブラリのみ・外部 API 不要**（§36）。`python3 -m unittest discover -s tests` が緑（37件）
+- **標準ライブラリのみ・外部 API 不要**（§36）。`python3 -m unittest discover -s tests` が緑（38件）
 
 **未実装 / 次にやること**
 - SNS 自動投稿（§32「効果と安全性が確認できたら」）は意図的に未実装（安全側）
