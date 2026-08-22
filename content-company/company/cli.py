@@ -77,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
     p_bak.add_argument("--out", default="backups/snapshot")
 
     sub.add_parser("demo", help="架空データで全ループを実演 (企画→承認→公開→実績→評価)")
+    p_reset = sub.add_parser("reset", help="台帳データを初期化（実行前に自動バックアップ）")
+    p_reset.add_argument("--yes", action="store_true", help="確認なしで実行")
 
     # Skill 自己改善 (§20)
     p_skill = sub.add_parser("skill", help="Skill 自己改善ループ (§20)")
@@ -195,6 +197,14 @@ def main(argv: list[str] | None = None) -> int:
     elif args.cmd == "backup":
         path = c.storage.snapshot(args.out)
         print(f"バックアップ作成: {path}")
+    elif args.cmd == "reset":
+        if not args.yes:
+            ans = input("全データを初期化します（自動バックアップあり）。'DELETE' と入力: ")
+            if ans.strip() != "DELETE":
+                print("中止しました")
+                return 0
+        info = c.reset_data()
+        print(f"初期化しました。バックアップ: {info.get('backup')}")
     elif args.cmd == "demo":
         from .seed import seed_demo, DemoRunner
         c.tasks.runner = DemoRunner()

@@ -261,6 +261,39 @@ class Company:
             rewrites += 1
         return article, review, rewrites
 
+    def reset_data(self, *, backup: bool = True) -> dict:
+        """台帳データ（商品/記事/タスク/承認/実績など）を初期化する。
+
+        破壊的操作なので、実行前に data/ 全体を zip バックアップする（付録A #6）。
+        設定（config.local.json）とスケジュール（schedule.json）は data 直下の
+        ファイルなので消さない。GUI からは二重確認の上で呼ぶ。
+        """
+        import pathlib
+        import shutil
+
+        root = pathlib.Path(self.storage.data_dir)
+        info: dict = {"backup": None, "cleared": []}
+        if backup and root.exists() and any(root.iterdir()):
+            stamp = ids.now_iso().replace(":", "").replace("-", "").replace("T", "_")[:15]
+            dest = root.parent / f"{root.name}_backup_{stamp}"
+            try:
+                info["backup"] = str(self.storage.snapshot(dest))
+            except Exception:  # noqa: BLE001
+                info["backup"] = None
+        for sub in sorted(root.iterdir()) if root.exists() else []:
+            if not sub.is_dir() or sub.name == "backups":
+                continue
+            for f in sub.iterdir():
+                if f.name == ".gitkeep":
+                    continue
+                if f.is_file():
+                    f.unlink()
+                else:
+                    shutil.rmtree(f, ignore_errors=True)
+            info["cleared"].append(sub.name)
+        self.memory.add("system", "データ初期化", f"backup={info['backup']}")
+        return info
+
     def request_rewrite(self, product_id: str, feedback: str) -> dict:
         """人間の修正依頼を反映して記事を書き直し、再レビューする (§4, §21)。
 

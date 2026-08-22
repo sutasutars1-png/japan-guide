@@ -170,14 +170,24 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):  # 静かに
         pass
 
+    def handle_one_request(self):  # ブラウザ切断の無害な例外を握りつぶす
+        try:
+            super().handle_one_request()
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            self.close_connection = True
+
     # ---- helpers ----------------------------------------------------------
 
     def _send(self, code: int, body: bytes, ctype: str) -> None:
-        self.send_response(code)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            # ブラウザが通信を打ち切っただけ（例: ダッシュボード再読込）。無視。
+            self.close_connection = True
 
     def _json(self, obj, code: int = 200) -> None:
         self._send(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"),
@@ -278,6 +288,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json({"planned": res})
             elif u.path == "/api/rewrite":
                 self._json(c.request_rewrite(b["product_id"], b.get("feedback", "")))
+            elif u.path == "/api/reset":
+                if b.get("confirm") != "DELETE":
+                    return self._json({"error": "confirm=DELETE が必要です"}, 400)
+                self._json(c.reset_data())
             elif u.path == "/api/approve":
                 self._json(c.approvals.approve(b["approval_id"]).to_dict())
             elif u.path == "/api/reject":
@@ -406,6 +420,7 @@ iframe{width:100%;height:520px;border:1px solid var(--line);border-radius:10px;b
     <button class="ghost" id="btnDemo">デモ投入</button>
     <button class="ghost" id="btnEval">評価</button>
     <button class="ghost" id="btnRefresh">更新</button>
+    <button class="bad" id="btnReset">データ初期化</button>
   </span>
 </header>
 <main>
@@ -679,6 +694,12 @@ $('#btnEval').onclick=async()=>{try{const r=await api('/api/evaluate','POST',{})
   $('#out').textContent=JSON.stringify(r.actions,null,2);toast('評価しました');refresh();}catch(e){toast(e.message);}};
 $('#btnRefresh').onclick=refresh;
 $('#btnLogs').onclick=loadLogs;
+$('#btnReset').onclick=async()=>{
+  if(!confirm('全データ（商品・記事・タスク・承認・実績など）を削除して初期化します。\\n実行前に自動で data のバックアップ(zip)を作成します。よろしいですか？'))return;
+  if(prompt('確認のため DELETE と入力してください:')!=='DELETE'){toast('中止しました');return;}
+  try{const r=await api('/api/reset','POST',{confirm:'DELETE'});
+  toast('初期化しました'+(r.backup?'（バックアップ: '+r.backup+'）':''));refresh();}
+  catch(e){toast('エラー: '+e.message);}};
 $('#btnImport').onclick=()=>noteImport(false);
 $('#btnImportDry').onclick=()=>noteImport(true);
 $('#schedMaster').onchange=async(e)=>{try{await api('/api/schedule/master','POST',{enabled:e.target.checked});
