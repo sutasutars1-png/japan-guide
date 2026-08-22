@@ -118,8 +118,9 @@ class Company:
         round_no = self.current_round()
 
         # CEO: 実験配分を決定 (§4, §11) → 判断根拠を保存 (§44)
-        alloc = self.experiments.round_allocation(round_no)[:n]
-        while len(alloc) < n:  # n が round_size と違う場合の穴埋め
+        # 既存の作成数を見て手薄なカテゴリーを優先（n=1 でも A に偏らない）。
+        alloc = self.experiments.next_categories(n)
+        while len(alloc) < n:  # 念のための穴埋め
             alloc.append(list(cats)[len(alloc) % len(cats)])
         self.log_decision(
             context=f"Round {round_no}: {n}商品の企画方針",
@@ -380,6 +381,23 @@ class Company:
             info["cleared"].append(sub.name)
         self.memory.add("system", "データ初期化", f"backup={info['backup']}")
         return info
+
+    def delete_product(self, product_id: str) -> dict:
+        """商品と、それに紐づく記事を削除する（§21 delete は要人間確認）。
+
+        GUI からは確認ダイアログを経て呼ぶ。承認・実績データはそのまま残す。
+        """
+        raw = self.storage.get("products", product_id)
+        if raw is None:
+            raise KeyError(product_id)
+        removed_articles = 0
+        for a in self.storage.find("articles", product_id=product_id):
+            if self.storage.delete("articles", a["id"]):
+                removed_articles += 1
+        self.storage.delete("products", product_id)
+        self.memory.add("system", "商品削除", raw.get("title", ""), related=[product_id])
+        return {"deleted": product_id, "title": raw.get("title"),
+                "removed_articles": removed_articles}
 
     def request_rewrite(self, product_id: str, feedback: str) -> dict:
         """人間の修正依頼を反映して記事を書き直し、再レビューする (§4, §21)。

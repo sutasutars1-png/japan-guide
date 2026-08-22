@@ -129,6 +129,21 @@ class PipelineTest(unittest.TestCase):
         ok = {"body_markdown": "# タイトル\n" + "本文です。" * 80 + "\n- 手順1\nたとえば具体例。"}
         self.assertEqual(quality.format_issues(ok), [])
 
+    def test_single_plans_spread_across_categories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            cats = [c.plan_products(1)[0]["category"] for _ in range(5)]
+            self.assertEqual(len(set(cats)), 5)  # A に偏らず A〜E を網羅
+
+    def test_delete_product_removes_articles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            pid = c.plan_products(1)[0]["product_id"]
+            self.assertTrue(c.storage.find("articles", product_id=pid))
+            c.delete_product(pid)
+            self.assertIsNone(c.storage.get("products", pid))
+            self.assertEqual(c.storage.find("articles", product_id=pid), [])
+
     def test_performance_hints_reads_outcome(self):
         with tempfile.TemporaryDirectory() as tmp:
             c = make_company(tmp)

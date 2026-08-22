@@ -49,6 +49,35 @@ class ExperimentDesign:
             i += 1
         return alloc
 
+    def next_categories(self, n: int) -> list[str]:
+        """次に作る n 商品のカテゴリーを、既存の作成数を見て分散配分する。
+
+        - 実績（購入）が無い探索期は、**作成数が少ないカテゴリーを優先**して
+          A〜E をまんべんなく回す（n=1 ずつ企画しても A に偏らない）。
+        - 実績が出たら、成績上位（上位3カテゴリー）に寄せつつ、その中で
+          作成数の少ないものから埋める（§11 の重点配分を維持）。
+        撤退済みカテゴリーは除外。
+        """
+        cats = [c for c in DEFAULT_CATEGORIES if not self.is_retreated(c)] \
+            or list(DEFAULT_CATEGORIES)
+        counts: dict[str, int] = {c: 0 for c in cats}
+        for p in self.storage.all("products"):
+            c = p.get("category")
+            if c in counts:
+                counts[c] += 1
+        ranking = self.category_ranking()
+        has_sales = any(v > 0 for _, v in ranking)
+        if has_sales:
+            pool = [c for c, _ in ranking if c in cats][:3] or cats
+        else:
+            pool = cats
+        alloc: list[str] = []
+        for _ in range(max(n, 0)):
+            best = min(pool, key=lambda c: (counts[c], pool.index(c)))
+            alloc.append(best)
+            counts[best] += 1
+        return alloc
+
     # ---- カテゴリー成績 --------------------------------------------------
 
     def category_ranking(self) -> list[tuple[str, int]]:

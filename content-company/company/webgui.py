@@ -288,6 +288,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json({"planned": res})
             elif u.path == "/api/rewrite":
                 self._json(c.request_rewrite(b["product_id"], b.get("feedback", "")))
+            elif u.path == "/api/product/delete":
+                if not b.get("confirm"):
+                    return self._json({"error": "confirm が必要です"}, 400)
+                self._json(c.delete_product(b["product_id"]))
             elif u.path == "/api/reset":
                 if b.get("confirm") != "DELETE":
                     return self._json({"error": "confirm=DELETE が必要です"}, 400)
@@ -527,6 +531,7 @@ async function refresh(){
     const st = p.status==='awaiting_approval'?'<span class="pill await">公開待ち</span>'
       : p.status==='published'?'<span class="pill pub">公開</span>':`<span class="pill">${esc(p.status)}</span>`;
     let act=`<button class="ghost" onclick="viewArticle('${p.id}')">記事を読む</button> `;
+    act+=`<button class="bad" onclick="deleteProduct('${p.id}','${(p.title||'').replace(/'/g,'')}')">削除</button> `;
     // 修正依頼（差し戻し中/公開待ちの記事を書き直す, §4）
     if(p.status==='review'||p.status==='awaiting_approval')
       act+=`<button class="ghost" onclick="requestRewrite('${p.id}')">修正依頼</button> `;
@@ -640,6 +645,11 @@ async function approve(id){try{await api('/api/approve','POST',{approval_id:id})
 async function recordUrl(pid,aid){const url=prompt('公開した note の URL を入力:');
   if(!url)return; try{await api('/api/publish','POST',{product_id:pid,url,approval_id:aid});
   toast('公開URLを記録しました');refresh();}catch(e){toast('エラー: '+e.message);}}
+async function deleteProduct(pid,title){
+  if(!confirm('この商品と記事を削除します：\\n'+(title||pid)+'\\nよろしいですか？'))return;
+  try{const r=await api('/api/product/delete','POST',{product_id:pid,confirm:true});
+  toast('削除しました（記事'+r.removed_articles+'件）');refresh();}
+  catch(e){toast('エラー: '+e.message);}}
 async function requestRewrite(pid){const fb=prompt('修正依頼の内容（例: 冒頭をもっと具体的に／価格の根拠を追加）:');
   if(fb==null||!fb.trim())return;
   toast('修正を依頼中…（実LLMだと数分かかります）');
