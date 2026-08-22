@@ -8,7 +8,7 @@
 
 - **ブランチ**: `claude/content-sales-company-build-n068kg`
 - **場所**: すべて `content-company/` 配下（同リポジトリの `ai-os/` は別物＝汎用実行プレーン）
-- **テスト**: `python3 -m unittest discover -s tests` が緑（**38件**）
+- **テスト**: `python3 -m unittest discover -s tests` が緑（**39件**）
 - **依存**: Python 3.11+、**標準ライブラリのみ**（pip 不要, §36 Pro範囲）
 - **ロードマップ対応**: Phase 0〜8 を一通り実装済み。詳細は
   [`ROADMAP-PHASES.md`](ROADMAP-PHASES.md)。元ロードマップは [`roadmap-source.md`](roadmap-source.md)。
@@ -31,7 +31,7 @@
 
 ```bash
 cd content-company
-python3 -m unittest discover -s tests      # まず緑を確認（38件）
+python3 -m unittest discover -s tests      # まず緑を確認（39件）
 python3 -m company demo                     # 架空データで全ループを実演
 python3 -m company gui                      # GUI（http://127.0.0.1:8787/）
 python3 -m company gui --llm                # 実 LLM 生成を有効化して起動

@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import html as _html
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -85,6 +86,75 @@ def _logs(c: Company, limit: int = 60) -> dict:
     return {"tasks": rows}
 
 
+def _note_preview_page(c: Company, product_id: str) -> str:
+    """note 貼り付け用プレビュー（書式ごとコピー可能な独立ページ）。"""
+    try:
+        data = c.note_export.render_html(product_id)
+    except Exception as exc:  # noqa: BLE001
+        return ("<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;"
+                "padding:24px'>記事を取得できませんでした: " + _html.escape(str(exc))
+                + "<br>（実 LLM 生成で記事を作成し、レビュー通過した商品を選んでください）</body>")
+    tags = " ".join("#" + t for t in data.get("hashtags", []))
+    title = _html.escape(data.get("title") or "")
+    price = data.get("price_jpy")
+    body_html = data.get("html", "")
+    tags_esc = _html.escape(tags)
+    return f"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>note貼り付け用: {title}</title>
+<style>
+ body{{font-family:system-ui,"Segoe UI",Roboto,sans-serif;max-width:760px;margin:0 auto;
+   padding:20px;background:#0b0f17;color:#e8eefc}}
+ .bar{{position:sticky;top:0;background:#0b0f17;padding:12px 0;border-bottom:1px solid #24314f;
+   display:flex;gap:10px;align-items:center;flex-wrap:wrap;z-index:5}}
+ button{{background:#2f6bff;color:#fff;border:0;border-radius:8px;padding:9px 14px;
+   font-size:14px;cursor:pointer}} button.ghost{{background:#1e2a44;color:#cfe0ff}}
+ .muted{{color:#9fb0d0;font-size:13px}} .tags{{color:#7fd1a6;font-size:13px;margin-top:4px}}
+ #doc{{background:#0f1626;border:1px solid #24314f;border-radius:10px;padding:22px;margin-top:14px;
+   line-height:1.9}}
+ #doc h1{{font-size:1.6em;margin:.2em 0 .5em}} #doc h2{{font-size:1.3em;margin:1.1em 0 .4em;
+   border-bottom:1px solid #24314f;padding-bottom:4px}} #doc h3{{font-size:1.12em;margin:1em 0 .3em}}
+ #doc p{{margin:.7em 0}} #doc ul,#doc ol{{margin:.6em 0 .6em 1.4em}} #doc li{{margin:.25em 0}}
+ #doc hr{{border:0;border-top:2px dashed #3a4a70;margin:1.4em 0}}
+ #doc .paid{{color:#ffcf6b;font-weight:700}} #doc blockquote{{border-left:3px solid #3a4a70;
+   margin:.6em 0;padding:.2em .9em;color:#c7d4ef}}
+ #msg{{margin-left:auto;color:#7fd1a6;font-size:13px}}
+</style></head><body>
+<div class="bar">
+  <button id="copyBtn">📋 書式ごとコピー</button>
+  <button class="ghost" id="copyText">テキストのみコピー</button>
+  <span class="muted">→ note の本文に貼り付け（見出し・太字・箇条書きが保持されます）</span>
+  <span id="msg"></span>
+</div>
+<div class="muted" style="margin-top:10px">価格: {price}円 ／ ハッシュタグ:</div>
+<div class="tags">{tags_esc}</div>
+<p class="muted">点線（👇 ここから下を…）の位置に、note 側で「有料エリア」の区切りを設定してください。
+自動投稿はしません（貼り付け・公開は人間, §22）。</p>
+<div id="doc">{body_html}</div>
+<script>
+ const msg=t=>{{document.getElementById('msg').textContent=t;}};
+ const doc=document.getElementById('doc');
+ document.getElementById('copyBtn').onclick=async()=>{{
+   try{{
+     await navigator.clipboard.write([new ClipboardItem({{
+       'text/html': new Blob([doc.innerHTML],{{type:'text/html'}}),
+       'text/plain': new Blob([doc.innerText],{{type:'text/plain'}})
+     }})]);
+     msg('コピーしました。noteに貼り付けてください。');
+   }}catch(e){{
+     const r=document.createRange(); r.selectNodeContents(doc);
+     const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r);
+     try{{document.execCommand('copy'); msg('コピーしました（選択方式）。');}}
+     catch(_){{msg('自動コピー不可。本文を手動で全選択してコピーしてください。');}}
+   }}
+ }};
+ document.getElementById('copyText').onclick=async()=>{{
+   try{{await navigator.clipboard.writeText(doc.innerText);msg('テキストをコピーしました。');}}
+   catch(e){{msg('自動コピー不可。手動で選択してください。');}}
+ }};
+</script></body></html>"""
+
+
 class _Handler(BaseHTTPRequestHandler):
     company: Company = None  # type: ignore[assignment]
     server_version = "CompanyGUI/0.1"
@@ -128,6 +198,11 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(200, _INDEX_HTML.encode("utf-8"), "text/html; charset=utf-8")
             elif u.path == "/dashboard":
                 self._send(200, dashboard.render(c).encode("utf-8"),
+                           "text/html; charset=utf-8")
+            elif u.path == "/note/preview":
+                q = parse_qs(u.query)
+                pid = (q.get("product_id") or [""])[0]
+                self._send(200, _note_preview_page(c, pid).encode("utf-8"),
                            "text/html; charset=utf-8")
             elif u.path == "/api/state":
                 self._json(_state(c))
@@ -429,7 +504,8 @@ async function refresh(){
     else if(p.status==='published')
       act+=`<button class="ghost" onclick="metrics('${p.id}')">実績入力</button>`;
     if(p.status==='published'||p.status==='awaiting_approval')
-      act+=` <button class="ghost" onclick="noteExport('${p.id}')">note出力</button>`;
+      act+=` <button class="ghost" onclick="notePreview('${p.id}')">note貼付(書式)</button>`
+           +` <button class="ghost" onclick="noteExport('${p.id}')">MD出力</button>`;
     if(p.status==='published')
       act+=` <button class="ghost" onclick="social('x','${p.id}')">X下書き</button>`
            +` <button class="ghost" onclick="social('tiktok','${p.id}')">TikTok下書き</button>`;
@@ -551,6 +627,7 @@ async function viewArticle(pid){try{const r=await api('/api/article?product_id='
   $('#out').textContent=head+body;
   toast(a.is_skeleton?'雛形を下部に表示（実LLM生成OFF）':'記事本文を下部に表示');
   }catch(e){toast('エラー: '+e.message);}}
+function notePreview(pid){window.open('/note/preview?product_id='+encodeURIComponent(pid),'_blank');}
 async function noteExport(pid){try{const r=await api('/api/note/export','POST',{product_id:pid});
   $('#out').textContent=r.markdown;
   try{await navigator.clipboard.writeText(r.markdown);toast('note本文をコピー＋書き出し: '+r.path);}

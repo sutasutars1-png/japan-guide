@@ -15,6 +15,7 @@ CSV エクスポート**で取り込むのが現実的 (付録A #2)。この方�
 from __future__ import annotations
 
 import csv
+import html as _html
 import io
 import pathlib
 import re
@@ -26,6 +27,96 @@ from . import ids
 # ---- エクスポート（公開補助, §22） ---------------------------------------
 
 _PAID_MARK_SRC = "―― ここから有料 ――"
+
+
+def _inline_md(text: str) -> str:
+    """行内 Markdown（太字/斜体/コード/リンク）を HTML に変換。"""
+    t = _html.escape(text)
+    t = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", t)
+    t = re.sub(r"__(.+?)__", r"<strong>\1</strong>", t)
+    t = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<em>\1</em>", t)
+    t = re.sub(r"`(.+?)`", r"<code>\1</code>", t)
+    t = re.sub(r"\[(.+?)\]\((https?://[^\s)]+)\)", r'<a href="\2">\1</a>', t)
+    return t
+
+
+def md_to_html(md: str) -> str:
+    """最小限の Markdown → HTML 変換（見出し/箇条書き/段落/引用/罫線）。
+
+    note エディタは Markdown 記号を解釈しないため、書式付きで貼り付けられるよう
+    整形済み HTML を用意する。標準ライブラリのみ。
+    """
+    out: list[str] = []
+    para: list[str] = []
+    state = {"ul": False, "ol": False}
+
+    def flush_para() -> None:
+        if para:
+            text = " ".join(para).strip()
+            if text:
+                out.append("<p>" + _inline_md(text) + "</p>")
+            para.clear()
+
+    def close_lists() -> None:
+        if state["ul"]:
+            out.append("</ul>")
+            state["ul"] = False
+        if state["ol"]:
+            out.append("</ol>")
+            state["ol"] = False
+
+    for raw in md.split("\n"):
+        s = raw.strip()
+        if not s:
+            flush_para()
+            close_lists()
+            continue
+        if "ここから有料" in s or "有料エリア" in s:
+            flush_para()
+            close_lists()
+            out.append('<hr><p class="paid">👇 ここから下を note の有料エリアに設定</p>')
+            continue
+        if re.match(r"^([-*_])\1{2,}$", s):
+            flush_para()
+            close_lists()
+            out.append("<hr>")
+            continue
+        m = re.match(r"^(#{1,6})\s+(.*)$", s)
+        if m:
+            flush_para()
+            close_lists()
+            level = len(m.group(1))
+            out.append("<h%d>%s</h%d>" % (level, _inline_md(m.group(2)), level))
+            continue
+        m = re.match(r"^\d+[.)]\s+(.*)$", s)
+        if m:
+            flush_para()
+            if not state["ol"]:
+                close_lists()
+                out.append("<ol>")
+                state["ol"] = True
+            out.append("<li>" + _inline_md(m.group(1)) + "</li>")
+            continue
+        m = re.match(r"^[-*・]\s+(.*)$", s)
+        if m:
+            flush_para()
+            if not state["ul"]:
+                close_lists()
+                out.append("<ul>")
+                state["ul"] = True
+            out.append("<li>" + _inline_md(m.group(1)) + "</li>")
+            continue
+        m = re.match(r"^>\s?(.*)$", s)
+        if m:
+            flush_para()
+            close_lists()
+            out.append("<blockquote>" + _inline_md(m.group(1)) + "</blockquote>")
+            continue
+        para.append(s)
+
+    flush_para()
+    close_lists()
+    return "\n".join(out)
 
 
 class NoteExporter:
@@ -76,6 +167,29 @@ class NoteExporter:
             "product_id": product_id, "title": product.get("title"),
             "price_jpy": product.get("price_jpy"), "hashtags": hashtags,
             "path": str(path), "markdown": content,
+        }
+
+    def render_html(self, product_id: str) -> dict[str, Any]:
+        """note 貼り付け用に、記事本文を整形済み HTML にして返す。
+
+        note エディタは Markdown を解釈しないので、見出し・太字・箇条書きを
+        保ったまま「書式ごとコピー」できるよう HTML を用意する（自動投稿はしない）。
+        """
+        product = self.c.storage.get("products", product_id)
+        if product is None:
+            raise KeyError(product_id)
+        arts = self.c.storage.find("articles", product_id=product_id)
+        if not arts:
+            raise ValueError(f"記事が見つかりません: {product_id}")
+        body = arts[-1].get("body_markdown", "")
+        title = product.get("title") or ""
+        # 本文が H1 で始まらなければタイトルを先頭に補う。
+        md = body if body.lstrip().startswith("# ") else f"# {title}\n\n{body}"
+        return {
+            "product_id": product_id, "title": title,
+            "price_jpy": product.get("price_jpy"),
+            "hashtags": self._hashtags(product),
+            "html": md_to_html(md),
         }
 
 

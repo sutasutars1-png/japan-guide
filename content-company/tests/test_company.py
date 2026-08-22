@@ -111,6 +111,15 @@ class PipelineTest(unittest.TestCase):
             # 未知の商品では None
             self.assertIsNone(c.article_for("nope"))
 
+    def test_note_render_html_formats_markdown(self):
+        from company.note_channel import md_to_html
+        html = md_to_html("# 見出し\n本文**太字**\n\n- 箇条書き\n\n―― ここから有料 ――\n有料")
+        self.assertIn("<h1>見出し</h1>", html)
+        self.assertIn("<strong>太字</strong>", html)
+        self.assertIn("<li>箇条書き</li>", html)
+        self.assertIn('class="paid"', html)  # 有料境界が見える
+        self.assertNotIn("# 見出し", html)     # Markdown 記号が残らない
+
     def test_publish_requires_approval(self):
         with tempfile.TemporaryDirectory() as tmp:
             c = make_company(tmp)
