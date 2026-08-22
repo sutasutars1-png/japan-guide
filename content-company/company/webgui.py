@@ -62,6 +62,29 @@ def _state(c: Company) -> dict:
     }
 
 
+_STEP_LABEL = {
+    "market-research": "調査", "product-planning": "企画",
+    "article-writing": "執筆", "quality-review": "レビュー",
+}
+
+
+def _logs(c: Company, limit: int = 60) -> dict:
+    """AI が実行したタスク（調査/企画/執筆/レビュー）を新しい順に返す。"""
+    tasks = c.storage.all("tasks")
+    tasks.sort(key=lambda t: t.get("created_at", ""), reverse=True)
+    rows = []
+    for t in tasks[:limit]:
+        rows.append({
+            "ts": t.get("created_at", ""),
+            "agent": t.get("agent", ""),
+            "step": _STEP_LABEL.get(t.get("skill", ""), t.get("skill") or t.get("title", "")),
+            "status": t.get("status", ""),
+            "review": t.get("review_status") or "",
+            "notes": (t.get("review_notes") or t.get("title") or "")[:160],
+        })
+    return {"tasks": rows}
+
+
 class _Handler(BaseHTTPRequestHandler):
     company: Company = None  # type: ignore[assignment]
     server_version = "CompanyGUI/0.1"
@@ -124,6 +147,8 @@ class _Handler(BaseHTTPRequestHandler):
                 q = parse_qs(u.query)
                 pid = (q.get("product_id") or [""])[0]
                 self._json({"article": c.article_for(pid)})
+            elif u.path == "/api/logs":
+                self._json(_logs(c))
             else:
                 self._json({"error": "not found"}, 404)
         except Exception as exc:  # noqa: BLE001
@@ -339,6 +364,16 @@ iframe{width:100%;height:520px;border:1px solid var(--line);border-radius:10px;b
     </div>
   </details>
 
+  <details open><summary>📜 ログ / 実行履歴（AIが何をしたか）</summary>
+    <div class="row" style="margin-top:8px">
+      <button class="ghost" id="btnLogs">最新に更新</button>
+      <span class="muted">研究→企画→執筆→レビューの各ステップと結果を新しい順に表示</span>
+    </div>
+    <div class="overflow"><table id="logs"><thead><tr>
+      <th>時刻</th><th>担当</th><th>ステップ</th><th>状態</th><th>レビュー</th><th>メモ</th>
+    </tr></thead><tbody></tbody></table></div>
+  </details>
+
   <details><summary>🔎 レポート / メモリ</summary>
     <div class="row" style="margin-top:8px">
       <button class="ghost" id="btnReport">先月レポート</button>
@@ -386,13 +421,13 @@ async function refresh(){
   tbody('#products').innerHTML=s.products.length? s.products.map(p=>{
     const st = p.status==='awaiting_approval'?'<span class="pill await">公開待ち</span>'
       : p.status==='published'?'<span class="pill pub">公開</span>':`<span class="pill">${esc(p.status)}</span>`;
-    let act=`<button class="ghost" onclick="viewArticle('${p.id}')">記事</button> `;
+    let act=`<button class="ghost" onclick="viewArticle('${p.id}')">記事を読む</button> `;
     if(p.status==='awaiting_approval'&&p.approval_id)
-      act=`<button class="good" onclick="approve('${p.approval_id}')">承認</button>`;
+      act+=`<button class="good" onclick="approve('${p.approval_id}')">承認</button>`;
     else if(p.status==='awaiting_approval')
-      act='<span class="muted">承認申請へ</span>';
+      act+='<span class="muted">承認申請へ</span>';
     else if(p.status==='published')
-      act=`<button class="ghost" onclick="metrics('${p.id}')">実績入力</button>`;
+      act+=`<button class="ghost" onclick="metrics('${p.id}')">実績入力</button>`;
     if(p.status==='published'||p.status==='awaiting_approval')
       act+=` <button class="ghost" onclick="noteExport('${p.id}')">note出力</button>`;
     if(p.status==='published')
@@ -411,8 +446,20 @@ async function refresh(){
         <button class="ghost" onclick="showVersions('${sk.key}')">履歴</button></td></tr>`).join('')
     +'</tbody></table></div>';
   renderSettings(s.config); renderSchedule(s.schedule); renderSocial(s.social);
+  loadLogs();
   $('#dash').src='/dashboard?'+Date.now();
 }
+
+async function loadLogs(){try{const r=await api('/api/logs');
+  const badge=v=>v==='pass'?'<span class="pill pub">pass</span>'
+    :v==='reject'?'<span class="pill await">reject</span>':(v?esc(v):'-');
+  tbody('#logs').innerHTML=(r.tasks||[]).length? r.tasks.map(t=>`<tr>
+    <td class="muted">${esc((t.ts||'').replace('T',' ').slice(0,19))}</td>
+    <td>${esc(t.agent)}</td><td>${esc(t.step)}</td>
+    <td>${esc(t.status)}</td><td>${badge(t.review)}</td>
+    <td class="muted">${esc(t.notes)}</td></tr>`).join('')
+    : '<tr><td colspan=6 class="muted">まだ実行ログがありません。「商品を企画」から。</td></tr>';
+  }catch(e){/* ログ取得失敗は致命的でないので無視 */}}
 
 const CFG_LABELS={initial_price_jpy:'初期価格(円)',max_tasks_per_day:'1日タスク上限(0=無制限)',
   max_publishes_per_day:'1日公開上限',max_rewrites:'自動再執筆 上限',
@@ -524,6 +571,7 @@ $('#btnDemo').onclick=async()=>{if(!confirm('架空デモデータを投入し�
 $('#btnEval').onclick=async()=>{try{const r=await api('/api/evaluate','POST',{});
   $('#out').textContent=JSON.stringify(r.actions,null,2);toast('評価しました');refresh();}catch(e){toast(e.message);}};
 $('#btnRefresh').onclick=refresh;
+$('#btnLogs').onclick=loadLogs;
 $('#btnImport').onclick=()=>noteImport(false);
 $('#btnImportDry').onclick=()=>noteImport(true);
 $('#schedMaster').onchange=async(e)=>{try{await api('/api/schedule/master','POST',{enabled:e.target.checked});
