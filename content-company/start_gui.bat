@@ -8,6 +8,8 @@ where py >nul 2>nul && (set "PY=py") || (set "PY=python")
 echo ============================================
 echo   AI会社 OS - ローカル GUI を起動します
 echo   URL : http://127.0.0.1:8787/
+echo   実LLM生成: 画面左上の「実LLM生成」チェックで切替
+echo             （ON=本物の記事 / OFF=雛形。claude CLI ログイン要）
 echo   停止: この黒い画面で Ctrl+C / ウィンドウを閉じる
 echo ============================================
 echo.

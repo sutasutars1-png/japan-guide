@@ -74,6 +74,16 @@ class Company:
         self.tasks.runner = ClaudeRunner(skill_text=self.skills_lab.text, **kwargs)
         return True
 
+    def disable_llm(self) -> None:
+        """タスク実行を既定の雛形ランナー (TemplateRunner) に戻す。
+
+        GUI の「実LLM生成」チェックを外したときに、同一セッション内でも
+        雛形生成へ戻せるようにする（enable_llm と対称）。
+        """
+        from .runner import TemplateRunner
+
+        self.tasks.runner = TemplateRunner()
+
     # ---- 意思決定ログ -----------------------------------------------------
 
     def log_decision(

@@ -159,6 +159,8 @@ class _Handler(BaseHTTPRequestHandler):
                     enabled = c.enable_llm()
                     if not enabled:
                         return self._json({"error": "claude CLI 未検出。雛形で継続してください。"}, 400)
+                else:
+                    c.disable_llm()  # チェックOFFなら雛形に戻す（切替を対称に）
                 res = c.plan_products(int(b.get("n", 5)))
                 self._json({"planned": res})
             elif u.path == "/api/approve":
