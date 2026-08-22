@@ -15,18 +15,32 @@ import re
 from typing import Any
 
 # 価格帯 → 必要要件。cap 以下の最初の段に該当。
+#
+# 方針: **どの価格でも「読者が1つの悩みをこの記事だけで完全に解決できる完結物」**。
+# 特に 100円 は入口動線として最重要。teaser（予告・要約）で終わらせず、
+# 無料部分で価値を実感 → 有料部分でその悩みを最後まで解決しきる。価格が上がるほど
+# 扱う課題の広さ・具体例・テンプレ/ワークシートの厚みを増す（完結性は全段で必須）。
 _PRICE_TIERS: list[tuple[int, dict[str, Any]]] = [
-    (100, {"label": "入門(〜100円)", "min_chars": 700, "min_lists": 1,
-           "min_examples": 1, "needs_checklist": False}),
-    (300, {"label": "基本(〜300円)", "min_chars": 1500, "min_lists": 1,
+    (100, {"label": "入口(〜100円)", "min_chars": 1800, "min_lists": 2,
            "min_examples": 2, "needs_checklist": False}),
-    (1000, {"label": "実践(〜1000円)", "min_chars": 3000, "min_lists": 2,
-            "min_examples": 3, "needs_checklist": True}),
-    (3000, {"label": "上級(〜3000円)", "min_chars": 6000, "min_lists": 3,
+    (300, {"label": "基本(〜300円)", "min_chars": 2800, "min_lists": 2,
+           "min_examples": 3, "needs_checklist": False}),
+    (500, {"label": "しっかり(〜500円)", "min_chars": 3800, "min_lists": 3,
+           "min_examples": 3, "needs_checklist": True}),
+    (1000, {"label": "実践(〜1000円)", "min_chars": 5000, "min_lists": 3,
             "min_examples": 4, "needs_checklist": True}),
+    (3000, {"label": "上級(〜3000円)", "min_chars": 8000, "min_lists": 4,
+            "min_examples": 5, "needs_checklist": True}),
 ]
-_TOP_TIER = {"label": "プレミアム(3000円超)", "min_chars": 9000, "min_lists": 4,
-             "min_examples": 5, "needs_checklist": True}
+_TOP_TIER = {"label": "プレミアム(3000円超)", "min_chars": 12000, "min_lists": 5,
+             "min_examples": 6, "needs_checklist": True}
+
+# 未完・予告で終わっている疑いのある表現（完結性チェック用）。
+_TEASER_PHRASES = ("続きは", "お楽しみに", "詳細は別記事", "詳しくは別",
+                   "後日公開", "次回に続く", "また次回", "追って解説")
+
+# 有料エリア境界（note_channel と一致）。
+_PAID_MARK = "―― ここから有料 ――"
 
 
 def price_tier_spec(price: int) -> dict[str, Any]:
@@ -37,17 +51,42 @@ def price_tier_spec(price: int) -> dict[str, Any]:
 
 
 def price_requirement_text(price: int) -> str:
-    """執筆 LLM に渡す、価格に見合う中身の要件（自然文）。"""
+    """執筆 LLM に渡す、価格に見合う中身の要件（自然文）。完結性を最優先。"""
     s = price_tier_spec(price)
     parts = [
         f"価格帯は{s['label']}",
+        "【最重要】読者が1つの具体的な悩みを、この記事だけで完全に解決できる"
+        "完結した内容にする。すぐ実践できる手順と具体例を必ず入れ、"
+        "『続きは別記事/次回』のような予告・要約で終わらせない",
+        "無料部分で価値と信頼を実感させ、有料部分でその悩みを最後まで解決しきる",
         f"本文は概ね{s['min_chars']}文字以上",
         f"箇条書き/手順リストを{s['min_lists']}個以上",
-        f"具体例を{s['min_examples']}件以上入れる",
+        f"再現できる具体例を{s['min_examples']}件以上入れる",
     ]
     if s["needs_checklist"]:
-        parts.append("チェックリストかテンプレート/ワークシートを1つ以上含める")
-    return "。".join(parts) + "。価格に見合う密度・具体性・実用性を担保する。"
+        parts.append("そのまま使えるチェックリストかテンプレート/ワークシートを1つ以上含める")
+    if price <= 100:
+        parts.append(
+            "100円は集客ファネルの入口として最重要。『安いのに、ちゃんと1つ得られた』"
+            "と感じる完結した実用価値を必ず届け、次の商品への信頼をつくる")
+    return "。".join(parts) + "。価格に見合う密度・具体性・実用性・完結性を担保する。"
+
+
+def completeness_issues(article: dict) -> list[str]:
+    """完結していない（予告・尻切れ）疑いを検出。"""
+    body = str(article.get("body_markdown", ""))
+    issues: list[str] = []
+    for ph in _TEASER_PHRASES:
+        if ph in body:
+            issues.append(
+                f"未完・予告の表現『{ph}』がある。この記事だけで完結させる。")
+            break
+    # 有料部分が実質的に存在し、薄すぎないか（境界がある場合）。
+    if _PAID_MARK in body:
+        paid = body.split(_PAID_MARK, 1)[1]
+        if len(paid.strip()) < 300:
+            issues.append("有料部分が薄い（完結していない）。核心の解決を有料側に置く。")
+    return issues
 
 
 def format_issues(article: dict) -> list[str]:
@@ -94,5 +133,6 @@ def tier_issues(article: dict, price: int) -> list[str]:
 
 
 def quality_issues(article: dict, price: int) -> list[str]:
-    """体裁(C) + 価格連動(A) をまとめて返す。空なら合格。"""
-    return format_issues(article) + tier_issues(article, price)
+    """体裁(C) + 価格連動(A) + 完結性 をまとめて返す。空なら合格。"""
+    return format_issues(article) + tier_issues(article, price) \
+        + completeness_issues(article)

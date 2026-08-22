@@ -118,10 +118,13 @@ class PipelineTest(unittest.TestCase):
         fi = quality.format_issues(bad)
         self.assertTrue(any("見出し" in x for x in fi))
         self.assertTrue(any("プレースホルダ" in x for x in fi))
-        # 価格連動: 高価格帯に薄い本文は不足指摘
+        # 価格連動: 100円でも薄い本文は不足指摘（入口=完結必須で要件は高い）
         thin = {"body_markdown": "# 見出し\n短い本文。"}
-        ti = quality.tier_issues(thin, 3000)
-        self.assertTrue(ti)  # 文字数・具体例・チェックリスト不足
+        self.assertTrue(quality.tier_issues(thin, 100))
+        self.assertTrue(quality.tier_issues(thin, 3000))
+        # 完結性: 予告表現は差し戻し
+        teaser = {"body_markdown": "# 見出し\n本論。続きは別記事で。"}
+        self.assertTrue(quality.completeness_issues(teaser))
         # 十分な入門記事は体裁OK
         ok = {"body_markdown": "# タイトル\n" + "本文です。" * 80 + "\n- 手順1\nたとえば具体例。"}
         self.assertEqual(quality.format_issues(ok), [])
