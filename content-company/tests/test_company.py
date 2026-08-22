@@ -111,6 +111,23 @@ class PipelineTest(unittest.TestCase):
             # 未知の商品では None
             self.assertIsNone(c.article_for("nope"))
 
+    def test_similarity_guard_detects_near_duplicate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            a = {"title": "副業の始め方", "outline": ["準備", "実践", "継続"],
+                 "body_markdown": "副業を始めるための具体的な手順を解説します。"}
+            b = {"title": "副業の始め方", "outline": ["準備", "実践", "継続"],
+                 "body_markdown": "副業を始めるための具体的な手順を解説します。"}
+            existing = [("既存A", c._article_signature(a))]
+            sim, title = c._max_similarity(c._article_signature(b), existing)
+            self.assertGreater(sim, c.config.similarity_threshold)
+            self.assertEqual(title, "既存A")
+            # 全く違う記事は閾値未満
+            other = {"title": "料理の時短術", "outline": ["下ごしらえ"],
+                     "body_markdown": "冷凍作り置きで平日の夕食を10分に。"}
+            sim2, _ = c._max_similarity(c._article_signature(other), existing)
+            self.assertLess(sim2, c.config.similarity_threshold)
+
     def test_request_rewrite_creates_new_article(self):
         with tempfile.TemporaryDirectory() as tmp:
             c = make_company(tmp)

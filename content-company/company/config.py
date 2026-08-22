@@ -34,6 +34,9 @@ class Config:
     initial_price_jpy: int = 100
     price_ladder_jpy: tuple[int, ...] = (0, 100, 300, 500, 1000, 3000)
 
+    # 記事の重複ガード (付録A #5)。既存記事との類似度がこれ以上なら差し戻す。
+    similarity_threshold: float = 0.72
+
     # コスト / スループット制御 (§36, §37, 付録A #3)
     max_tasks_per_day: int = 40
     # 予算レベル → 想定モデル Tier (§14, §37)
@@ -67,6 +70,7 @@ class Config:
         "max_publishes_per_day": (int, 0, 100),
         "max_rewrites": (int, 0, 5),
         "target_conversion_rate": (float, 0.0, 1.0),
+        "similarity_threshold": (float, 0.3, 1.0),
         "breakeven_product_count": (int, 1, 1000),
         "retreat_zero_purchase_rounds": (int, 1, 20),
         "x_enabled": (bool, None, None),

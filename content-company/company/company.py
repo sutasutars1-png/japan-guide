@@ -13,6 +13,7 @@ MVP 成功条件 (§39) の 2 つの振る舞いをここに実装する:
 
 from __future__ import annotations
 
+import difflib
 from typing import Any
 
 from . import agents as agents_mod
@@ -132,6 +133,46 @@ class Company:
             results.append(self._plan_one(cat, theme, round_no))
         return results
 
+    # ---- 重複回避 (付録A #5) ---------------------------------------------
+
+    @staticmethod
+    def _article_signature(art: dict) -> str:
+        """記事の指紋（タイトル＋見出し＋本文冒頭）。類似度計算に使う。"""
+        parts = [str(art.get("title", ""))]
+        outline = art.get("outline")
+        if isinstance(outline, list):
+            parts += [str(x) for x in outline]
+        parts.append((str(art.get("body_markdown", "")))[:400])
+        return " ".join(parts).lower()
+
+    def _existing_signatures(self, exclude_pid: str | None) -> list[tuple[str, str]]:
+        out: list[tuple[str, str]] = []
+        for a in self.storage.all("articles"):
+            if exclude_pid and a.get("product_id") == exclude_pid:
+                continue
+            title = a.get("title") or a.get("product_id", "")
+            out.append((title, self._article_signature(a)))
+        return out
+
+    def _max_similarity(self, sig: str, existing: list[tuple[str, str]]) -> tuple[float, str]:
+        best = (0.0, "")
+        for title, esig in existing:
+            r = difflib.SequenceMatcher(None, sig, esig).ratio()
+            if r > best[0]:
+                best = (r, title)
+        return best
+
+    def _avoid_list(self, exclude_pid: str | None = None, limit: int = 15) -> list[str]:
+        """既に作った切り口の一覧（タイトル（テーマ））。LLM に差別化を促す入力。"""
+        seen: list[str] = []
+        for p in self.storage.all("products"):
+            if exclude_pid and p.get("id") == exclude_pid:
+                continue
+            t = p.get("title")
+            if t:
+                seen.append(f"{t}（{p.get('theme', '')}）")
+        return seen[-limit:]
+
     def _plan_one(self, category: str, theme: str, round_no: int) -> dict[str, Any]:
         # 1) Researcher: 市場調査 (§4)
         t_res = self.tasks.create(
@@ -149,7 +190,8 @@ class Company:
             f"企画: {theme}", agent="cpo", task_type="product_plan",
             skill="product-planning", parent_id=t_res.id,
             input={"theme": theme, "category": category,
-                   "price_jpy": self.config.initial_price_jpy, "research": research},
+                   "price_jpy": self.config.initial_price_jpy, "research": research,
+                   "avoid_similar": self._avoid_list()},
         )
         self.tasks.run(t_plan.id)
         self.tasks.review(t_plan.id, True)
@@ -216,9 +258,11 @@ class Company:
         article: dict = {}
         review: dict = {}
         rewrites = 0
+        existing = self._existing_signatures(exclude_pid=product.id)
+        avoid = self._avoid_list(exclude_pid=product.id)
         # 初回 + 最大 max_rewrites 回の書き直し
         for attempt in range(self.config.max_rewrites + 1):
-            w_input: dict = {"plan": plan}
+            w_input: dict = {"plan": plan, "avoid_similar": avoid}
             if feedback:
                 w_input["feedback"] = feedback
                 w_input["previous_body"] = prev_body
@@ -239,6 +283,19 @@ class Company:
             self.tasks.run(t_review.id)
             review = self.tasks.get(t_review.id).output  # type: ignore[union-attr]
             passed = review.get("verdict") == "pass"
+            # 重複ガード: 既存記事と似すぎたら差し戻して切り口を変えさせる (付録A #5)。
+            # 実 LLM 記事のみ対象（雛形/デモは差別化できないので対象外）。
+            if passed and existing and article.get("_llm"):
+                sim, sim_title = self._max_similarity(
+                    self._article_signature(article), existing)
+                if sim >= self.config.similarity_threshold:
+                    passed = False
+                    review = {**review, "verdict": "reject",
+                              "similar_to": sim_title, "similarity": round(sim, 3),
+                              "notes": (review.get("notes", "")
+                                        + f" / 既存記事『{sim_title}』と類似度が高い"
+                                        f"({sim:.0%})。テーマの切り口・見出し・具体例を"
+                                        "変えて差別化すること。").strip()}
             self.tasks.review(t_review.id, passed, notes=review.get("notes", ""))
             self.memory.add(
                 "review", f"レビュー: {product.title}"

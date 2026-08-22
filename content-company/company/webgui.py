@@ -577,7 +577,8 @@ async function loadLogs(){try{const r=await api('/api/logs');
 
 const CFG_LABELS={initial_price_jpy:'初期価格(円)',max_tasks_per_day:'1日タスク上限(0=無制限)',
   max_publishes_per_day:'1日公開上限',max_rewrites:'自動再執筆 上限',
-  target_conversion_rate:'目標購入率',breakeven_product_count:'損益分岐 商品数',
+  target_conversion_rate:'目標購入率',similarity_threshold:'重複ガード閾値(0-1)',
+  breakeven_product_count:'損益分岐 商品数',
   retreat_zero_purchase_rounds:'撤退ラウンド',x_enabled:'X チャネル有効',tiktok_enabled:'TikTok チャネル有効'};
 function renderSettings(cfg){
   const rows=Object.keys(cfg).map(k=>{

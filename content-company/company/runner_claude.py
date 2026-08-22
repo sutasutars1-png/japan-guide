@@ -61,6 +61,8 @@ _CONTRACT: dict[str, dict[str, Any]] = {
             "§13 の商品企画フォーマットを全項目埋める。price_jpy は入力の価格を使う。"
             "success_probability は『低』『中』『高』のいずれか。"
             "景表法（優良誤認）に触れる断定（『必ず稼げる』等）は禁止。"
+            "入力 avoid_similar は既存商品の一覧。これらと product_name・切り口・"
+            "reader_pain が重複しないよう、別の読者層/悩み/角度で差別化する。"
         ),
     },
     "article_write": {
@@ -69,6 +71,8 @@ _CONTRACT: dict[str, dict[str, Any]] = {
             "note 記事を書く。outline は配列。body_markdown は Markdown 本文で、"
             "無料部分→『―― ここから有料 ――』→有料部分→まとめ の構成。"
             "読者価値を中心に、誇張・誤情報を避ける。プレースホルダ（[ ]）は残さない。"
+            "入力 avoid_similar は既存記事の一覧。見出し構成・具体例・言い回しが"
+            "これらと似ないよう、独自の切り口と事例で書く。"
             "入力に feedback がある場合は、その差し戻し指摘を必ず反映して "
             "previous_body を改稿する（具体例・手順・固有名詞を補い、断定表現を是正）。"
         ),
