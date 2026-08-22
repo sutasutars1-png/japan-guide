@@ -55,6 +55,9 @@ class CostController:
         )
 
     def check_daily_budget(self) -> None:
+        # 0 以下は「無制限」（テスト用）。既定は上限あり (§36 Pro範囲保護)。
+        if self.config.max_tasks_per_day <= 0:
+            return
         if self.tasks_today() >= self.config.max_tasks_per_day:
             raise BudgetExceeded(
                 f"本日のタスク上限 {self.config.max_tasks_per_day} 件に到達しました"

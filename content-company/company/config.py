@@ -63,7 +63,7 @@ class Config:
     # GUI から編集できる安全なフィールド（型と上限つき）。data_dir 等は含めない。
     EDITABLE_FIELDS: typing.ClassVar[dict] = {
         "initial_price_jpy": (int, 0, 1_000_000),
-        "max_tasks_per_day": (int, 1, 1000),
+        "max_tasks_per_day": (int, 0, 100000),  # 0 = 無制限（テスト用）
         "max_publishes_per_day": (int, 0, 100),
         "max_rewrites": (int, 0, 5),
         "target_conversion_rate": (float, 0.0, 1.0),
