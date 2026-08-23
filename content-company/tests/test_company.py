@@ -239,10 +239,14 @@ class PipelineTest(unittest.TestCase):
             self.assertTrue(any(p["title"] == "Lose" for p in rep["fail_products"]))
 
     def test_daily_budget_cap(self):
+        # 上限到達でバッチ全体を止めず、超過分は status=error で切り離す。
         with tempfile.TemporaryDirectory() as tmp:
             c = make_company(tmp, max_tasks_per_day=3)
-            with self.assertRaises(BudgetExceeded):
-                c.plan_products(5)  # 4タスク/商品なので上限3をすぐ超える
+            res = c.plan_products(5)  # 4タスク/商品なので上限3をすぐ超える
+            self.assertEqual(len(res), 5)               # 5件すべて試行される
+            self.assertTrue(any(r["status"] == "error" for r in res))  # 超過は error
+            # 上限が実際に効いている（無制限に走らない）
+            self.assertLessEqual(c.cost.tasks_today(), 6)
 
 
 class ExperimentTest(unittest.TestCase):

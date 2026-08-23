@@ -129,10 +129,17 @@ class Company:
             options=["均等配分", "上位集中"],
         )
 
+        # 各商品は独立して企画する。1件が失敗（タスク上限/LLMエラー等）しても
+        # 残りは続行し、成功分は必ず反映する（1件のせいで全滅させない）。
         results: list[dict[str, Any]] = []
         for idx, cat in enumerate(alloc, start=1):
             theme = cats.get(cat, cat)
-            results.append(self._plan_one(cat, theme, round_no))
+            try:
+                results.append(self._plan_one(cat, theme, round_no))
+            except Exception as exc:  # noqa: BLE001
+                self.memory.add("failure", f"企画失敗: {theme}", str(exc)[:200])
+                results.append({"category": cat, "theme": theme,
+                                "status": "error", "error": str(exc)[:200]})
         return results
 
     # ---- 重複回避 (付録A #5) ---------------------------------------------

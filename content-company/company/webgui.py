@@ -696,8 +696,13 @@ async function noteImport(dry){try{const csv=$('#noteCsv').value;
   if(!dry) refresh();}catch(e){toast('エラー: '+e.message);}}
 
 $('#btnPlan').onclick=async()=>{const b=$('#btnPlan');b.disabled=true;b.textContent='実行中…';
-  try{await api('/api/plan','POST',{n:+$('#planN').value,llm:$('#useLlm').checked});
-  toast('企画を実行しました');refresh();}catch(e){toast('エラー: '+e.message);}
+  try{const r=await api('/api/plan','POST',{n:+$('#planN').value,llm:$('#useLlm').checked});
+  const pl=r.planned||[]; const err=pl.filter(x=>x.status==='error');
+  const ok=pl.length-err.length;
+  if(err.length){$('#out').textContent='失敗:\\n'+err.map(e=>'・'+e.theme+': '+e.error).join('\\n');
+    toast(`企画 ${ok}/${pl.length} 件成功。${err.length}件失敗（下部に理由）。上限なら設定でタスク上限を0に。`);}
+  else toast(`企画 ${ok} 件を実行しました`);
+  refresh();}catch(e){toast('エラー: '+e.message);}
   finally{b.disabled=false;b.textContent='商品を企画';}};
 $('#btnDemo').onclick=async()=>{if(!confirm('架空デモデータを投入します。よろしいですか？'))return;
   try{await api('/api/demo','POST',{});toast('デモ投入完了');refresh();}catch(e){toast(e.message);}};
