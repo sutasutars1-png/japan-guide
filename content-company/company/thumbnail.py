@@ -22,54 +22,67 @@ _PALETTE: dict[str, tuple[str, str, str]] = {
 _DEFAULT = ("#334155", "#0f172a", "#f1f5f9")
 
 
-def _wrap(title: str, per_line: int = 11, max_lines: int = 3) -> list[str]:
-    """全角想定でタイトルを機械的に折り返す（SVG は自動改行しないため）。"""
-    title = " ".join(title.split())
-    lines: list[str] = []
+# 区切り候補（この文字の直後で改行してよい）。単語途中の分断を避ける。
+_BREAK_AFTER = "｜|・/／、，。&＆:：〜～ 　-—"
+
+
+def _wrap(title: str, max_lines: int = 4) -> tuple[list[str], int]:
+    """タイトルを区切り優先で折り返す。全文を表示し、途中で切らない。
+
+    返り値は (行リスト, 1行あたりの目安文字数)。行数が max_lines に収まるよう
+    1行の文字数を決め、区切り記号の直後で改行する。長すぎる語のみ強制分割。
+    """
+    title = " ".join(title.split()) or "(無題)"
+    n = len(title)
+    # max_lines 行に収まる 1行文字数（8〜16 でクランプ）
+    per_line = max(8, min(16, -(-n // max_lines)))
+    # 区切りごとにトークン化（区切り文字は直前トークンに含める）
+    tokens: list[str] = []
     cur = ""
     for ch in title:
         cur += ch
-        if len(cur) >= per_line:
-            lines.append(cur)
+        if ch in _BREAK_AFTER:
+            tokens.append(cur)
             cur = ""
-        if len(lines) >= max_lines:
-            break
-    if cur and len(lines) < max_lines:
-        lines.append(cur)
-    if not lines:
-        lines = ["(無題)"]
-    # 収まり切らない場合は末尾に … を付ける
-    if len(lines) == max_lines and len("".join(lines)) < len(title):
-        lines[-1] = lines[-1][:per_line - 1] + "…"
-    return lines
+    if cur:
+        tokens.append(cur)
+    # 貪欲に詰める。少しの余裕(slack)で末尾1〜2字の孤立や単語途中分割を避ける。
+    limit = per_line + 2
+    lines: list[str] = []
+    line = ""
+    for tok in tokens:
+        while len(tok) > limit:
+            if line:
+                lines.append(line)
+                line = ""
+            lines.append(tok[:per_line])
+            tok = tok[per_line:]
+        if line and len(line) + len(tok) > limit:
+            lines.append(line)
+            line = tok
+        else:
+            line += tok
+    if line:
+        lines.append(line)
+    return [ln.rstrip() for ln in lines], per_line
 
 
 def svg(product: dict, width: int = 1280, height: int = 670) -> str:
     cat = str(product.get("category", ""))
     c1, c2, accent = _PALETTE.get(cat, _DEFAULT)
     title = str(product.get("title", "無題"))
-    theme = str(product.get("theme", ""))
-    price = product.get("price_jpy")
-    badge = f"{('カテゴリ ' + cat + ' ・ ') if cat else ''}{theme}".strip(" ・")
 
-    lines = _wrap(title)
-    # タイトルを縦中央に配置
-    font_size = 74 if max(len(x) for x in lines) <= 9 else 62
-    line_h = font_size + 22
+    lines, per_line = _wrap(title)
+    pad = 80
+    # 幅に収まるフォントサイズ（1行の文字数から算出、40〜72 でクランプ）。
+    font_size = max(40, min(72, int((width - pad * 2) / max(per_line, 1))))
+    line_h = int(font_size * 1.34)
     block_h = line_h * len(lines)
     start_y = (height - block_h) // 2 + font_size
     tspans = "".join(
-        f'<tspan x="80" y="{start_y + i * line_h}">{_esc(line)}</tspan>'
+        f'<tspan x="{pad}" y="{start_y + i * line_h}">{_esc(line)}</tspan>'
         for i, line in enumerate(lines)
     )
-    price_tag = ""
-    if isinstance(price, (int, float)) and price:
-        price_tag = (
-            f'<g><rect x="{width - 250}" y="{height - 110}" rx="16" '
-            f'width="170" height="60" fill="{accent}" opacity="0.95"/>'
-            f'<text x="{width - 165}" y="{height - 68}" text-anchor="middle" '
-            f'font-size="34" font-weight="700" fill="{c2}">¥{int(price)}</text></g>'
-        )
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" font-family="system-ui,\'Segoe UI\','
@@ -78,19 +91,9 @@ def svg(product: dict, width: int = 1280, height: int = 670) -> str:
         f'<stop offset="0" stop-color="{c1}"/><stop offset="1" stop-color="{c2}"/>'
         f"</linearGradient></defs>"
         f'<rect width="{width}" height="{height}" fill="url(#g)"/>'
-        # 左の縦アクセントバー
+        # 左の縦アクセントバー（装飾のみ）
         f'<rect x="0" y="0" width="16" height="{height}" fill="{accent}" opacity="0.9"/>'
-        # カテゴリ/テーマのバッジ
-        f'<rect x="80" y="70" rx="22" width="{min(len(badge) * 26 + 60, width - 160)}" '
-        f'height="52" fill="{accent}" opacity="0.9"/>'
-        f'<text x="110" y="106" font-size="30" font-weight="700" fill="{c2}">'
-        f"{_esc(badge)}</text>"
-        # タイトル
-        f'<text font-size="{font_size}" font-weight="800" fill="#ffffff" '
-        f'style="paint-order:stroke">{tspans}</text>'
-        # フッター（媒体名っぽい装飾）
-        f'<text x="80" y="{height - 68}" font-size="30" fill="#ffffff" '
-        f'opacity="0.85">note で公開</text>'
-        f"{price_tag}"
+        # タイトル（縦中央）
+        f'<text font-size="{font_size}" font-weight="800" fill="#ffffff">{tspans}</text>'
         f"</svg>"
     )
