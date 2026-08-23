@@ -445,6 +445,14 @@ class Company:
         self.tasks.run(t_review.id)
         review = self.tasks.get(t_review.id).output  # type: ignore[union-attr]
         passed = review.get("verdict") == "pass"
+        # 修正版も自動ガード（体裁/価格連動/完結性）を通す（実 LLM のみ）。
+        if passed and article.get("_llm"):
+            q_issues = quality_mod.quality_issues(article, product.price_jpy)
+            if q_issues:
+                passed = False
+                review = {**review, "verdict": "reject", "quality_issues": q_issues,
+                          "notes": (review.get("notes", "") + " / 品質差し戻し: "
+                                    + " / ".join(q_issues)).strip()}
         self.tasks.review(t_review.id, passed, notes=review.get("notes", ""))
 
         article_id = ids.new_id("art")

@@ -287,6 +287,12 @@ class _Handler(BaseHTTPRequestHandler):
                 res = c.plan_products(int(b.get("n", 5)))
                 self._json({"planned": res})
             elif u.path == "/api/rewrite":
+                if b.get("llm"):
+                    if not c.enable_llm():
+                        return self._json(
+                            {"error": "claude CLI 未検出。実LLM生成が使えません。"}, 400)
+                else:
+                    c.disable_llm()
                 self._json(c.request_rewrite(b["product_id"], b.get("feedback", "")))
             elif u.path == "/api/product/delete":
                 if not b.get("confirm"):
@@ -653,9 +659,9 @@ async function deleteProduct(pid,title){
 async function requestRewrite(pid){const fb=prompt('修正依頼の内容（例: 冒頭をもっと具体的に／価格の根拠を追加）:');
   if(fb==null||!fb.trim())return;
   toast('修正を依頼中…（実LLMだと数分かかります）');
-  try{const r=await api('/api/rewrite','POST',{product_id:pid,feedback:fb});
-  if(r.llm===false) toast('雛形のため書き直しても骨格のままです。実LLM生成をONにしてください。');
-  else toast(r.passed?'修正版がレビュー通過。承認待ちへ。':'修正版はレビューで差し戻し（reviewに戻りました）。');
+  try{const r=await api('/api/rewrite','POST',{product_id:pid,feedback:fb,llm:$('#useLlm').checked});
+  if(r.llm===false) toast('雛形で書き直しました（骨格のまま）。本文を作るには左上「実LLM生成」をONにして再度修正依頼を。');
+  else toast(r.passed?'修正版がレビュー通過。承認待ちへ。':'修正版はレビューで差し戻し（品質/重複ガード）。もう一度修正依頼できます。');
   refresh();}catch(e){toast('エラー: '+e.message);}}
 async function reject(id){const note=prompt('却下理由（任意）')||'';
   try{await api('/api/reject','POST',{approval_id:id,note});toast('却下しました');refresh();}
