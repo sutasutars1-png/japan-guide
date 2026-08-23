@@ -168,11 +168,25 @@ class ClaudeRunner:
         keys = contract["keys"]
         # payload から巨大になりうるものは要約せずそのまま渡す（初期はシンプルに）。
         ctx = {k: v for k, v in payload.items() if k != "task_type"}
-        keyspec = ", ".join(f'"{k}"' for k in keys)
-        return (
+        common = (
             f"{role}\n{skill}\n\n"
             f"# 指示\n{contract['instruction']}\n\n"
             f"# 入力(JSON)\n{json.dumps(ctx, ensure_ascii=False)}\n\n"
+        )
+        if task_type == "article_write":
+            # 本文を JSON に埋め込むと壊れやすいので、メタ情報のみ JSON、本文は
+            # 区切りの後に生 Markdown で出させる（頑健）。
+            return common + (
+                "# 出力形式（厳守）\n"
+                '1行目に メタ情報のみの JSON を出力: {"title": "…", '
+                '"outline": ["見出し1", "見出し2", …], "cta": "…"}。\n'
+                f"次の行に、区切り記号だけの行: {_ARTICLE_BODY_MARK}\n"
+                "その後に、記事本文を Markdown でそのまま書く（長さ自由・"
+                "エスケープ不要・本文全体をコードフェンスで囲まない）。\n"
+                "本文には JSON を書かない。区切りより前に本文を書かない。"
+            )
+        keyspec = ", ".join(f'"{k}"' for k in keys)
+        return common + (
             f"# 出力形式\n"
             f"次のキーだけを持つ JSON オブジェクトを1つ**だけ**出力する: {keyspec}。\n"
             f"前置き・説明・コードフェンス(```)は一切書かない。JSON のみ。"
@@ -202,7 +216,8 @@ class ClaudeRunner:
             return self._fallback(task_type, payload, f"claude CLI エラー: {detail[:200]}")
 
         text = (proc.stdout or b"").decode("utf-8", "replace").strip()
-        parsed = _extract_json(text)
+        parsed = _parse_article(text) if task_type == "article_write" \
+            else _extract_json(text)
         if parsed is None:
             return self._fallback(task_type, payload, "JSON 解析失敗")
         return self._coerce(task_type, parsed)
@@ -226,6 +241,54 @@ class ClaudeRunner:
             parsed.setdefault("body_markdown", "")
         parsed["_llm"] = True
         return parsed
+
+
+# 記事本文の区切り（JSON に長文を埋め込むと壊れやすいため本文だけ外に出す）。
+_ARTICLE_BODY_MARK = "===本文ここから==="
+
+
+def _strip_outer_fence(text: str) -> str:
+    """全体が ```〜``` で囲まれている場合だけ外側フェンスを外す。"""
+    t = text.strip()
+    if t.startswith("```"):
+        nl = t.find("\n")
+        if nl != -1:
+            t = t[nl + 1:]
+        if t.rstrip().endswith("```"):
+            t = t.rstrip()[:-3]
+    return t.strip()
+
+
+def _first_heading(body: str) -> str:
+    for line in body.splitlines():
+        s = line.strip()
+        if s.startswith("#"):
+            return s.lstrip("#").strip()
+    return ""
+
+
+def _parse_article(text: str) -> dict[str, Any] | None:
+    """article_write 出力を解析。メタJSON + 区切り + 生Markdown本文。
+
+    本文を JSON 文字列に埋め込むと『"』『\\』『```』で壊れて解析失敗するため、
+    本文は区切り記号の後にそのまま出させる（頑健）。区切りが無い場合は従来の
+    JSON 抽出にフォールバックする。
+    """
+    if not text:
+        return None
+    if _ARTICLE_BODY_MARK in text:
+        head, body = text.split(_ARTICLE_BODY_MARK, 1)
+        meta = _extract_json(head) or {}
+        body = _strip_outer_fence(body)
+        if not body.strip():
+            return None
+        return {
+            "title": meta.get("title") or _first_heading(body),
+            "outline": meta.get("outline", []),
+            "cta": meta.get("cta", ""),
+            "body_markdown": body,
+        }
+    return _extract_json(text)
 
 
 def _extract_json(text: str) -> dict[str, Any] | None:

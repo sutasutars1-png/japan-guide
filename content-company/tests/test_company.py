@@ -111,6 +111,21 @@ class PipelineTest(unittest.TestCase):
             # 未知の商品では None
             self.assertIsNone(c.article_for("nope"))
 
+    def test_article_parser_survives_quotes_and_fences(self):
+        from company.runner_claude import _parse_article, _ARTICLE_BODY_MARK
+        text = (
+            '{"title": "T", "outline": ["a", "b"], "cta": "c"}\n'
+            + _ARTICLE_BODY_MARK + "\n"
+            + '# T\n彼は"便利"と言った。パスは C:\\\\x。\n\n'
+            + "```python\nprint(1)\n```\n- 手順1"
+        )
+        r = _parse_article(text)
+        self.assertIsNotNone(r)
+        self.assertEqual(r["title"], "T")
+        self.assertEqual(r["outline"], ["a", "b"])
+        self.assertIn("```python", r["body_markdown"])  # 本文のコードフェンスが残る
+        self.assertIn("便利", r["body_markdown"])         # 生の引用符でも壊れない
+
     def test_quality_format_and_price_tier(self):
         from company import quality
         # 体裁: 見出しなし・プレースホルダ残り
