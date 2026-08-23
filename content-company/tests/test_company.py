@@ -205,6 +205,15 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("2. b", out)             # 5. → 2.
         self.assertIn("3. c", out)             # 2. → 3.
 
+    def test_thumbnail_svg_valid(self):
+        import xml.dom.minidom as minidom
+        from company import thumbnail
+        for cat in ("A", "B", "C", "D", "E", "Z"):
+            s = thumbnail.svg({"title": "テストタイトル長め" * 3, "theme": "テーマ",
+                               "category": cat, "price_jpy": 300})
+            self.assertTrue(s.startswith("<svg"))
+            minidom.parseString(s)  # XML として妥当（例外が出ないこと）
+
     def test_note_render_html_formats_markdown(self):
         from company.note_channel import md_to_html
         html = md_to_html("# 見出し\n本文**太字**\n\n- 箇条書き\n\n―― ここから有料 ――\n有料")

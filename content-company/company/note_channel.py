@@ -199,12 +199,17 @@ class NoteExporter:
         path = out_dir / f"{product_id}.md"
         path.write_text(content, encoding="utf-8")
 
+        # サムネイル（SVG）も成果物として書き出す。
+        from . import thumbnail
+        thumb_path = out_dir / f"{product_id}_thumb.svg"
+        thumb_path.write_text(thumbnail.svg(product), encoding="utf-8")
+
         self.c.memory.add("note", f"note公開用エクスポート: {product.get('title')}",
                           str(path), related=[product_id])
         return {
             "product_id": product_id, "title": product.get("title"),
             "price_jpy": product.get("price_jpy"), "hashtags": hashtags,
-            "path": str(path), "markdown": content,
+            "path": str(path), "markdown": content, "thumbnail_path": str(thumb_path),
         }
 
     def render_html(self, product_id: str) -> dict[str, Any]:

@@ -134,7 +134,16 @@ def _note_preview_page(c: Company, product_id: str) -> str:
   <span class="muted">→ note の本文に貼り付け（見出し・太字・箇条書きが保持されます）</span>
   <span id="msg"></span>
 </div>
-<div class="muted" style="margin-top:10px">価格: {price}円 ／ ハッシュタグ:</div>
+<div class="thumb">
+  <div class="muted" style="margin-bottom:6px">note サムネイル（成果物）:</div>
+  <img id="thumbImg" src="/note/thumb.svg?product_id={_html.escape(product_id)}"
+       alt="thumbnail" style="max-width:100%;border:1px solid #24314f;border-radius:10px">
+  <div class="row" style="margin-top:8px">
+    <button id="thumbPng">🖼 サムネをPNG保存（1280×670）</button>
+    <span class="muted">note のヘッダ画像にアップロードできます</span>
+  </div>
+</div>
+<div class="muted" style="margin-top:14px">価格: {price}円 ／ ハッシュタグ:</div>
 <div class="tags">{tags_esc}</div>
 <p class="muted">点線（👇 ここから下を…）の位置に、note 側で「有料エリア」の区切りを設定してください。
 自動投稿はしません（貼り付け・公開は人間, §22）。</p>
@@ -159,6 +168,30 @@ def _note_preview_page(c: Company, product_id: str) -> str:
  document.getElementById('copyText').onclick=async()=>{{
    try{{await navigator.clipboard.writeText(doc.innerText);msg('テキストをコピーしました。');}}
    catch(e){{msg('自動コピー不可。手動で選択してください。');}}
+ }};
+ // SVG サムネを canvas で PNG に変換してダウンロード（ブラウザ内・外部送信なし）
+ document.getElementById('thumbPng').onclick=async()=>{{
+   try{{
+     const res=await fetch('/note/thumb.svg?product_id={_html.escape(product_id)}');
+     const svgText=await res.text();
+     const W=1280,H=670;
+     const img=new Image();
+     const blob=new Blob([svgText],{{type:'image/svg+xml;charset=utf-8'}});
+     const url=URL.createObjectURL(blob);
+     img.onload=()=>{{
+       const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+       const ctx=cv.getContext('2d');ctx.drawImage(img,0,0,W,H);
+       URL.revokeObjectURL(url);
+       cv.toBlob(b=>{{
+         const a=document.createElement('a');a.href=URL.createObjectURL(b);
+         a.download='note_thumb_{_html.escape(product_id)}.png';
+         document.body.appendChild(a);a.click();a.remove();
+         msg('PNGを保存しました。noteのヘッダ画像に設定してください。');
+       }},'image/png');
+     }};
+     img.onerror=()=>msg('サムネ変換に失敗しました。');
+     img.src=url;
+   }}catch(e){{msg('サムネ保存に失敗: '+e.message);}}
  }};
 </script></body></html>"""
 
@@ -222,6 +255,13 @@ class _Handler(BaseHTTPRequestHandler):
                 pid = (q.get("product_id") or [""])[0]
                 self._send(200, _note_preview_page(c, pid).encode("utf-8"),
                            "text/html; charset=utf-8")
+            elif u.path == "/note/thumb.svg":
+                from . import thumbnail
+                q = parse_qs(u.query)
+                pid = (q.get("product_id") or [""])[0]
+                prod = c.storage.get("products", pid) or {}
+                self._send(200, thumbnail.svg(prod).encode("utf-8"),
+                           "image/svg+xml; charset=utf-8")
             elif u.path == "/api/state":
                 self._json(_state(c))
             elif u.path == "/api/report":
