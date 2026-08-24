@@ -431,6 +431,68 @@ class Company:
             rewrites += 1
         return article, review, rewrites
 
+    # ---- システム改修提案 (§20 メタ改善): AIは提案のみ・実装は人間 --------
+
+    def propose_system_improvements(self, *, use_llm: bool = False) -> dict:
+        """売上を上げるためのシステム改修案を生成して起票する（重複は除外）。
+
+        決定論ヒューリスティック＋（任意で）Growth エージェントの LLM 提案。
+        いずれも『提案』であり、コードの自動改変はしない（人間が採否）。
+        """
+        from . import system_improve
+
+        candidates = system_improve.heuristic_proposals(self)
+        if use_llm:
+            candidates += self._llm_system_proposals()
+        added = 0
+        for c in candidates:
+            if self.storage.get("improvements", c["id"]) is None:
+                self.storage.put("improvements", c)
+                added += 1
+        self.memory.add("system", "システム改修提案を生成",
+                        f"{added}件を新規起票", tags=["improvement"])
+        return {"added": added, "total": len(self.storage.all("improvements"))}
+
+    def _llm_system_proposals(self) -> list[dict]:
+        from . import system_improve
+        try:
+            summary = {"kpi": self.kpi.summary(),
+                       "patterns": self.kpi.patterns(),
+                       "lessons": [r.get("guideline") for r in
+                                   self.storage.all("lessons") if r.get("active")]}
+            t = self.tasks.create(
+                "システム改修提案", agent="growth", task_type="system_improve",
+                skill="growth-strategy", input={"summary": summary})
+            self.tasks.run(t.id)
+            out = self.tasks.get(t.id).output or {}
+            props = out.get("proposals") or []
+            result = []
+            for p in props:
+                if not isinstance(p, dict) or not p.get("title"):
+                    continue
+                result.append({
+                    "id": system_improve.slug(str(p["title"])),
+                    "title": str(p.get("title"))[:120],
+                    "problem": str(p.get("problem", ""))[:400],
+                    "hypothesis": str(p.get("hypothesis", ""))[:400],
+                    "expected_effect": str(p.get("expected_effect", ""))[:200],
+                    "category": str(p.get("category", "ux"))[:20],
+                    "effort": str(p.get("effort", "M"))[:2],
+                    "source": "llm", "status": "new", "created_at": ids.now_iso()})
+            return result
+        except Exception:  # noqa: BLE001
+            return []
+
+    def set_improvement_status(self, imp_id: str, status: str) -> dict:
+        rec = self.storage.get("improvements", imp_id)
+        if rec is None:
+            raise KeyError(imp_id)
+        if status not in ("new", "accepted", "rejected", "done"):
+            raise ValueError(status)
+        rec["status"] = status
+        self.storage.put("improvements", rec)
+        return rec
+
     def reset_data(self, *, backup: bool = True) -> dict:
         """台帳データ（商品/記事/タスク/承認/実績など）を初期化する。
 

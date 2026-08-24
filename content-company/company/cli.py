@@ -79,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("demo", help="架空データで全ループを実演 (企画→承認→公開→実績→評価)")
     p_reset = sub.add_parser("reset", help="台帳データを初期化（実行前に自動バックアップ）")
     p_reset.add_argument("--yes", action="store_true", help="確認なしで実行")
+    p_imp = sub.add_parser("improve", help="売上向上のためのシステム改修案を起票（提案のみ）")
+    p_imp.add_argument("--llm", action="store_true", help="Growth AI の提案も追加")
 
     # Skill 自己改善 (§20)
     p_skill = sub.add_parser("skill", help="Skill 自己改善ループ (§20)")
@@ -205,6 +207,13 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
         info = c.reset_data()
         print(f"初期化しました。バックアップ: {info.get('backup')}")
+    elif args.cmd == "improve":
+        if args.llm:
+            c.enable_llm()
+        res = c.propose_system_improvements(use_llm=args.llm)
+        _print(res)
+        for im in c.storage.all("improvements"):
+            print(f"[{im['status']}] ({im['category']}/{im['effort']}) {im['title']}")
     elif args.cmd == "demo":
         from .seed import seed_demo, DemoRunner
         c.tasks.runner = DemoRunner()

@@ -73,6 +73,11 @@ def _state(c: Company) -> dict:
         "schedule": c.scheduler.get_state(),
         "channels": {"x": c.config.x_enabled, "tiktok": c.config.tiktok_enabled},
         "social": social,
+        "improvements": sorted(
+            c.storage.all("improvements"),
+            key=lambda r: ({"new": 0, "accepted": 1, "done": 2, "rejected": 3}
+                           .get(r.get("status"), 9), r.get("created_at", "")),
+        ),
     }
 
 
@@ -343,6 +348,12 @@ class _Handler(BaseHTTPRequestHandler):
                 if not b.get("confirm"):
                     return self._json({"error": "confirm が必要です"}, 400)
                 self._json(c.delete_product(b["product_id"]))
+            elif u.path == "/api/improve/system":
+                if b.get("llm"):
+                    c.enable_llm()
+                self._json(c.propose_system_improvements(use_llm=bool(b.get("llm"))))
+            elif u.path == "/api/improve/status":
+                self._json(c.set_improvement_status(b["id"], b["status"]))
             elif u.path == "/api/reset":
                 if b.get("confirm") != "DELETE":
                     return self._json({"error": "confirm=DELETE が必要です"}, 400)
@@ -497,6 +508,15 @@ iframe{width:100%;height:520px;border:1px solid var(--line);border-radius:10px;b
     <div id="lessons" style="margin-top:4px"></div>
   </details>
 
+  <details open><summary>🛠 システム改修提案（売上を上げる機能提案・実装は人間が判断）</summary>
+    <div class="row" style="margin-top:8px">
+      <button id="btnImpGen">提案を生成</button>
+      <button class="ghost" id="btnImpGenLlm">実LLMで提案</button>
+      <span class="muted">KPI・実績・教訓から、売れるためのシステム改修案を起票します</span>
+    </div>
+    <div id="improvements" style="margin-top:8px"></div>
+  </details>
+
   <details><summary>⚙️ 設定（チャネル有効化・運用パラメータ · §23, §36）</summary>
     <div id="settings" style="margin-top:8px"></div>
   </details>
@@ -617,6 +637,7 @@ async function refresh(){
         <button class="ghost" onclick="propose('${sk.key}')">改善案</button>
         <button class="ghost" onclick="showVersions('${sk.key}')">履歴</button></td></tr>`).join('')
     +'</tbody></table></div>';
+  renderImprovements(s.improvements||[]);
   $('#lessons').innerHTML=(s.lessons&&s.lessons.length)
     ? s.lessons.map(l=>`<div class="muted" style="padding:3px 0">
         ✅ <b>${esc(l.skill)}</b>: ${esc(l.guideline)} <span style="opacity:.6">(${l.count}回)</span></div>`).join('')
@@ -626,6 +647,25 @@ async function refresh(){
   $('#dash').src='/dashboard?'+Date.now();
 }
 
+const IMP_BADGE={new:'🆕 新規',accepted:'✅ 採用',done:'🏁 完了',rejected:'🗑 却下'};
+function renderImprovements(list){
+  if(!list.length){$('#improvements').innerHTML='<div class="muted">まだ提案はありません。「提案を生成」を押してください。</div>';return;}
+  $('#improvements').innerHTML=list.map(im=>`<div style="border:1px solid var(--line);border-radius:9px;padding:10px;margin-bottom:8px">
+    <div class="row" style="justify-content:space-between">
+      <b>${esc(im.title)}</b>
+      <span class="muted">${IMP_BADGE[im.status]||im.status} ・ ${esc(im.category||'')} ・ 規模${esc(im.effort||'')} ・ ${im.source==='llm'?'AI':'自動'}</span>
+    </div>
+    <div class="muted" style="margin-top:4px">課題: ${esc(im.problem||'')}</div>
+    <div class="muted">仮説: ${esc(im.hypothesis||'')}</div>
+    <div class="muted">期待効果: ${esc(im.expected_effect||'')}</div>
+    <div class="row" style="margin-top:6px">
+      <button class="good" onclick="impStatus('${im.id}','accepted')">採用</button>
+      <button class="ghost" onclick="impStatus('${im.id}','done')">完了</button>
+      <button class="bad" onclick="impStatus('${im.id}','rejected')">却下</button>
+    </div></div>`).join('');
+}
+async function impStatus(id,status){try{await api('/api/improve/status','POST',{id,status});
+  toast('提案を'+status+'にしました');refresh();}catch(e){toast('エラー: '+e.message);}}
 async function loadLogs(){try{const r=await api('/api/logs');
   const badge=v=>v==='pass'?'<span class="pill pub">pass</span>'
     :v==='reject'?'<span class="pill await">reject</span>':(v?esc(v):'-');
@@ -767,6 +807,12 @@ $('#btnEval').onclick=async()=>{try{const r=await api('/api/evaluate','POST',{})
   $('#out').textContent=JSON.stringify(r.actions,null,2);toast('評価しました');refresh();}catch(e){toast(e.message);}};
 $('#btnRefresh').onclick=refresh;
 $('#btnLogs').onclick=loadLogs;
+$('#btnImpGen').onclick=async()=>{try{const r=await api('/api/improve/system','POST',{});
+  toast('改修提案を生成: 新規'+r.added+'件 / 合計'+r.total+'件');refresh();}catch(e){toast('エラー: '+e.message);}};
+$('#btnImpGenLlm').onclick=async()=>{const b=$('#btnImpGenLlm');b.disabled=true;b.textContent='生成中…';
+  try{const r=await api('/api/improve/system','POST',{llm:true});
+  toast('実LLMで改修提案を生成: 新規'+r.added+'件');refresh();}catch(e){toast('エラー: '+e.message);}
+  finally{b.disabled=false;b.textContent='実LLMで提案';}};
 $('#btnReset').onclick=async()=>{
   if(!confirm('全データ（商品・記事・タスク・承認・実績など）を削除して初期化します。\\n実行前に自動で data のバックアップ(zip)を作成します。よろしいですか？'))return;
   if(prompt('確認のため DELETE と入力してください:')!=='DELETE'){toast('中止しました');return;}

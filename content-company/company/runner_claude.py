@@ -38,6 +38,7 @@ TASK_ROLE: dict[str, tuple[str, str]] = {
     "review_final": ("reviewer", "quality-review"),
     "x_post": ("marketing", "x-marketing"),
     "tiktok_script": ("marketing", "tiktok-marketing"),
+    "system_improve": ("growth", "growth-strategy"),
 }
 
 # task_type → 期待する JSON キー（検証用）と追加指示。
@@ -98,6 +99,18 @@ _CONTRACT: dict[str, dict[str, Any]] = {
             "売れた記事をショート動画化する台本を作る（§33）。channel は 'tiktok'。"
             "hook は最初の3秒の一言、script は秒数付きの構成配列、captions は字幕案の配列。"
             "note への導線を含める。誇張・断定を避ける。撮影・投稿は人間が行う前提の下書き。"
+        ),
+    },
+    "system_improve": {
+        "keys": ["proposals"],
+        "instruction": (
+            "あなたは Growth 責任者。入力 summary（KPI/成功失敗パターン/教訓）を読み、"
+            "**売上を上げるためのシステム改修案**（機能追加・仕組み変更）を 3〜5 件提案する。"
+            "proposals は配列で、各要素は "
+            '{"title","problem","hypothesis","expected_effect","category","effort"} '
+            "を持つ。category は funnel/pricing/channel/measurement/ux/quality/retention "
+            "のいずれか、effort は S/M/L。コンテンツの小手先ではなく、仕組みの改善に絞る。"
+            "コードの自動改変は求めていない（人間が実装可否を判断する提案）。"
         ),
     },
     "review_final": {

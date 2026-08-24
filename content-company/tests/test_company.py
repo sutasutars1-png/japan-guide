@@ -159,6 +159,21 @@ class PipelineTest(unittest.TestCase):
             self.assertIsNone(c.storage.get("products", pid))
             self.assertEqual(c.storage.find("articles", product_id=pid), [])
 
+    def test_system_improvement_proposals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            c.plan_products(3)
+            r = c.propose_system_improvements()
+            self.assertGreater(r["added"], 0)
+            self.assertEqual(c.propose_system_improvements()["added"], 0)  # 冪等
+            imps = c.storage.all("improvements")
+            self.assertTrue(all("title" in i and "category" in i for i in imps))
+            iid = imps[0]["id"]
+            c.set_improvement_status(iid, "accepted")
+            self.assertEqual(c.storage.get("improvements", iid)["status"], "accepted")
+            with self.assertRaises(ValueError):
+                c.set_improvement_status(iid, "bogus")
+
     def test_learning_loop_captures_lesson_and_proposes(self):
         from company.runner import TemplateRunner
         with tempfile.TemporaryDirectory() as tmp:
