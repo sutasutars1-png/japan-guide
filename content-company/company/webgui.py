@@ -52,6 +52,7 @@ def _state(c: Company) -> dict:
         "url": p.get("url"),
         "approval_id": (pub_apr.get(p["id"]) or {}).get("id"),
         "approval_status": (pub_apr.get(p["id"]) or {}).get("status"),
+        "pending_feedback": p.get("pending_feedback", ""),
     } for p in products]
     prod_rows.sort(key=lambda r: (r["status"] != "awaiting_approval", r["id"]))
     social = c.social.list()
@@ -361,7 +362,7 @@ class _Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/approve":
                 self._json(c.approvals.approve(b["approval_id"]).to_dict())
             elif u.path == "/api/reject":
-                self._json(c.approvals.reject(b["approval_id"], note=b.get("note", "")).to_dict())
+                self._json(c.human_reject_publish(b["approval_id"], note=b.get("note", "")))
             elif u.path == "/api/publish":
                 p = c.publish(b["product_id"], b["url"], b["approval_id"])
                 self._json(p.to_dict())
@@ -602,7 +603,9 @@ async function refresh(){
 
   tbody('#products').innerHTML=s.products.length? s.products.map(p=>{
     const st = p.status==='awaiting_approval'?'<span class="pill await">公開待ち</span>'
-      : p.status==='published'?'<span class="pill pub">公開</span>':`<span class="pill">${esc(p.status)}</span>`;
+      : p.status==='published'?'<span class="pill pub">公開</span>'
+      : p.status==='review'?'<span class="pill">差し戻し中</span>'+(p.pending_feedback?' <span class="muted">📝指示あり</span>':'')
+      :`<span class="pill">${esc(p.status)}</span>`;
     let act=`<button class="ghost" onclick="viewArticle('${p.id}')">記事を読む</button> `;
     act+=`<button class="bad" onclick="deleteProduct('${p.id}','${(p.title||'').replace(/'/g,'')}')">削除</button> `;
     // 修正依頼（差し戻し中/公開待ちの記事を書き直す, §4）
@@ -747,16 +750,19 @@ async function deleteProduct(pid,title){
   try{const r=await api('/api/product/delete','POST',{product_id:pid,confirm:true});
   toast('削除しました（記事'+r.removed_articles+'件）');refresh();}
   catch(e){toast('エラー: '+e.message);}}
-async function requestRewrite(pid){const fb=prompt('修正依頼の内容（例: 冒頭をもっと具体的に／価格の根拠を追加）:');
+async function requestRewrite(pid){
+  let def='';try{const s=await api('/api/state');const p=s.products.find(x=>x.id===pid);def=(p&&p.pending_feedback)||'';}catch(e){}
+  const fb=prompt('修正依頼の内容（差し戻しコメントがあれば初期表示。例: 具体例を数値つきで3件）:', def);
   if(fb==null||!fb.trim())return;
   toast('修正を依頼中…（実LLMだと数分かかります）');
   try{const r=await api('/api/rewrite','POST',{product_id:pid,feedback:fb,llm:$('#useLlm').checked});
   if(r.llm===false) toast('雛形で書き直しました（骨格のまま）。本文を作るには左上「実LLM生成」をONにして再度修正依頼を。');
   else toast(r.passed?'修正版がレビュー通過。承認待ちへ。':'修正版はレビューで差し戻し（品質/重複ガード）。もう一度修正依頼できます。');
   refresh();}catch(e){toast('エラー: '+e.message);}}
-async function reject(id){const note=prompt('却下理由（任意）')||'';
-  try{await api('/api/reject','POST',{approval_id:id,note});toast('却下しました');refresh();}
-  catch(e){toast('エラー: '+e.message);}}
+async function reject(id){const note=prompt('却下理由（ライターへの差し戻し指示になります）:')||'';
+  try{await api('/api/reject','POST',{approval_id:id,note});
+  toast('差し戻しました。'+(note?'この指示は「修正依頼」で反映されます。':'')+'商品はreviewに戻りました。');
+  refresh();}catch(e){toast('エラー: '+e.message);}}
 async function metrics(pid){const pv=+prompt('PV',0),pu=+prompt('購入数',0),rev=+prompt('売上(円)',0);
   try{await api('/api/metrics','POST',{product_id:pid,pv,purchases:pu,revenue:rev});
   toast('実績を記録しました');refresh();}catch(e){toast('エラー: '+e.message);}}

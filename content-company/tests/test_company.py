@@ -159,6 +159,35 @@ class PipelineTest(unittest.TestCase):
             self.assertIsNone(c.storage.get("products", pid))
             self.assertEqual(c.storage.find("articles", product_id=pid), [])
 
+    def test_human_reject_feeds_writer_and_clears_queue(self):
+        from company.runner import TemplateRunner
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+
+            class Stub(TemplateRunner):
+                def run(self, tt, p):
+                    if tt == "article_write":
+                        Stub.fb = p.get("feedback")
+                        return {"title": "T", "outline": ["a"], "_llm": True,
+                                "body_markdown": "# T\n" + "本文" * 900
+                                + "\nたとえば例1。たとえば例2。\n- 手順1\n- 手順2", "cta": "c"}
+                    if tt == "review_final":
+                        return {"verdict": "pass", "checklist": {}, "notes": "OK"}
+                    return super().run(tt, p)
+
+            c.tasks.runner = Stub()
+            r = c.plan_products(1)[0]
+            pid, aid = r["product_id"], r["approval_id"]
+            self.assertEqual(len(c.approvals.pending()), 1)
+            c.human_reject_publish(aid, note="具体例を数値つきで足して")
+            prod = c.storage.get("products", pid)
+            self.assertEqual(prod["status"], "review")             # 承認待ちから外れる
+            self.assertEqual(prod["pending_feedback"], "具体例を数値つきで足して")
+            self.assertEqual(len(c.approvals.pending()), 0)        # 滞留解消
+            c.request_rewrite(pid, "")                             # 空 → 保存コメント使用
+            self.assertIn("具体例", Stub.fb)                        # 人間指示がライターへ
+            self.assertIsNone(c.storage.get("products", pid).get("pending_feedback"))
+
     def test_system_improvement_proposals(self):
         with tempfile.TemporaryDirectory() as tmp:
             c = make_company(tmp)

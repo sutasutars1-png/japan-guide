@@ -53,7 +53,7 @@ class Config:
 
     # 自動再執筆 (§4 の差し戻し→Writer)。Reviewer が reject したとき、指摘を
     # 反映して書き直す最大回数。0 で自動再執筆オフ。実 LLM 生成時のみ作動する。
-    max_rewrites: int = 3
+    max_rewrites: int = 4
 
     # 実験の撤退基準 (付録A 任意強化案)。
     # 「Nラウンド連続で購入0のカテゴリは打ち切り」
@@ -72,7 +72,7 @@ class Config:
         "initial_price_jpy": (int, 0, 1_000_000),
         "max_tasks_per_day": (int, 0, 100000),  # 0 = 無制限（テスト用）
         "max_publishes_per_day": (int, 0, 100),
-        "max_rewrites": (int, 0, 5),
+        "max_rewrites": (int, 0, 8),
         "target_conversion_rate": (float, 0.0, 1.0),
         "similarity_threshold": (float, 0.3, 1.0),
         "lesson_threshold": (int, 1, 20),

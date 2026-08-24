@@ -316,10 +316,10 @@ class ConfigTest(unittest.TestCase):
     def test_update_rejects_unsafe_fields_and_persists(self):
         with tempfile.TemporaryDirectory() as tmp:
             c = make_company(tmp)
-            out = c.update_config({"x_enabled": "true", "max_rewrites": "9",
+            out = c.update_config({"x_enabled": "true", "max_rewrites": "99",
                                    "data_dir": "/etc", "unknown": 1})
             self.assertTrue(c.config.x_enabled)
-            self.assertEqual(c.config.max_rewrites, 5)  # 上限5にクランプ
+            self.assertEqual(c.config.max_rewrites, 8)  # 上限8にクランプ
             self.assertEqual(str(c.config.data_dir), tmp)  # data_dir は不変
             self.assertNotIn("data_dir", out["applied"])
             # 再構築で永続化を確認

@@ -228,9 +228,18 @@ class Company:
             if not lessons:
                 return
             guidance = " / ".join(lessons)
-            # 既に同じガイダンスの版があれば重複起票しない。
-            for v in self.skills_lab.versions(skill):
-                if (v.get("guidance") or "").strip() == guidance.strip():
+            # 既に現行版に反映済みなら不要。
+            try:
+                if guidance.strip() and guidance.strip() in \
+                        (self.skills_lab.current(skill).get("guidance") or ""):
+                    return
+            except KeyError:
+                pass
+            # 既にこの Skill の採用提案が承認待ちなら二重起票しない
+            # （却下・未対応で不備が続く場合は再度上がる）。
+            for a in self.approvals.pending():
+                if a.get("kind") == "config" and \
+                        a.get("payload", {}).get("skill") == skill:
                     return
             cand = self.skills_lab.propose(skill, guidance=guidance, author="growth")
             self.skills_lab.request_adoption(skill, cand["version"])
@@ -543,6 +552,28 @@ class Company:
         return {"deleted": product_id, "title": raw.get("title"),
                 "removed_articles": removed_articles}
 
+    def human_reject_publish(self, approval_id: str, note: str = "") -> dict:
+        """人間が公開を却下したときの処理。
+
+        却下コメントを (1) 商品に保存して次の修正依頼で使い、(2) 学習にも回し、
+        (3) 商品を review に戻して承認待ちの滞留を解消する。publish 以外の
+        承認（Skill採用など）は通常の却下のみ。
+        """
+        raw = self.storage.get("approvals", approval_id)
+        apr = self.approvals.reject(approval_id, note=note)
+        note = (note or "").strip()
+        if raw and raw.get("kind") == "publish":
+            pid = raw.get("payload", {}).get("product_id")
+            prod = self.storage.get("products", pid) if pid else None
+            if prod:
+                prod["status"] = "review"  # 承認待ちから外す（滞留解消）
+                if note:
+                    prod["pending_feedback"] = note  # 次の修正依頼で使う
+                self.storage.put("products", prod)
+            if note and pid:
+                self._learn_from_reject("article-writing", note)  # 学習にも回す
+        return {"approval": apr.to_dict(), "note": note}
+
     def request_rewrite(self, product_id: str, feedback: str) -> dict:
         """人間の修正依頼を反映して記事を書き直し、再レビューする (§4, §21)。
 
@@ -557,6 +588,14 @@ class Company:
         if not arts:
             raise ValueError(f"記事が見つかりません: {product_id}")
         prev = arts[-1]
+        # 指示が空なら、人間の却下コメント（保存済み）を使う。
+        feedback = (feedback or "").strip() or str(raw.get("pending_feedback", "")).strip() \
+            or "具体例・分量・完結性を高めて改稿する"
+        # 古い公開承認が承認待ちに残っていれば閉じる（滞留解消）。
+        for a in self.approvals.pending():
+            if a.get("kind") == "publish" and \
+                    a.get("payload", {}).get("product_id") == product_id:
+                self.approvals.reject(a["id"], note="修正依頼により再作成")
         plan = {
             "product_name": product.title, "theme": product.theme,
             "target": product.target, "price_jpy": product.price_jpy,
