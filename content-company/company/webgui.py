@@ -61,6 +61,11 @@ def _state(c: Company) -> dict:
         "pending": pending,
         "products": prod_rows,
         "skills": c.skills_lab.all_current(),
+        "lessons": sorted(
+            ({"skill": r.get("skill"), "guideline": r.get("guideline"),
+              "count": r.get("count", 0)}
+             for r in c.storage.all("lessons") if r.get("active")),
+            key=lambda x: x["count"], reverse=True),
         "tasks_today": c.cost.tasks_today(),
         "max_tasks_per_day": c.config.max_tasks_per_day,
         "runner": type(c.tasks.runner).__name__,
@@ -486,8 +491,10 @@ iframe{width:100%;height:520px;border:1px solid var(--line);border-radius:10px;b
     <th>タイトル</th><th>カテゴリ</th><th>状態</th><th>PV</th><th>購入</th>
     <th>売上</th><th>評価</th><th>操作</th></tr></thead><tbody></tbody></table></div>
 
-  <details><summary>🧠 Skill 自己改善（§20）</summary>
+  <details open><summary>🧠 Skill 自己改善（§20）</summary>
     <div id="skills" style="margin-top:8px"></div>
+    <div style="margin-top:10px" class="muted">📚 学習した教訓（差し戻しから自動獲得 → 以後の執筆に反映）:</div>
+    <div id="lessons" style="margin-top:4px"></div>
   </details>
 
   <details><summary>⚙️ 設定（チャネル有効化・運用パラメータ · §23, §36）</summary>
@@ -610,6 +617,10 @@ async function refresh(){
         <button class="ghost" onclick="propose('${sk.key}')">改善案</button>
         <button class="ghost" onclick="showVersions('${sk.key}')">履歴</button></td></tr>`).join('')
     +'</tbody></table></div>';
+  $('#lessons').innerHTML=(s.lessons&&s.lessons.length)
+    ? s.lessons.map(l=>`<div class="muted" style="padding:3px 0">
+        ✅ <b>${esc(l.skill)}</b>: ${esc(l.guideline)} <span style="opacity:.6">(${l.count}回)</span></div>`).join('')
+    : '<div class="muted">まだ教訓はありません（差し戻しが繰り返されると自動で獲得します）。</div>';
   renderSettings(s.config); renderSchedule(s.schedule); renderSocial(s.social);
   loadLogs();
   $('#dash').src='/dashboard?'+Date.now();

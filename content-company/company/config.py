@@ -37,6 +37,10 @@ class Config:
     # 記事の重複ガード (付録A #5)。既存記事との類似度がこれ以上なら差し戻す。
     similarity_threshold: float = 0.72
 
+    # 学習ループ (§20)。同じ差し戻し理由がこの回数に達したら「教訓」として
+    # 以後の執筆に必ず反映し、Skill 改善提案を自動生成する。
+    lesson_threshold: int = 2
+
     # コスト / スループット制御 (§36, §37, 付録A #3)
     max_tasks_per_day: int = 40
     # 予算レベル → 想定モデル Tier (§14, §37)
@@ -71,6 +75,7 @@ class Config:
         "max_rewrites": (int, 0, 5),
         "target_conversion_rate": (float, 0.0, 1.0),
         "similarity_threshold": (float, 0.3, 1.0),
+        "lesson_threshold": (int, 1, 20),
         "breakeven_product_count": (int, 1, 1000),
         "retreat_zero_purchase_rounds": (int, 1, 20),
         "x_enabled": (bool, None, None),

@@ -171,6 +171,76 @@ class Company:
                 best = (r, title)
         return best
 
+    # ---- 学習ループ (§20): 差し戻し理由を教訓化して次に活かす ------------
+
+    # 却下理由の分類 → 恒久的な改善ガイドライン。
+    _LESSON_RULES: tuple[tuple[tuple[str, ...], str, str], ...] = (
+        (("具体例", "事例", "例が不足"), "examples",
+         "再現できる具体例を最低3件、数値・固有名詞・手順つきで入れる（抽象論で終わらせない）"),
+        (("短い", "薄い", "分量", "文字"), "depth",
+         "価格に見合う分量と具体性を確保し、各主張に根拠・手順・数値を添える"),
+        (("類似", "重複", "似て"), "dedup",
+         "既存記事と切り口・見出し・具体例を変えて差別化する"),
+        (("プレースホルダ", "見出し", "体裁", "空のリンク"), "format",
+         "プレースホルダを残さず、見出し構造を整え、体裁を崩さない"),
+        (("完結", "予告", "続きは"), "complete",
+         "この記事だけで悩みを完全解決し、予告・要約で終わらせない"),
+        (("断定", "誇張", "景表", "優良誤認"), "compliance",
+         "『必ず稼げる』等の断定・誇張を避け、根拠を添えて表現する"),
+    )
+
+    def _classify_reject(self, notes: str) -> list[tuple[str, str]]:
+        out: list[tuple[str, str]] = []
+        for keys, rkey, guide in self._LESSON_RULES:
+            if any(k in notes for k in keys):
+                out.append((rkey, guide))
+        return out
+
+    def _active_lessons(self, skill: str, limit: int = 6) -> list[str]:
+        recs = [r for r in self.storage.find("lessons", skill=skill) if r.get("active")]
+        recs.sort(key=lambda r: r.get("count", 0), reverse=True)
+        return [r["guideline"] for r in recs[:limit]]
+
+    def _learn_from_reject(self, skill: str, notes: str) -> None:
+        """差し戻し理由を教訓として蓄積。閾値に達したら以後必ず反映＋改善提案。"""
+        if not notes:
+            return
+        for rkey, guide in self._classify_reject(notes):
+            lid = f"{skill}:{rkey}"
+            rec = self.storage.get("lessons", lid) or {
+                "id": lid, "skill": skill, "key": rkey, "guideline": guide,
+                "count": 0, "active": False}
+            rec["count"] = int(rec.get("count", 0)) + 1
+            rec["guideline"] = guide
+            newly_active = (not rec.get("active")) and \
+                rec["count"] >= self.config.lesson_threshold
+            if rec["count"] >= self.config.lesson_threshold:
+                rec["active"] = True
+            self.storage.put("lessons", rec)
+            if newly_active:
+                self.memory.add("lesson", f"教訓を獲得: {skill}", guide, tags=[skill])
+                self._auto_propose_skill(skill)
+
+    def _auto_propose_skill(self, skill: str) -> None:
+        """獲得した教訓を Skill 改善案として自動起票し、承認待ちに出す (§20)。"""
+        try:
+            lessons = self._active_lessons(skill)
+            if not lessons:
+                return
+            guidance = " / ".join(lessons)
+            # 既に同じガイダンスの版があれば重複起票しない。
+            for v in self.skills_lab.versions(skill):
+                if (v.get("guidance") or "").strip() == guidance.strip():
+                    return
+            cand = self.skills_lab.propose(skill, guidance=guidance, author="growth")
+            self.skills_lab.request_adoption(skill, cand["version"])
+            self.log_decision(
+                context=f"Skill 自動改善: {skill}",
+                decision=f"教訓を反映した v{cand['version']} を提案・採用申請",
+                rationale=guidance, actor="growth", options=["現状維持", "改善版を採用"])
+        except Exception:  # noqa: BLE001
+            pass
+
     def _performance_hints(self, limit: int = 8) -> dict[str, list[str]]:
         """実績評価(§31)の結果を次の企画・執筆へ渡す（B: 学習の反映）。
 
@@ -218,7 +288,8 @@ class Company:
             input={"theme": theme, "category": category,
                    "price_jpy": self.config.initial_price_jpy, "research": research,
                    "avoid_similar": self._avoid_list(),
-                   "performance_hints": self._performance_hints()},
+                   "performance_hints": self._performance_hints(),
+                   "lessons": self._active_lessons("product-planning")},
         )
         self.tasks.run(t_plan.id)
         self.tasks.review(t_plan.id, True)
@@ -292,7 +363,8 @@ class Company:
         # 初回 + 最大 max_rewrites 回の書き直し
         for attempt in range(self.config.max_rewrites + 1):
             w_input: dict = {"plan": plan, "avoid_similar": avoid,
-                             "performance_hints": hints, "price_requirement": price_req}
+                             "performance_hints": hints, "price_requirement": price_req,
+                             "lessons": self._active_lessons("article-writing")}
             if feedback:
                 w_input["feedback"] = feedback
                 w_input["previous_body"] = prev_body
@@ -340,6 +412,9 @@ class Company:
                 + (f" (再執筆{attempt})" if attempt else ""),
                 review.get("notes", ""), related=[product.id])
 
+            if not passed:
+                # 差し戻し理由を教訓化（同じ失敗を繰り返さないよう学習, §20）。
+                self._learn_from_reject("article-writing", review.get("notes", ""))
             if passed:
                 break
             # 再執筆は「実 LLM が書いた記事」に対してのみ意味がある。
@@ -431,7 +506,8 @@ class Company:
             input={"plan": plan, "feedback": feedback,
                    "previous_body": prev.get("body_markdown", ""), "human_request": True,
                    "price_requirement": quality_mod.price_requirement_text(product.price_jpy),
-                   "performance_hints": self._performance_hints()},
+                   "performance_hints": self._performance_hints(),
+                   "lessons": self._active_lessons("article-writing")},
         )
         self.tasks.run(t_write.id)
         self.tasks.review(t_write.id, True)
@@ -454,6 +530,8 @@ class Company:
                           "notes": (review.get("notes", "") + " / 品質差し戻し: "
                                     + " / ".join(q_issues)).strip()}
         self.tasks.review(t_review.id, passed, notes=review.get("notes", ""))
+        if not passed:
+            self._learn_from_reject("article-writing", review.get("notes", ""))
 
         article_id = ids.new_id("art")
         self.storage.put("articles", {"id": article_id, "product_id": product.id,

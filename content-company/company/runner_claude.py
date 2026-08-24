@@ -65,6 +65,7 @@ _CONTRACT: dict[str, dict[str, Any]] = {
             "reader_pain が重複しないよう、別の読者層/悩み/角度で差別化する。"
             "入力 performance_hints があれば winning_angles の切り口に寄せ、"
             "losing_angles は避ける（実績に基づく学習, §31）。"
+            "入力 lessons は過去の差し戻しから学んだ必須の改善点。すべて必ず守る。"
         ),
     },
     "article_write": {
@@ -77,6 +78,8 @@ _CONTRACT: dict[str, dict[str, Any]] = {
             "これらと似ないよう、独自の切り口と事例で書く。"
             "入力 price_requirement の分量・具体例・チェックリスト等の要件を必ず満たす"
             "（価格に見合う密度）。performance_hints があれば winning_angles に寄せる。"
+            "入力 lessons は過去の差し戻しから学んだ必須の改善点。**すべて必ず守る**"
+            "（特に具体例は数値・固有名詞・手順つきで十分な数を入れる）。"
             "入力に feedback がある場合は、その差し戻し指摘を必ず反映して "
             "previous_body を改稿する（具体例・手順・固有名詞を補い、断定表現を是正）。"
         ),

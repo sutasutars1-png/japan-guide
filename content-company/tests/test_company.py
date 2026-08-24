@@ -159,6 +159,31 @@ class PipelineTest(unittest.TestCase):
             self.assertIsNone(c.storage.get("products", pid))
             self.assertEqual(c.storage.find("articles", product_id=pid), [])
 
+    def test_learning_loop_captures_lesson_and_proposes(self):
+        from company.runner import TemplateRunner
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp, lesson_threshold=2)
+
+            class Stub(TemplateRunner):
+                def run(self, tt, p):
+                    if tt == "article_write":
+                        Stub.seen = p.get("lessons")
+                        return {"title": "T", "outline": ["a"],
+                                "body_markdown": "# T\n" + "本文" * 500,
+                                "cta": "c", "_llm": True}
+                    if tt == "review_final":
+                        return {"verdict": "reject", "checklist": {},
+                                "notes": "具体例が不足しています。事例を追加してください。"}
+                    return super().run(tt, p)
+
+            c.tasks.runner = Stub()
+            c.plan_products(1)
+            # 教訓が獲得され、後続の執筆入力に注入される
+            self.assertTrue(c._active_lessons("article-writing"))
+            self.assertTrue(Stub.seen)
+            # Skill 改善提案が承認待ち(config)に自動起票される
+            self.assertTrue(any(a.get("kind") == "config" for a in c.approvals.pending()))
+
     def test_performance_hints_reads_outcome(self):
         with tempfile.TemporaryDirectory() as tmp:
             c = make_company(tmp)
