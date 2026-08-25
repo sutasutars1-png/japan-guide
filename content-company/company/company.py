@@ -185,8 +185,9 @@ class Company:
          "プレースホルダを残さず、見出し構造を整え、体裁を崩さない"),
         (("完結", "予告", "続きは"), "complete",
          "この記事だけで悩みを完全解決し、予告・要約で終わらせない"),
-        (("断定", "誇張", "景表", "優良誤認"), "compliance",
-         "『必ず稼げる』等の断定・誇張を避け、根拠を添えて表現する"),
+        (("断定", "誇張", "景表", "優良誤認", "出典", "数値"), "compliance",
+         "効果・数値は断定しない。出典不明の具体数値（例『平均10〜15分』）は削除するか"
+         "『個人差があります』等の留保と幅表現（『数分程度』等）に必ず言い換える"),
     )
 
     def _classify_reject(self, notes: str) -> list[tuple[str, str]]:
@@ -355,13 +356,19 @@ class Company:
             "rewrites": rewrites,
         }
 
-    def _write_and_review(self, product: Product, plan: dict, parent_id: str):
+    def _write_and_review(self, product: Product, plan: dict, parent_id: str,
+                          *, seed_feedback: str = "", seed_prev_body: str = "",
+                          human: bool = False):
         """執筆→レビューを行い、reject なら自動再執筆する (§4)。
 
+        seed_feedback / seed_prev_body を渡すと、その内容を初回の執筆に反映する
+        （人間の修正依頼を起点に、満足するまでループさせるため）。human=True の
+        ときは人間の指示を毎回保持し、レビュアーの直近指摘を足して回す。
         Returns (article, review, rewrites)。rewrites は再執筆回数。
         """
-        feedback = ""
-        prev_body = ""
+        human_note = (seed_feedback or "").strip()
+        feedback = human_note
+        prev_body = seed_prev_body or ""
         article: dict = {}
         review: dict = {}
         rewrites = 0
@@ -377,8 +384,10 @@ class Company:
             if feedback:
                 w_input["feedback"] = feedback
                 w_input["previous_body"] = prev_body
+            label = ("修正依頼(人間)" if human else "執筆") if attempt == 0 \
+                else (f"再執筆{attempt}" + ("(人間依頼)" if human else ""))
             t_write = self.tasks.create(
-                (f"再執筆{attempt}: " if attempt else "執筆: ") + product.title,
+                f"{label}: {product.title}",
                 agent="writer", task_type="article_write",
                 skill="article-writing", parent_id=parent_id, input=w_input,
             )
@@ -435,7 +444,10 @@ class Company:
                     f"{self.config.max_rewrites}回改稿しても reject。人間対応へ.",
                     related=[product.id])
                 break
-            feedback = review.get("notes", "")
+            # 人間の指示は毎回保持し、レビュアーの直近指摘を足して次に渡す。
+            review_note = review.get("notes", "")
+            feedback = (f"{human_note} / 直近レビュー指摘: {review_note}"
+                        if human_note else review_note)
             prev_body = article.get("body_markdown", "")
             rewrites += 1
         return article, review, rewrites
@@ -601,42 +613,18 @@ class Company:
             "target": product.target, "price_jpy": product.price_jpy,
             "category": product.category,
         }
-        t_write = self.tasks.create(
-            f"修正依頼(人間): {product.title}", agent="writer",
-            task_type="article_write", skill="article-writing",
-            input={"plan": plan, "feedback": feedback,
-                   "previous_body": prev.get("body_markdown", ""), "human_request": True,
-                   "price_requirement": quality_mod.price_requirement_text(product.price_jpy),
-                   "performance_hints": self._performance_hints(),
-                   "lessons": self._active_lessons("article-writing")},
-        )
-        self.tasks.run(t_write.id)
-        self.tasks.review(t_write.id, True)
-        article = self.tasks.get(t_write.id).output  # type: ignore[union-attr]
-
-        t_review = self.tasks.create(
-            f"レビュー(修正後): {product.title}", agent="reviewer",
-            task_type="review_final", skill="quality-review",
-            parent_id=t_write.id, input={"article": article},
-        )
-        self.tasks.run(t_review.id)
-        review = self.tasks.get(t_review.id).output  # type: ignore[union-attr]
+        # 単発ではなく、満足するまで最大 max_rewrites 回ループさせる（§4）。
+        # 人間の指示を毎回保持し、レビュアーの直近指摘を足して改稿する。
+        article, review, rewrites = self._write_and_review(
+            product, plan, parent_id=None,
+            seed_feedback=feedback, seed_prev_body=prev.get("body_markdown", ""),
+            human=True)
         passed = review.get("verdict") == "pass"
-        # 修正版も自動ガード（体裁/価格連動/完結性）を通す（実 LLM のみ）。
-        if passed and article.get("_llm"):
-            q_issues = quality_mod.quality_issues(article, product.price_jpy)
-            if q_issues:
-                passed = False
-                review = {**review, "verdict": "reject", "quality_issues": q_issues,
-                          "notes": (review.get("notes", "") + " / 品質差し戻し: "
-                                    + " / ".join(q_issues)).strip()}
-        self.tasks.review(t_review.id, passed, notes=review.get("notes", ""))
-        if not passed:
-            self._learn_from_reject("article-writing", review.get("notes", ""))
 
         article_id = ids.new_id("art")
-        self.storage.put("articles", {"id": article_id, "product_id": product.id,
-                                      "rewrites": int(prev.get("rewrites", 0)) + 1, **article})
+        self.storage.put("articles", {
+            "id": article_id, "product_id": product.id,
+            "rewrites": int(prev.get("rewrites", 0)) + rewrites + 1, **article})
         approval_id = None
         if passed:
             product.status = "awaiting_approval"
@@ -647,10 +635,10 @@ class Company:
         else:
             product.status = "review"
         self.storage.put("products", product.to_dict())
-        self.memory.add("rewrite", f"修正依頼を反映: {product.title}",
+        self.memory.add("rewrite", f"修正依頼を反映: {product.title}（改稿{rewrites + 1}回）",
                         feedback[:200], related=[product.id])
         return {"product_id": product_id, "status": product.status, "passed": passed,
-                "approval_id": approval_id, "review": review,
+                "rounds": rewrites + 1, "approval_id": approval_id, "review": review,
                 "llm": bool(article.get("_llm"))}
 
     # ---- 公開 (§21, §22): 人間承認後にのみ実行 --------------------------

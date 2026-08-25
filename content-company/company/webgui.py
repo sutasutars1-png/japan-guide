@@ -757,7 +757,7 @@ async function requestRewrite(pid){
   toast('修正を依頼中…（実LLMだと数分かかります）');
   try{const r=await api('/api/rewrite','POST',{product_id:pid,feedback:fb,llm:$('#useLlm').checked});
   if(r.llm===false) toast('雛形で書き直しました（骨格のまま）。本文を作るには左上「実LLM生成」をONにして再度修正依頼を。');
-  else toast(r.passed?'修正版がレビュー通過。承認待ちへ。':'修正版はレビューで差し戻し（品質/重複ガード）。もう一度修正依頼できます。');
+  else toast(`修正依頼: ${r.rounds||1}回改稿。`+(r.passed?'レビュー通過→承認待ちへ。':'まだレビューで差し戻し。指摘を足して再依頼できます。'));
   refresh();}catch(e){toast('エラー: '+e.message);}}
 async function reject(id){const note=prompt('却下理由（ライターへの差し戻し指示になります）:')||'';
   try{await api('/api/reject','POST',{approval_id:id,note});
