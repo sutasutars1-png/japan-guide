@@ -639,7 +639,8 @@ class Company:
                         feedback[:200], related=[product.id])
         return {"product_id": product_id, "status": product.status, "passed": passed,
                 "rounds": rewrites + 1, "approval_id": approval_id, "review": review,
-                "llm": bool(article.get("_llm"))}
+                "llm": bool(article.get("_llm")),
+                "llm_error": article.get("_llm_error")}
 
     # ---- 公開 (§21, §22): 人間承認後にのみ実行 --------------------------
 
