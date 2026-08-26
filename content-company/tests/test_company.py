@@ -274,6 +274,20 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("2. b", out)             # 5. → 2.
         self.assertIn("3. c", out)             # 2. → 3.
 
+    def test_architecture_state_and_page(self):
+        from company import architecture
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            c.plan_products(1)
+            st = architecture.state(c)
+            self.assertIn("roles", st)
+            self.assertIn("writer", st["roles"])
+            self.assertGreaterEqual(st["roles"]["writer"]["count"], 1)
+            self.assertIn("tasks_today", st["stats"])
+            page = architecture.page()
+            self.assertIn("<svg", page)
+            self.assertIn("/api/arch", page)  # ライブ更新スクリプトを含む
+
     def test_thumbnail_svg_valid(self):
         import xml.dom.minidom as minidom
         from company import thumbnail

@@ -261,6 +261,13 @@ class _Handler(BaseHTTPRequestHandler):
             elif u.path == "/dashboard":
                 self._send(200, dashboard.render(c).encode("utf-8"),
                            "text/html; charset=utf-8")
+            elif u.path == "/architecture":
+                from . import architecture
+                self._send(200, architecture.page().encode("utf-8"),
+                           "text/html; charset=utf-8")
+            elif u.path == "/api/arch":
+                from . import architecture
+                self._json(architecture.state(c))
             elif u.path == "/note/preview":
                 q = parse_qs(u.query)
                 pid = (q.get("product_id") or [""])[0]
@@ -493,6 +500,10 @@ iframe{width:100%;height:520px;border:1px solid var(--line);border-radius:10px;b
 <main>
   <h2>経営 KPI</h2>
   <div class="grid" id="kpi"></div>
+
+  <details open><summary>🗺 システム全体像（役割・稼働状況・データフロー）</summary>
+    <iframe src="/architecture" id="arch" style="height:1180px;background:#05070d"></iframe>
+  </details>
 
   <h2>⏳ 承認待ち（人間の判断ポイント · §21）</h2>
   <div class="overflow"><table id="pending"><thead><tr>
