@@ -17,7 +17,10 @@ _ROLE_AGENT = {
     "writer": "writer", "reviewer": "reviewer",
     "analyst": "analyst", "growth": "growth",
 }
-_ACTIVE_WINDOW_SEC = 90
+# 稼働中とみなす条件: 進行中(doing/todo)かつ開始が STALE 以内、または直近 AFTERGLOW
+# 秒に完了した（余韻）。クラッシュで doing のまま残ったタスクは stale として除外。
+_STALE_SEC = 900      # これより古い doing は「止まっている」とみなす
+_AFTERGLOW_SEC = 15   # 完了直後だけ短く光らせる
 
 
 def _recent(iso: str | None, secs: int) -> bool:
@@ -40,11 +43,11 @@ def state(company) -> dict[str, Any]:
         active = False
         if mine:
             latest = max(mine, key=lambda t: t.get("created_at", ""))
-            if latest.get("status") in ("doing", "todo", "blocked"):
-                active = True
-            elif _recent(latest.get("completed_at") or latest.get("created_at"),
-                         _ACTIVE_WINDOW_SEC):
-                active = True
+            status = latest.get("status")
+            if status in ("doing", "todo") and _recent(latest.get("created_at"), _STALE_SEC):
+                active = True  # 実際に進行中（古すぎる doing は除外）
+            elif status == "done" and _recent(latest.get("completed_at"), _AFTERGLOW_SEC):
+                active = True  # 完了直後の余韻だけ
         roles[role] = {"active": active, "count": len(mine)}
 
     products = company.storage.all("products")
@@ -130,6 +133,7 @@ _PAGE = r"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
   .flow{fill:none;stroke-width:3.4;stroke-linecap:round;stroke-dasharray:0.5 15;animation:dash 2.6s linear infinite}
   .flow.s2{animation-duration:3.4s} .flow.s3{animation-duration:2.0s}
   .meta{stroke-width:2;stroke-dasharray:5 9;animation:dash 4.2s linear infinite;opacity:.85}
+  .human{stroke-dasharray:4 8;stroke-width:2.6;opacity:.95}
   @keyframes dash{to{stroke-dashoffset:-155}}
   .led.wait-anim{animation:blink 1.5s ease-in-out infinite}
   .halo{fill:none;stroke:var(--c);stroke-width:1.4;opacity:0;transform-box:fill-box;transform-origin:center}
@@ -191,6 +195,7 @@ _PAGE = r"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
         <path id="p_eva_grow"  d="M620,535 L 620,623"/>
         <path id="p_grow_appr" d="M708,660 C 980,660 1120,520 1120,338"/>
         <path id="p_pub_ch"    d="M1120,535 L 1120,592"/>
+        <path id="p_human_fix" d="M1032,283 C 900,205 730,205 650,263"/>
       </defs>
       <use href="#p_ceo_plan" class="wire"/><use href="#p_ceo_res" class="wire"/>
       <use href="#p_res_plan" class="wire"/><use href="#p_plan_wr" class="wire"/>
@@ -199,6 +204,7 @@ _PAGE = r"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
       <use href="#p_met_eva" class="wire"/><use href="#p_eva_plan" class="wire"/>
       <use href="#p_loop" class="wire"/><use href="#p_eva_grow" class="wire"/>
       <use href="#p_grow_appr" class="wire"/><use href="#p_pub_ch" class="wire"/>
+      <use href="#p_human_fix" class="wire"/>
       <use href="#p_ceo_plan" class="flow s2" style="stroke:var(--violet)"/>
       <use href="#p_ceo_res"  class="flow s2" style="stroke:var(--cyan)"/>
       <use href="#p_res_plan" class="flow" style="stroke:var(--cyan)"/>
@@ -213,6 +219,8 @@ _PAGE = r"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
       <use href="#p_eva_grow" class="flow s2" style="stroke:var(--magenta)"/>
       <use href="#p_grow_appr" class="meta" style="stroke:var(--magenta)"/>
       <use href="#p_pub_ch"   class="flow s2" style="stroke:var(--sky)"/>
+      <use href="#p_human_fix" class="flow s2 human" style="stroke:var(--emerald)"/>
+      <text class="caption" x="838" y="198" text-anchor="middle" fill="#8fe6bf">人間の差し戻し・修正指示</text>
       <text class="caption" x="767" y="404" text-anchor="middle" fill="#c9b27a">自動再執筆（最大4回）</text>
       <text class="caption" x="452" y="410" text-anchor="middle" fill="#9fe6c2">学習：教訓・実績を反映</text>
       <text class="caption" x="1120" y="404" text-anchor="middle" fill="#f0abfc">システム改修提案</text>

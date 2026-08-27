@@ -20,7 +20,7 @@ from . import agents as agents_mod
 from . import ids
 from .approval import ApprovalGateway
 from .config import Config, load_config
-from .cost import CostController
+from .cost import CostController, BudgetExceeded
 from .experiments import DEFAULT_CATEGORIES, ExperimentDesign
 from .kpi import KPI
 from .memory import CompanyMemory
@@ -378,6 +378,19 @@ class Company:
         price_req = quality_mod.price_requirement_text(product.price_jpy)
         # 初回 + 最大 max_rewrites 回の書き直し
         for attempt in range(self.config.max_rewrites + 1):
+            # 1ラウンド＝執筆+レビューの2タスク。上限で途中中断せず、手前で停止。
+            cap = self.config.max_tasks_per_day
+            if cap and self.cost.tasks_today() >= cap - 1:
+                review = {**(review or {}), "verdict": "reject",
+                          "notes": ((review or {}).get("notes", "")
+                                    + " / 本日のタスク上限に到達しループ停止。"
+                                    "設定で『1日タスク上限』を0にすると解除。").strip()}
+                if not article:
+                    article = {"title": product.title, "body_markdown": "",
+                               "_capped": True}
+                self.memory.add("failure", f"タスク上限でループ停止: {product.title}",
+                                f"tasks_today>={cap}", related=[product.id])
+                break
             w_input: dict = {"plan": plan, "avoid_similar": avoid,
                              "performance_hints": hints, "price_requirement": price_req,
                              "lessons": self._active_lessons("article-writing")}
