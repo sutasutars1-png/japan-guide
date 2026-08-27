@@ -266,6 +266,22 @@ class SocialChannelTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 c.social.draft("instagram", p.id)
 
+    def test_social_preview_page_renders_draft(self):
+        from company import webgui
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            p = self._pub(c)
+            dx = c.social.draft("x", p.id)
+            hx = webgui._social_preview_page(c, dx["social_id"])
+            self.assertIn("X（旧Twitter）", hx)
+            self.assertIn(p.title, hx)
+            self.assertIn('class="cp"', hx)  # コピー用ボタンがある
+            dt = c.social.draft("tiktok", p.id)
+            ht = webgui._social_preview_page(c, dt["social_id"])
+            self.assertIn("TikTok", ht)
+            # 未知の下書き ID はエラーで落ちず案内を返す
+            self.assertIn("見つかりません", webgui._social_preview_page(c, "nope"))
+
 
 class SchedulerTest(unittest.TestCase):
     def test_default_off_and_safe_jobs_only(self):

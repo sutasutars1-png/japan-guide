@@ -105,6 +105,87 @@ def _logs(c: Company, limit: int = 60) -> dict:
     return {"tasks": rows}
 
 
+def _social_preview_page(c: Company, sid: str) -> str:
+    """X / TikTok 下書きの試し読みページ（投稿ごとにコピー可）。"""
+    esc = _html.escape
+    post = c.storage.get("social", sid)
+    if not post:
+        return ("<!doctype html><meta charset='utf-8'><body style='font-family:sans-serif;"
+                "background:#0b0f17;color:#e8eefc;padding:24px'>下書きが見つかりません。</body>")
+    content = post.get("content") or {}
+    prod = c.storage.get("products", post.get("product_id")) or {}
+    channel = str(post.get("channel", ""))
+    ch_label = {"x": "X（旧Twitter）", "tiktok": "TikTok"}.get(channel, channel)
+    texts: list[str] = []
+
+    def cp(label: str, text: str) -> str:
+        texts.append(text)
+        return f'<button class="cp" data-i="{len(texts) - 1}">{esc(label)}</button>'
+
+    sec: list[str] = []
+    posts = content.get("posts")
+    if isinstance(posts, list) and posts:
+        for i, t in enumerate(posts, 1):
+            txt = str(t)
+            sec.append(f'<div class="post"><div class="ph"><b>投稿 {i}</b>'
+                       f'<span class="cc">{len(txt)}字</span>{cp("コピー", txt)}</div>'
+                       f'<div class="pt">{esc(txt)}</div></div>')
+    if content.get("hook"):
+        h = str(content["hook"])
+        sec.append(f'<div class="post"><div class="ph"><b>フック（最初の3秒）</b>'
+                   f'{cp("コピー", h)}</div><div class="pt">{esc(h)}</div></div>')
+    script = content.get("script")
+    if isinstance(script, list) and script:
+        li = "".join(f"<li>{esc(str(s))}</li>" for s in script)
+        full = "\n".join(str(s) for s in script)
+        sec.append(f'<div class="post"><div class="ph"><b>台本</b>{cp("全部コピー", full)}</div>'
+                   f'<ol class="sc">{li}</ol></div>')
+    caps = content.get("captions")
+    if isinstance(caps, list) and caps:
+        li = "".join(f"<li>{esc(str(s))}</li>" for s in caps)
+        sec.append(f'<div class="post"><div class="ph"><b>字幕案</b></div><ul class="sc">{li}</ul></div>')
+    tags = content.get("hashtags")
+    if isinstance(tags, list) and tags:
+        tg = " ".join("#" + str(t).lstrip("#") for t in tags)
+        sec.append(f'<div class="post"><div class="ph"><b>ハッシュタグ</b>{cp("コピー", tg)}</div>'
+                   f'<div class="pt">{esc(tg)}</div></div>')
+    if content.get("note"):
+        sec.append(f'<div class="muted2">メモ: {esc(str(content["note"]))}</div>')
+    if not sec:
+        sec.append('<div class="muted2">下書き内容が空です（実LLM生成ONで作り直してください）。</div>')
+
+    body = "".join(sec)
+    texts_json = json.dumps(texts, ensure_ascii=False)
+    title = esc(prod.get("title") or post.get("product_id") or "")
+    return f"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>下書き試し読み: {ch_label}</title>
+<style>
+ body{{font-family:system-ui,"Segoe UI","Hiragino Kaku Gothic ProN",Meiryo,sans-serif;
+   max-width:720px;margin:0 auto;padding:18px;background:#0b0f17;color:#e8eefc}}
+ h1{{font-size:18px;margin:2px 0 2px}} .sub{{color:#9fb0d0;font-size:13px;margin-bottom:12px}}
+ .post{{background:#0f1626;border:1px solid #24314f;border-radius:12px;padding:12px 14px;margin:10px 0}}
+ .ph{{display:flex;align-items:center;gap:10px;margin-bottom:6px}}
+ .ph b{{font-size:14px}} .cc{{color:#8aa0c8;font-size:12px}}
+ .cp{{margin-left:auto;background:#2f6bff;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer}}
+ .pt{{white-space:pre-wrap;line-height:1.7;font-size:15px}}
+ .sc{{margin:.2em 0 .2em 1.2em;line-height:1.7}} .sc li{{margin:.2em 0}}
+ .muted2{{color:#8aa0c8;font-size:13px;margin-top:8px}}
+ #msg{{color:#7fd1a6;font-size:13px;margin-left:8px}}
+</style></head><body>
+<h1>{ch_label} 下書き <span id="msg"></span></h1>
+<div class="sub">商品: {title} ／ 投稿は人間が行います（自動投稿なし）</div>
+{body}
+<script>
+ const TEXTS={texts_json};
+ document.querySelectorAll('.cp').forEach(b=>b.onclick=async()=>{{
+   const t=TEXTS[+b.dataset.i]||'';
+   try{{await navigator.clipboard.writeText(t);document.getElementById('msg').textContent='コピーしました';}}
+   catch(e){{document.getElementById('msg').textContent='コピー不可（手動選択してください）';}}
+ }});
+</script></body></html>"""
+
+
 def _note_preview_page(c: Company, product_id: str) -> str:
     """note 貼り付け用プレビュー（書式ごとコピー可能な独立ページ）。"""
     try:
@@ -272,6 +353,11 @@ class _Handler(BaseHTTPRequestHandler):
                 q = parse_qs(u.query)
                 pid = (q.get("product_id") or [""])[0]
                 self._send(200, _note_preview_page(c, pid).encode("utf-8"),
+                           "text/html; charset=utf-8")
+            elif u.path == "/social/preview":
+                q = parse_qs(u.query)
+                sid = (q.get("id") or [""])[0]
+                self._send(200, _social_preview_page(c, sid).encode("utf-8"),
                            "text/html; charset=utf-8")
             elif u.path == "/note/thumb.svg":
                 from . import thumbnail
@@ -634,11 +720,11 @@ async function refresh(){
     if(p.status==='published'||p.status==='awaiting_approval')
       act+=`<button class="ghost" onclick="notePreview('${p.id}')">note貼付(書式)</button>`
            +` <button class="ghost" onclick="noteExport('${p.id}')">MD出力</button> `;
-    if(p.status==='published'){
-      if(p.url) act+=`<a href="${esc(p.url)}" target="_blank" class="muted">公開URL↗</a> `;
+    if(p.status==='published'&&p.url)
+      act+=`<a href="${esc(p.url)}" target="_blank" class="muted">公開URL↗</a> `;
+    if(p.status==='published'||p.status==='awaiting_approval')
       act+=`<button class="ghost" onclick="social('x','${p.id}')">X下書き</button>`
            +` <button class="ghost" onclick="social('tiktok','${p.id}')">TikTok下書き</button>`;
-    }
     return `<tr><td>${esc(p.title)}</td><td>${esc(p.category)}</td><td>${st}</td>
       <td>${p.pv}</td><td>${p.purchases}</td><td>${yen(p.revenue_jpy)}</td>
       <td>${p.outcome?esc(p.outcome):'-'}</td><td class="row">${act}</td></tr>`;
@@ -734,7 +820,7 @@ function renderSocial(list){
     +'<th>操作</th></tr></thead><tbody>'
     +list.map(p=>`<tr><td>${esc(p.channel)}</td>
       <td><span class="pill${p.status==='posted'?' pub':''}">${esc(p.status)}</span></td>
-      <td class="row"><button class="ghost" onclick="showSocial('${p.id}')">内容</button>
+      <td class="row"><button class="ghost" onclick="socialPreview('${p.id}')">試し読み</button>
       ${p.status!=='posted'?`<button class="ghost" onclick="socialPosted('${p.id}')">投稿URL記録</button>`:esc(p.url||'')}</td></tr>`).join('')
     +'</tbody></table></div>';
 }
@@ -743,10 +829,9 @@ async function setJob(name,patch){try{await api('/api/schedule/job','POST',{name
 async function runJob(name){try{const r=await api('/api/schedule/run','POST',{name});
   $('#out').textContent=JSON.stringify(r,null,2);toast('実行: '+name+(r.ok?' OK':' 失敗'));refresh();}catch(e){toast(e.message);}}
 async function social(channel,pid){try{const r=await api('/api/social/draft','POST',{channel,product_id:pid});
-  $('#out').textContent=JSON.stringify(r.content,null,2);
-  toast(channel+' 下書きを作成。承認待ち(人間確認)に追加。下部に内容表示。');refresh();}catch(e){toast(e.message);}}
-function showSocial(id){api('/api/state').then(s=>{const p=(s.social||[]).find(x=>x.id===id);
-  $('#out').textContent=p?JSON.stringify(p.content,null,2):'(見つかりません)';toast('下部に内容表示');});}
+  toast(channel+' 下書きを作成。試し読みを開きます（投稿は人間）。');refresh();
+  if(r.social_id) socialPreview(r.social_id);}catch(e){toast(e.message);}}
+function socialPreview(id){window.open('/social/preview?id='+encodeURIComponent(id),'_blank');}
 async function socialPosted(id){const url=prompt('投稿した X/TikTok の URL を入力（人間確認の承認が前提）:');
   if(!url)return; try{await api('/api/social/posted','POST',{social_id:id,url});
   toast('投稿を記録しました');refresh();}catch(e){toast('エラー: '+e.message+'（先に承認待ちで承認が必要です）');}}
