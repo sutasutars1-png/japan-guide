@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import datetime as _dt
 import html as _html
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -103,6 +104,82 @@ def _logs(c: Company, limit: int = 60) -> dict:
             "notes": (t.get("review_notes") or t.get("title") or "")[:160],
         })
     return {"tasks": rows}
+
+
+def _debug(c: Company, limit: int = 40) -> dict:
+    """デバッグ用の要約診断。
+
+    エラー / LLMフォールバック / 差し戻し / 予算上限などを新しい順に集約する。
+    詳細ダンプではなく「概要が掴める」粒度。そのまま貼り付けて共有できる
+    プレーンテキスト (``text``) も返し、人間が Claude に渡して検証・修正できる。
+    """
+    tasks = c.storage.all("tasks")
+    tasks.sort(key=lambda t: t.get("created_at", ""), reverse=True)
+    products = c.storage.all("products")
+
+    runner_cls = type(c.tasks.runner).__name__
+    llm_on = runner_cls == "ClaudeRunner"
+    runner_label = "実LLM (Claude CLI)" if llm_on else "雛形 (Template)"
+
+    issues: list[dict] = []
+
+    def push(sev: str, kind: str, msg: str, ts: str = "") -> None:
+        issues.append({"sev": sev, "kind": kind,
+                       "msg": " ".join(str(msg).split())[:200],
+                       "ts": (ts or "").replace("T", " ")[:19]})
+
+    for t in tasks:
+        out = t.get("output") if isinstance(t.get("output"), dict) else {}
+        ts = t.get("created_at", "")
+        title = t.get("title", "") or t.get("skill", "")
+        if t.get("status") == "error":
+            push("error", "タスクエラー",
+                 f"{title}: {t.get('error') or out.get('_llm_error') or '不明'}", ts)
+        elif out.get("_llm_error"):
+            push("warn", "LLMフォールバック", f"{title}: {out.get('_llm_error')}", ts)
+        if t.get("review_status") == "reject":
+            push("warn", "差し戻し", f"{title}: {t.get('review_notes') or ''}", ts)
+
+    for m in c.memory.recent(30):
+        if m.get("kind") == "failure":
+            push("error", "失敗記録",
+                 f"{m.get('title', '')}: {m.get('body', '')}", m.get("created_at", ""))
+
+    for p in products:
+        if p.get("status") == "review" and p.get("pending_feedback"):
+            push("warn", "差し戻し滞留",
+                 f"{p.get('title', '')}: 人間の修正指示が未反映のまま", p.get("updated_at", ""))
+
+    issues = issues[:limit]
+    counts = {
+        "products": len(products),
+        "await": sum(1 for p in products if p.get("status") == "awaiting_approval"),
+        "review": sum(1 for p in products if p.get("status") == "review"),
+        "published": sum(1 for p in products if p.get("status") == "published"),
+        "tasks_today": c.cost.tasks_today(),
+        "pending_approvals": len(c.approvals.pending()),
+        "errors": sum(1 for i in issues if i["sev"] == "error"),
+        "warns": sum(1 for i in issues if i["sev"] == "warn"),
+    }
+
+    now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        f"# デバッグ要約 ({now})",
+        f"ランナー: {runner_label}",
+        f"商品 {counts['products']} / 公開待ち {counts['await']} / 差し戻し {counts['review']}"
+        f" / 公開 {counts['published']}",
+        f"本日タスク {counts['tasks_today']} / 承認待ち {counts['pending_approvals']}"
+        f" / エラー {counts['errors']} / 警告 {counts['warns']}",
+        "",
+        "## 直近の問題（新しい順）",
+    ]
+    if issues:
+        lines += [f"- [{i['sev']}] {i['kind']}: {i['msg']}"
+                  + (f" ({i['ts']})" if i['ts'] else "") for i in issues]
+    else:
+        lines.append("- 問題は検出されていません")
+    return {"runner": runner_label, "llm_on": llm_on, "counts": counts,
+            "issues": issues, "text": "\n".join(lines)}
 
 
 def _social_preview_page(c: Company, sid: str) -> str:
@@ -391,6 +468,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json({"article": art})
             elif u.path == "/api/logs":
                 self._json(_logs(c))
+            elif u.path == "/api/debug":
+                self._json(_debug(c))
             else:
                 self._json({"error": "not found"}, 404)
         except Exception as exc:  # noqa: BLE001
@@ -569,6 +648,26 @@ padding:10px 14px;border-radius:8px;max-width:380px;display:none;font-size:13px;
 details{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px}
 summary{cursor:pointer;color:#9fb4d8}
 iframe{width:100%;height:520px;border:1px solid var(--line);border-radius:10px;background:#fff}
+/* 右側の空きスペースに常駐するデバッグ履歴パネル */
+.dbg{position:fixed;top:72px;right:14px;width:300px;max-height:calc(100vh - 90px);
+  flex-direction:column;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;box-shadow:0 24px 60px -24px rgba(0,0,0,.75);z-index:50;
+  overflow:hidden;display:none}
+body.show-dbg .dbg{display:flex}
+.dbg .dbgh{display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid var(--line);
+  background:#111624}
+.dbg .dbgh b{font-size:13px} .dbg .dbgh .sp{margin-left:auto;display:flex;gap:6px}
+.dbg .dbgh button{padding:4px 9px;font-size:12px}
+.dbgmeta{padding:8px 11px;border-bottom:1px solid var(--line);font-size:12px}
+.dbgrow{display:flex;justify-content:space-between;gap:8px;padding:1px 0;color:var(--muted)}
+.dbgrow b{color:var(--fg);font-weight:600} .dbgrow b.e{color:var(--bad)}
+.dbglist{overflow-y:auto;padding:6px 8px}
+.di{border-left:3px solid var(--line);background:#0f1422;border-radius:6px;padding:6px 9px;margin:6px 0}
+.di.error{border-left-color:var(--bad)} .di.warn{border-left-color:var(--warn)}
+.di .dik{font-size:11px;font-weight:700;color:#cfe0ff}
+.di.error .dik{color:var(--bad)} .di.warn .dik{color:var(--warn)}
+.di .dim{font-size:12px;color:var(--fg);margin:2px 0;word-break:break-word}
+.di .dit{font-size:10px;color:var(--muted)}
 </style></head><body>
 <header>
   <h1>🏢 AI会社 コックピット</h1>
@@ -580,9 +679,20 @@ iframe{width:100%;height:520px;border:1px solid var(--line);border-radius:10px;b
     <button class="ghost" id="btnDemo">デモ投入</button>
     <button class="ghost" id="btnEval">評価</button>
     <button class="ghost" id="btnRefresh">更新</button>
+    <button class="ghost" id="btnDbg" title="デバッグ履歴の表示/非表示">🐞 デバッグ</button>
     <button class="bad" id="btnReset">データ初期化</button>
   </span>
 </header>
+<aside class="dbg" id="dbg">
+  <div class="dbgh"><b>🐞 デバッグ履歴</b>
+    <span class="sp">
+      <button class="ghost" id="dbgCopy">コピー</button>
+      <button class="ghost" id="dbgClose">×</button>
+    </span>
+  </div>
+  <div class="dbgmeta" id="dbgMeta"></div>
+  <div class="dbglist" id="dbgList"></div>
+</aside>
 <main>
   <h2>経営 KPI</h2>
   <div class="grid" id="kpi"></div>
@@ -743,9 +853,25 @@ async function refresh(){
         ✅ <b>${esc(l.skill)}</b>: ${esc(l.guideline)} <span style="opacity:.6">(${l.count}回)</span></div>`).join('')
     : '<div class="muted">まだ教訓はありません（差し戻しが繰り返されると自動で獲得します）。</div>';
   renderSettings(s.config); renderSchedule(s.schedule); renderSocial(s.social);
-  loadLogs();
+  loadLogs(); loadDebug();
   $('#dash').src='/dashboard?'+Date.now();
 }
+
+async function loadDebug(){try{const d=await api('/api/debug');
+  window.__dbgText=d.text||'';
+  const c=d.counts||{};
+  $('#dbgMeta').innerHTML=
+     `<div class="dbgrow"><span>ランナー</span><b>${esc(d.runner||'')}</b></div>`
+    +`<div class="dbgrow"><span>本日タスク / 承認待ち</span><b>${c.tasks_today||0} / ${c.pending_approvals||0}</b></div>`
+    +`<div class="dbgrow"><span>公開待ち / 差戻 / 公開</span><b>${c.await||0} / ${c.review||0} / ${c.published||0}</b></div>`
+    +`<div class="dbgrow"><span>エラー / 警告</span><b class="${c.errors?'e':''}">${c.errors||0} / ${c.warns||0}</b></div>`;
+  const its=d.issues||[];
+  $('#dbgList').innerHTML=its.length? its.map(i=>`<div class="di ${esc(i.sev)}">
+      <div class="dik">${esc(i.kind)}</div>
+      <div class="dim">${esc(i.msg)}</div>
+      ${i.ts?`<div class="dit">${esc(i.ts)}</div>`:''}</div>`).join('')
+    : '<div class="muted" style="padding:10px 6px">問題は検出されていません 🟢</div>';
+  }catch(e){/* デバッグ取得失敗は致命的でないので無視 */}}
 
 const IMP_BADGE={new:'🆕 新規',accepted:'✅ 採用',done:'🏁 完了',rejected:'🗑 却下'};
 function renderImprovements(list){
@@ -930,5 +1056,13 @@ $('#schedMaster').onchange=async(e)=>{try{await api('/api/schedule/master','POST
 $('#btnReport').onclick=async()=>{const r=await api('/api/report');$('#out').textContent=JSON.stringify(r,null,2);};
 $('#btnMem').onclick=async()=>{const r=await api('/api/memory?query='+encodeURIComponent($('#memq').value));
   $('#out').textContent=JSON.stringify(r,null,2);};
+// デバッグ履歴パネル：広い画面では既定で右側に表示。トグル/コピー/閉じる。
+if(window.innerWidth>=1400) document.body.classList.add('show-dbg');
+$('#btnDbg').onclick=()=>{document.body.classList.toggle('show-dbg');loadDebug();};
+$('#dbgClose').onclick=()=>document.body.classList.remove('show-dbg');
+$('#dbgCopy').onclick=async()=>{try{await navigator.clipboard.writeText(window.__dbgText||'');
+  toast('デバッグ要約をコピーしました。そのまま貼り付けて共有できます。');}
+  catch(e){toast('コピー不可（パネルのテキストを手動選択してください）');}};
+setInterval(loadDebug, 8000);
 refresh();
 </script></body></html>"""

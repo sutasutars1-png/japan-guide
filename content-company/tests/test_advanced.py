@@ -426,6 +426,15 @@ class WebGuiTest(unittest.TestCase):
                 st3 = self._get(port, "/api/state")
                 self.assertTrue(st3["channels"]["x"])
                 self.assertTrue(len(st3["social"]) >= 1)
+                # デバッグ要約: ランナー・件数・コピー用テキストが返る
+                dbg = self._get(port, "/api/debug")
+                self.assertIn("runner", dbg)
+                self.assertIn("text", dbg)
+                self.assertIn("issues", dbg)
+                self.assertIn("デバッグ要約", dbg["text"])
+                # social/preview は HTML
+                self.assertIn(b"<title", self._get(
+                    port, "/social/preview?id=" + st3["social"][0]["id"]))
             finally:
                 httpd.shutdown()
                 httpd.server_close()

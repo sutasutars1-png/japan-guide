@@ -130,10 +130,15 @@ _PAGE = r"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
   .caption{font-size:12.5px;fill:var(--muted);font-weight:500}
   .caption.k{fill:var(--dim);font-family:"DM Mono",monospace;font-size:10.5px}
   .wire{fill:none;stroke:var(--wire);stroke-width:1.6}
-  .flow{fill:none;stroke-width:3.4;stroke-linecap:round;stroke-dasharray:0.5 15;animation:dash 2.6s linear infinite}
+  /* 既定は「停止」＝流れない・薄い。稼働中の経路だけ .on で流す。 */
+  .flow{fill:none;stroke-width:3.4;stroke-linecap:round;stroke-dasharray:0.5 15;
+    animation:dash 2.6s linear infinite;animation-play-state:paused;opacity:.16}
+  .flow.on{animation-play-state:running;opacity:1}
   .flow.s2{animation-duration:3.4s} .flow.s3{animation-duration:2.0s}
-  .meta{stroke-width:2;stroke-dasharray:5 9;animation:dash 4.2s linear infinite;opacity:.85}
-  .human{stroke-dasharray:4 8;stroke-width:2.6;opacity:.95}
+  .meta{stroke-width:2;stroke-dasharray:5 9;animation:dash 4.2s linear infinite;
+    animation-play-state:paused;opacity:.22}
+  .meta.on{animation-play-state:running;opacity:.85}
+  .human{stroke-dasharray:4 8;stroke-width:2.6}
   @keyframes dash{to{stroke-dashoffset:-155}}
   .led.wait-anim{animation:blink 1.5s ease-in-out infinite}
   .halo{fill:none;stroke:var(--c);stroke-width:1.4;opacity:0;transform-box:fill-box;transform-origin:center}
@@ -165,7 +170,8 @@ _PAGE = r"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
   .chip .en{position:absolute;right:10px;top:9px;font-family:"Michroma",sans-serif;font-size:8px;letter-spacing:.14em;color:var(--dim)}
   .note{margin:18px 4px 0;color:var(--dim);font-size:12px;font-family:"DM Mono",monospace}
   @media (prefers-reduced-motion: reduce){
-    .flow,.meta{animation:none;stroke-dasharray:1 12}
+    .flow,.meta{animation:none;stroke-dasharray:1 12;opacity:.16}
+    .flow.on,.meta.on{opacity:1}
     .node.live .halo{animation:none;opacity:.4} .led.wait-anim{animation:none;opacity:.9}
   }
 </style></head><body>
@@ -205,21 +211,21 @@ _PAGE = r"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
       <use href="#p_loop" class="wire"/><use href="#p_eva_grow" class="wire"/>
       <use href="#p_grow_appr" class="wire"/><use href="#p_pub_ch" class="wire"/>
       <use href="#p_human_fix" class="wire"/>
-      <use href="#p_ceo_plan" class="flow s2" style="stroke:var(--violet)"/>
-      <use href="#p_ceo_res"  class="flow s2" style="stroke:var(--cyan)"/>
-      <use href="#p_res_plan" class="flow" style="stroke:var(--cyan)"/>
-      <use href="#p_plan_wr"  class="flow" style="stroke:var(--violet)"/>
-      <use href="#p_wr_rev"   class="flow s3" style="stroke:var(--amber)"/>
-      <use href="#p_rev_appr" class="flow" style="stroke:var(--rose)"/>
-      <use href="#p_appr_pub" class="flow" style="stroke:var(--emerald)"/>
-      <use href="#p_pub_met"  class="flow" style="stroke:var(--sky)"/>
-      <use href="#p_met_eva"  class="flow" style="stroke:var(--sky)"/>
-      <use href="#p_eva_plan" class="flow s2" style="stroke:var(--emerald)"/>
-      <use href="#p_loop"     class="flow s3" style="stroke:var(--amber)"/>
-      <use href="#p_eva_grow" class="flow s2" style="stroke:var(--magenta)"/>
-      <use href="#p_grow_appr" class="meta" style="stroke:var(--magenta)"/>
-      <use href="#p_pub_ch"   class="flow s2" style="stroke:var(--sky)"/>
-      <use href="#p_human_fix" class="flow s2 human" style="stroke:var(--emerald)"/>
+      <use href="#p_ceo_plan" class="flow s2" data-drive="ceo" style="stroke:var(--violet)"/>
+      <use href="#p_ceo_res"  class="flow s2" data-drive="ceo" style="stroke:var(--cyan)"/>
+      <use href="#p_res_plan" class="flow" data-drive="researcher" style="stroke:var(--cyan)"/>
+      <use href="#p_plan_wr"  class="flow" data-drive="cpo" style="stroke:var(--violet)"/>
+      <use href="#p_wr_rev"   class="flow s3" data-drive="writer" style="stroke:var(--amber)"/>
+      <use href="#p_rev_appr" class="flow" data-drive="reviewer" style="stroke:var(--rose)"/>
+      <use href="#p_appr_pub" class="flow" data-drive="human" style="stroke:var(--emerald)"/>
+      <use href="#p_pub_met"  class="flow" data-drive="analyst" style="stroke:var(--sky)"/>
+      <use href="#p_met_eva"  class="flow" data-drive="analyst" style="stroke:var(--sky)"/>
+      <use href="#p_eva_plan" class="flow s2" data-drive="analyst" style="stroke:var(--emerald)"/>
+      <use href="#p_loop"     class="flow s3" data-drive="writer" style="stroke:var(--amber)"/>
+      <use href="#p_eva_grow" class="flow s2" data-drive="growth" style="stroke:var(--magenta)"/>
+      <use href="#p_grow_appr" class="meta" data-drive="growth" style="stroke:var(--magenta)"/>
+      <use href="#p_pub_ch"   class="flow s2" data-drive="growth" style="stroke:var(--sky)"/>
+      <use href="#p_human_fix" class="flow s2 human" data-drive="human" style="stroke:var(--emerald)"/>
       <text class="caption" x="838" y="198" text-anchor="middle" fill="#8fe6bf">人間の差し戻し・修正指示</text>
       <text class="caption" x="767" y="404" text-anchor="middle" fill="#c9b27a">自動再執筆（最大4回）</text>
       <text class="caption" x="452" y="410" text-anchor="middle" fill="#9fe6c2">学習：教訓・実績を反映</text>
@@ -341,7 +347,7 @@ _PAGE = r"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
     <span class="lg"><span class="dot" style="background:var(--emerald);box-shadow:0 0 8px var(--emerald)"></span>稼働中（発光）</span>
     <span class="lg"><span class="dot" style="background:var(--wait)"></span>承認待ち（点滅）</span>
     <span class="lg"><span class="dot" style="background:var(--dim)"></span>待機</span>
-    <span class="lg"><span class="ln"></span>データの流れ（点が流れる）</span>
+    <span class="lg"><span class="ln"></span>データの流れ（稼働中の経路だけ点が流れる）</span>
     <span class="lg"><span class="ln dash"></span>提案（人間が承認）</span>
   </div>
 
@@ -380,6 +386,12 @@ _PAGE = r"""<!doctype html><html lang="ja"><head><meta charset="utf-8">
         const c=document.getElementById('c-'+role);
         if(c) c.textContent = info.count? ('×'+info.count):'';
       }
+      // フロー線は「稼働中の経路だけ」流す。駆動役割が動いていなければ静止。
+      const roles=s.roles||{};
+      const on=d=> d==='human' ? !!s.human_waiting : !!(roles[d] && roles[d].active);
+      document.querySelectorAll('[data-drive]').forEach(el=>{
+        el.classList.toggle('on', on(el.getAttribute('data-drive')));
+      });
       const led=document.getElementById('led-human');
       if(led){ led.setAttribute('fill', s.human_waiting? 'var(--wait)':'var(--dim)');
         led.classList.toggle('wait-anim', !!s.human_waiting);
