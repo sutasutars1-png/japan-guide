@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import html as _html
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -71,6 +72,9 @@ def _state(c: Company) -> dict:
         "tasks_today": c.cost.tasks_today(),
         "max_tasks_per_day": c.config.max_tasks_per_day,
         "runner": type(c.tasks.runner).__name__,
+        # 配信中の画面HTMLの内容ハッシュ。git pull 後に再起動したかを一目で判別できる
+        # （サーバーは起動時に _INDEX_HTML を読み込むため、再起動しないと更新されない）。
+        "build": hashlib.sha1(_INDEX_HTML.encode("utf-8")).hexdigest()[:8],
         "config": c.config.editable_snapshot(),
         "schedule": c.scheduler.get_state(),
         "channels": {"x": c.config.x_enabled, "tiktok": c.config.tiktok_enabled},
@@ -821,7 +825,8 @@ function esc(s){return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<
 async function refresh(){
   const s=await api('/api/state');
   $('#runner').textContent='ランナー: '+s.runner+' · 本日タスク '+s.tasks_today+'/'+s.max_tasks_per_day
-    +' · 実験 '+s.progress.created+'/'+s.progress.target_products;
+    +' · 実験 '+s.progress.created+'/'+s.progress.target_products
+    +(s.build?(' · 画面 build:'+s.build):'');
   const k=s.summary;
   $('#kpi').innerHTML=[
     ['総売上',yen(k.total_revenue_jpy)],['今月売上',yen(k.month_revenue_jpy)],
