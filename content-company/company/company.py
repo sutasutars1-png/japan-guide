@@ -76,11 +76,52 @@ class Company:
         self.tasks.runner = ClaudeRunner(skill_text=self.skills_lab.text, **kwargs)
         return True
 
-    def llm_health(self, timeout_s: int = 45) -> dict[str, Any]:
+    def llm_health(self, timeout_s: int = 20) -> dict[str, Any]:
         """実 LLM の疎通確認（バイナリ + ログイン）。GUI の接続テスト用。"""
         from .runner_claude import ClaudeRunner
 
         return ClaudeRunner(skill_text=self.skills_lab.text).preflight(timeout_s=timeout_s)
+
+    def start_login(self, claude_bin: str = "claude") -> dict[str, Any]:
+        """人間の claude ログイン（`claude auth login --claudeai`）を新しい端末で開始。
+
+        GUI からのワンクリック用のローカル操作。ブラウザ OAuth 認証はユーザー自身が
+        行い、生成は依然キーレス（サブスク）。起動するのは公式 claude 自身の認証
+        フローで、アプリが外部へ送信経路を持つわけではない（不変条件1は不変）。
+        """
+        import shutil
+        import subprocess
+        import sys
+
+        resolved = shutil.which(claude_bin)
+        if resolved is None:
+            return {"launched": False, "reason": "no_binary",
+                    "detail": "claude CLI が見つかりません。インストールと PATH を確認してください。"}
+        plat = sys.platform
+        manual = f'{claude_bin} auth login --claudeai'
+        try:
+            if plat.startswith("win"):
+                # 新しいコンソールを開いて公式ログインフローを実行（/k で結果を残す）。
+                subprocess.Popen(
+                    f'start "Claude Login" cmd /k ""{resolved}" auth login --claudeai"',
+                    shell=True)
+            elif plat == "darwin":
+                script = (f'tell application "Terminal" to do script '
+                          f'"{resolved} auth login --claudeai"')
+                subprocess.Popen(["osascript", "-e", script])
+            else:
+                term = next((t for t in ("x-terminal-emulator", "gnome-terminal",
+                                         "konsole", "xterm") if shutil.which(t)), None)
+                if term is None:
+                    return {"launched": False, "reason": "no_terminal", "manual": manual,
+                            "detail": f"端末が見つかりません。手動で `{manual}` を実行してください。"}
+                subprocess.Popen([term, "-e", resolved, "auth", "login", "--claudeai"])
+        except OSError as exc:
+            return {"launched": False, "reason": "error", "manual": manual,
+                    "detail": f"起動に失敗しました: {str(exc)[:140]}（手動: {manual}）"}
+        self.memory.add("system", "claude ログインを開始", plat)
+        return {"launched": True, "platform": plat, "manual": manual,
+                "detail": "ログイン用ターミナルを起動しました。ブラウザで認証を完了してください。"}
 
     def disable_llm(self) -> None:
         """タスク実行を既定の雛形ランナー (TemplateRunner) に戻す。

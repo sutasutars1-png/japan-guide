@@ -536,6 +536,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(c.request_rewrite(b["product_id"], b.get("feedback", "")))
             elif u.path == "/api/llm/check":
                 self._json(c.llm_health())
+            elif u.path == "/api/llm/login":
+                self._json(c.start_login())
             elif u.path == "/api/product/delete":
                 if not b.get("confirm"):
                     return self._json({"error": "confirm が必要です"}, 400)
@@ -698,6 +700,7 @@ body.show-dbg .dbg{display:flex}
   <span class="muted" id="runner"></span>
   <span class="row" style="margin-left:auto">
     <label class="muted"><input type="checkbox" id="useLlm"> 実LLM生成</label>
+    <button class="good" id="btnLlmLogin" title="claude にワンクリックでログイン（ブラウザ認証）">🔑 claudeにログイン</button>
     <button class="ghost" id="btnLlmCheck" title="claude CLI のログイン/疎通を確認">接続テスト</button>
     <input id="planN" type="number" value="5" min="1" max="20" style="width:60px">
     <button id="btnPlan">商品を企画</button>
@@ -1090,7 +1093,8 @@ function setLlmBanner(r){const el=$('#llmBanner');
   if(!r){el.style.display='none';return;}
   let msg, warn=false;
   if(r.reason==='not_logged_in')
-    msg='claude CLI が<b>未ログイン</b>です。ターミナルで <b>claude</b> を起動し <b>/login</b> でログインしてください。ログインするまで生成はすべて雛形にフォールバックします。';
+    msg='claude CLI が<b>未ログイン</b>です。右のボタンでワンクリックログイン（ブラウザ認証）できます。ログインするまで生成はすべて雛形にフォールバックします。'
+        +' <button class="good" style="margin-left:8px" onclick="llmLogin()">🔑 claudeにログイン</button>';
   else if(r.reason==='no_binary')
     msg='claude CLI が<b>見つかりません</b>。インストールと PATH を確認してください。';
   else if(r.reason==='timeout'){msg='claude CLI の応答がありません（タイムアウト/起動失敗）。'; }
@@ -1104,6 +1108,26 @@ async function llmCheck(silent){try{
   if(r.ok){setLlmBanner(null);toast('実LLM 疎通OK。ログイン済みです。');}
   else setLlmBanner(r);
   return r;}catch(e){if(!silent)toast('確認に失敗: '+e.message);}}
+// claude ワンクリックログイン：ローカル端末で公式ログインを起動 → 完了を自動検知。
+async function llmLogin(){try{
+  const r=await api('/api/llm/login','POST',{});
+  if(!r.launched){setLlmBanner({reason:r.reason||'error',detail:r.detail});
+    toast('ログイン起動に失敗: '+(r.detail||''));return;}
+  toast('ログイン用ターミナルを起動しました。ブラウザで認証を完了してください。完了を自動確認します…');
+  const el=$('#llmBanner'); el.className='banner warnc';
+  el.innerHTML='⏳ ブラウザで claude ログインを完了してください（このウィンドウはそのままでOK。完了を数秒ごとに自動確認します）。';
+  el.style.display='block';
+  let n=0; clearInterval(window.__loginPoll);
+  window.__loginPoll=setInterval(async()=>{ n++;
+    const s=await llmCheck(true);
+    if(s&&s.ok){clearInterval(window.__loginPoll);setLlmBanner(null);
+      $('#useLlm').checked=true; window.__llmChecked=true;
+      toast('✅ ログイン完了。実LLM生成が使えます。');loadDebug();}
+    else if(n>=40){clearInterval(window.__loginPoll);
+      toast('自動確認を打ち切りました。ログイン後に「接続テスト」を押してください。');}
+  },3000);
+}catch(e){toast('エラー: '+e.message);}}
+$('#btnLlmLogin').onclick=()=>llmLogin();
 $('#btnLlmCheck').onclick=()=>llmCheck(false);
 $('#useLlm').onchange=(e)=>{ if(e.target.checked) llmCheck(false); else {setLlmBanner(null);window.__llmChecked=false;} };
 // デバッグ履歴パネル：広い画面では既定で右側に表示。トグル/コピー/閉じる。

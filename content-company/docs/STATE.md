@@ -13,7 +13,7 @@
 
 - **ブランチ**: `claude/content-sales-company-build-n068kg`
 - **場所**: すべて `content-company/` 配下（同リポジトリの `ai-os/` は別物＝汎用実行プレーン）
-- **テスト**: `python3 -m unittest discover -s tests` が緑（**54件**）
+- **テスト**: `python3 -m unittest discover -s tests` が緑（**55件**）
 - **依存**: Python 3.11+、**標準ライブラリのみ**（pip 不要, §36 Pro範囲）
 - **ロードマップ対応**: Phase 0〜8 を一通り実装済み。詳細は
   [`ROADMAP-PHASES.md`](ROADMAP-PHASES.md)。元ロードマップは [`roadmap-source.md`](roadmap-source.md)。
@@ -37,7 +37,7 @@
 
 ```bash
 cd content-company
-python3 -m unittest discover -s tests      # まず緑を確認（54件）
+python3 -m unittest discover -s tests      # まず緑を確認（55件）
 python3 -m company demo                     # 架空データで全ループを実演
 python3 -m company gui                      # GUI（http://127.0.0.1:8787/）
 python3 -m company gui --llm                # 実 LLM 生成を有効化して起動
@@ -78,9 +78,12 @@ git checkout -B claude/content-sales-company-build-n068kg origin/main
 - **自動再執筆は `_llm` 記事のみ**作動（`article.get("_llm")`）。雛形で回すと
   無意味にループするため 1 回で打ち切る設計。
 - **「実LLM ON なのに毎回フォールバック」= claude CLI 未ログイン**が典型。
-  `ClaudeRunner.available()` はバイナリ有無しか見ない。ログインは
-  `Company.llm_health()`（GUI「接続テスト」/`/api/llm/check`）で確認し、未ログインは
-  ターミナルで `claude` 起動 →`/login`。デバッグ履歴パネルが headline で集約表示する。
+  `ClaudeRunner.available()` はバイナリ有無しか見ない。ログイン判定は
+  `preflight()`＝`claude auth status --json`（高速・無課金・確定的）を使い、
+  GUI「接続テスト」/`/api/llm/check`（`Company.llm_health`）で確認できる。
+  ログインは GUI の「🔑 claudeにログイン」ボタン＝`/api/llm/login`
+  （`Company.start_login`→ ローカル端末で `claude auth login --claudeai` を起動、
+  ブラウザ OAuth、完了をGUIが自動ポーリング）。デバッグ履歴パネルが headline で集約表示。
 - **実 LLM は遅い/重い**: `claude -p` は 1 呼び出し ~1〜3 分。1 商品＝最大
   (2 + 2×3) = 8 タスク。`--llm` で n=5＋再執筆は `max_tasks_per_day`（既定40）に
   当たりうる。長時間実行は Bash の 2 分制限に注意（`timeout` 大きめ or 背景実行）。

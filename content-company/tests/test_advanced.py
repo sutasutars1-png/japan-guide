@@ -278,6 +278,14 @@ class SocialChannelTest(unittest.TestCase):
             self.assertIn("未ログイン", dbg["headline"])
             self.assertIn("診断", dbg["text"])
 
+    def test_start_login_missing_binary_is_safe(self):
+        # 存在しない claude では端末を起動せず no_binary を返す（例外なし）
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            r = c.start_login(claude_bin="claude-nonexistent-xyz")
+            self.assertFalse(r["launched"])
+            self.assertEqual(r["reason"], "no_binary")
+
     def test_social_preview_page_renders_draft(self):
         from company import webgui
         with tempfile.TemporaryDirectory() as tmp:

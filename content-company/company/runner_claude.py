@@ -149,12 +149,13 @@ class ClaudeRunner:
     def available(claude_bin: str = "claude") -> str | None:
         return shutil.which(claude_bin)
 
-    def preflight(self, timeout_s: int = 45) -> dict[str, Any]:
+    def preflight(self, timeout_s: int = 20) -> dict[str, Any]:
         """実 LLM の疎通確認（バイナリ有無 + ログイン状態）。
 
         `available()` はバイナリの存在しか見ないため、未ログインでも True になり
-        「実LLM ON なのに毎回フォールバック」になりがち。ここで軽いプロンプトを
-        1 回だけ投げ、未ログイン等を human 向けメッセージで返す（生成本体はしない）。
+        「実LLM ON なのに毎回フォールバック」になりがち。ここは `claude auth status
+        --json` で高速・無課金・確定的に判定する（生成本体はしない）。生成と同じく
+        API 課金 env を除いた環境で確認し、サブスク（firstParty）状態を反映する。
         """
         resolved = shutil.which(self.claude_bin)
         if resolved is None:
@@ -162,19 +163,23 @@ class ClaudeRunner:
                     "detail": "claude CLI が見つかりません（未インストール or PATH 未設定）"}
         try:
             proc = subprocess.run(
-                self._argv(resolved), input="OK とだけ返してください。".encode("utf-8"),
+                [resolved, "auth", "status", "--json"],
                 capture_output=True, timeout=timeout_s, env=self._env())
         except (subprocess.TimeoutExpired, OSError) as exc:
             return {"ok": False, "reason": "timeout",
                     "detail": f"応答なし/起動失敗: {str(exc)[:120]}"}
-        if proc.returncode != 0:
-            detail = (proc.stderr or proc.stdout or b"").decode("utf-8", "replace").strip()
-            low = detail.lower()
-            reason = "not_logged_in" if any(
-                k in low for k in ("logged in", "log in", "/login", "unauthorized")) else "error"
-            return {"ok": False, "reason": reason, "detail": detail[:200]}
-        out = (proc.stdout or b"").decode("utf-8", "replace").strip()
-        return {"ok": True, "reason": "ok", "detail": out[:80]}
+        text = (proc.stdout or b"").decode("utf-8", "replace").strip()
+        data = _extract_json(text) or {}
+        if data.get("loggedIn") is True:
+            return {"ok": True, "reason": "ok",
+                    "detail": f"ログイン済み（{data.get('authMethod', '')}/"
+                              f"{data.get('apiProvider', '')}）".replace("（/）", "")}
+        detail = (proc.stderr or b"").decode("utf-8", "replace").strip() or text
+        low = (detail + " " + text).lower()
+        if data.get("loggedIn") is False or any(
+                k in low for k in ("logged in", "log in", "/login", "unauthorized")):
+            return {"ok": False, "reason": "not_logged_in", "detail": "claude CLI が未ログインです"}
+        return {"ok": False, "reason": "error", "detail": (detail or "auth status 解析失敗")[:200]}
 
     def _env(self) -> dict[str, str]:
         env = os.environ.copy()
