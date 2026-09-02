@@ -76,6 +76,12 @@ class Company:
         self.tasks.runner = ClaudeRunner(skill_text=self.skills_lab.text, **kwargs)
         return True
 
+    def llm_health(self, timeout_s: int = 45) -> dict[str, Any]:
+        """実 LLM の疎通確認（バイナリ + ログイン）。GUI の接続テスト用。"""
+        from .runner_claude import ClaudeRunner
+
+        return ClaudeRunner(skill_text=self.skills_lab.text).preflight(timeout_s=timeout_s)
+
     def disable_llm(self) -> None:
         """タスク実行を既定の雛形ランナー (TemplateRunner) に戻す。
 

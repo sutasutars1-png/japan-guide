@@ -266,6 +266,18 @@ class SocialChannelTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 c.social.draft("instagram", p.id)
 
+    def test_debug_headline_detects_login(self):
+        from company import webgui
+        with tempfile.TemporaryDirectory() as tmp:
+            c = make_company(tmp)
+            c.storage.put("tasks", {
+                "id": "t1", "agent": "writer", "skill": "article-writing",
+                "title": "執筆", "status": "done", "created_at": "2026-09-02T16:00:00",
+                "output": {"_llm_error": "claude CLI エラー: Not logged in · Please run /login"}})
+            dbg = webgui._debug(c)
+            self.assertIn("未ログイン", dbg["headline"])
+            self.assertIn("診断", dbg["text"])
+
     def test_social_preview_page_renders_draft(self):
         from company import webgui
         with tempfile.TemporaryDirectory() as tmp:
@@ -432,6 +444,12 @@ class WebGuiTest(unittest.TestCase):
                 self.assertIn("text", dbg)
                 self.assertIn("issues", dbg)
                 self.assertIn("デバッグ要約", dbg["text"])
+                # LLM 疎通確認: 環境に依らず一定の形（ok/reason/detail）で返る（例外なし）
+                chk = self._post(port, "/api/llm/check", {})
+                self.assertIn("ok", chk)
+                self.assertIn(chk["reason"],
+                              ("ok", "no_binary", "not_logged_in", "timeout", "error"))
+                self.assertIsInstance(chk.get("detail", ""), str)
                 # social/preview は HTML
                 self.assertIn(b"<title", self._get(
                     port, "/social/preview?id=" + st3["social"][0]["id"]))

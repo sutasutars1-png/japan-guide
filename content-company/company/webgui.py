@@ -150,6 +150,21 @@ def _debug(c: Company, limit: int = 40) -> dict:
             push("warn", "差し戻し滞留",
                  f"{p.get('title', '')}: 人間の修正指示が未反映のまま", p.get("updated_at", ""))
 
+    # 同じ根本原因の繰り返し（未ログイン等）を一言に集約した headline を作る。
+    blob = " ".join(i["msg"].lower() for i in issues)
+    n_llm_err = sum(1 for i in issues if i["kind"] in ("LLMフォールバック", "タスクエラー"))
+    headline = ""
+    if any(k in blob for k in ("logged in", "log in", "/login", "unauthorized")):
+        headline = ("🔑 claude CLI が未ログインです。ターミナルで `claude` を起動し "
+                    "`/login` でログインしてください。ログインするまで生成はすべて雛形に"
+                    f"フォールバックします（該当 {n_llm_err} 件）。")
+    elif "未検出" in blob or "見つかりません" in blob:
+        headline = "🧩 claude CLI が見つかりません。インストールと PATH を確認してください。"
+    elif "タイムアウト" in blob:
+        headline = "⏱ claude CLI の応答が遅い/返りません。ネットワークやCLIの状態を確認してください。"
+    elif "json 解析失敗" in blob:
+        headline = f"⚠ LLM 出力の解析に失敗しています（{n_llm_err} 件）。プロンプト/出力形式を要確認。"
+
     issues = issues[:limit]
     counts = {
         "products": len(products),
@@ -163,8 +178,10 @@ def _debug(c: Company, limit: int = 40) -> dict:
     }
 
     now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    lines = [
-        f"# デバッグ要約 ({now})",
+    lines = [f"# デバッグ要約 ({now})"]
+    if headline:
+        lines += [f"‼ 診断: {headline}", ""]
+    lines += [
         f"ランナー: {runner_label}",
         f"商品 {counts['products']} / 公開待ち {counts['await']} / 差し戻し {counts['review']}"
         f" / 公開 {counts['published']}",
@@ -178,8 +195,8 @@ def _debug(c: Company, limit: int = 40) -> dict:
                   + (f" ({i['ts']})" if i['ts'] else "") for i in issues]
     else:
         lines.append("- 問題は検出されていません")
-    return {"runner": runner_label, "llm_on": llm_on, "counts": counts,
-            "issues": issues, "text": "\n".join(lines)}
+    return {"runner": runner_label, "llm_on": llm_on, "headline": headline,
+            "counts": counts, "issues": issues, "text": "\n".join(lines)}
 
 
 def _social_preview_page(c: Company, sid: str) -> str:
@@ -517,6 +534,8 @@ class _Handler(BaseHTTPRequestHandler):
                 else:
                     c.disable_llm()
                 self._json(c.request_rewrite(b["product_id"], b.get("feedback", "")))
+            elif u.path == "/api/llm/check":
+                self._json(c.llm_health())
             elif u.path == "/api/product/delete":
                 if not b.get("confirm"):
                     return self._json({"error": "confirm が必要です"}, 400)
@@ -668,12 +687,18 @@ body.show-dbg .dbg{display:flex}
 .di.error .dik{color:var(--bad)} .di.warn .dik{color:var(--warn)}
 .di .dim{font-size:12px;color:var(--fg);margin:2px 0;word-break:break-word}
 .di .dit{font-size:10px;color:var(--muted)}
+.banner{display:none;margin:0;padding:11px 22px;background:#3a1d1d;border-bottom:1px solid #5a2a2a;
+  color:#ffd7d7;font-size:13px;line-height:1.5}
+.banner b{color:#fff} .banner.warnc{background:#3a2f10;border-bottom-color:#5a4a1f;color:#ffe9b8}
+.dbghead{margin:0 0 8px;padding:7px 9px;border-radius:8px;background:#3a1d1d;border:1px solid #5a2a2a;
+  color:#ffd7d7;font-size:12px;line-height:1.45}
 </style></head><body>
 <header>
   <h1>🏢 AI会社 コックピット</h1>
   <span class="muted" id="runner"></span>
   <span class="row" style="margin-left:auto">
     <label class="muted"><input type="checkbox" id="useLlm"> 実LLM生成</label>
+    <button class="ghost" id="btnLlmCheck" title="claude CLI のログイン/疎通を確認">接続テスト</button>
     <input id="planN" type="number" value="5" min="1" max="20" style="width:60px">
     <button id="btnPlan">商品を企画</button>
     <button class="ghost" id="btnDemo">デモ投入</button>
@@ -693,6 +718,7 @@ body.show-dbg .dbg{display:flex}
   <div class="dbgmeta" id="dbgMeta"></div>
   <div class="dbglist" id="dbgList"></div>
 </aside>
+<div class="banner" id="llmBanner"></div>
 <main>
   <h2>経営 KPI</h2>
   <div class="grid" id="kpi"></div>
@@ -860,7 +886,10 @@ async function refresh(){
 async function loadDebug(){try{const d=await api('/api/debug');
   window.__dbgText=d.text||'';
   const c=d.counts||{};
-  $('#dbgMeta').innerHTML=
+  const head=d.headline?`<div class="dbghead">${esc(d.headline)}</div>`:'';
+  // 履歴に未ログイン等の診断があり、かつ実LLM ON のときは上部バナーも自動表示。
+  if(d.headline && $('#useLlm').checked && !window.__llmChecked) setLlmBanner({reason:'headline',detail:d.headline});
+  $('#dbgMeta').innerHTML= head+
      `<div class="dbgrow"><span>ランナー</span><b>${esc(d.runner||'')}</b></div>`
     +`<div class="dbgrow"><span>本日タスク / 承認待ち</span><b>${c.tasks_today||0} / ${c.pending_approvals||0}</b></div>`
     +`<div class="dbgrow"><span>公開待ち / 差戻 / 公開</span><b>${c.await||0} / ${c.review||0} / ${c.published||0}</b></div>`
@@ -1056,6 +1085,27 @@ $('#schedMaster').onchange=async(e)=>{try{await api('/api/schedule/master','POST
 $('#btnReport').onclick=async()=>{const r=await api('/api/report');$('#out').textContent=JSON.stringify(r,null,2);};
 $('#btnMem').onclick=async()=>{const r=await api('/api/memory?query='+encodeURIComponent($('#memq').value));
   $('#out').textContent=JSON.stringify(r,null,2);};
+// 実LLM の疎通/ログイン確認バナー。
+function setLlmBanner(r){const el=$('#llmBanner');
+  if(!r){el.style.display='none';return;}
+  let msg, warn=false;
+  if(r.reason==='not_logged_in')
+    msg='claude CLI が<b>未ログイン</b>です。ターミナルで <b>claude</b> を起動し <b>/login</b> でログインしてください。ログインするまで生成はすべて雛形にフォールバックします。';
+  else if(r.reason==='no_binary')
+    msg='claude CLI が<b>見つかりません</b>。インストールと PATH を確認してください。';
+  else if(r.reason==='timeout'){msg='claude CLI の応答がありません（タイムアウト/起動失敗）。'; }
+  else if(r.reason==='headline'){msg=esc(r.detail||''); warn=true;}
+  else msg='claude CLI エラー: '+esc(r.detail||'');
+  el.innerHTML='⚠ '+msg;
+  el.className='banner'+(warn?' warnc':''); el.style.display='block';}
+async function llmCheck(silent){try{
+  if(!silent) toast('claude CLI の疎通を確認中…（数秒かかります）');
+  const r=await api('/api/llm/check','POST',{}); window.__llmChecked=true;
+  if(r.ok){setLlmBanner(null);toast('実LLM 疎通OK。ログイン済みです。');}
+  else setLlmBanner(r);
+  return r;}catch(e){if(!silent)toast('確認に失敗: '+e.message);}}
+$('#btnLlmCheck').onclick=()=>llmCheck(false);
+$('#useLlm').onchange=(e)=>{ if(e.target.checked) llmCheck(false); else {setLlmBanner(null);window.__llmChecked=false;} };
 // デバッグ履歴パネル：広い画面では既定で右側に表示。トグル/コピー/閉じる。
 if(window.innerWidth>=1400) document.body.classList.add('show-dbg');
 $('#btnDbg').onclick=()=>{document.body.classList.toggle('show-dbg');loadDebug();};

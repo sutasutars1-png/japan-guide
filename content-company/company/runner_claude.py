@@ -149,6 +149,33 @@ class ClaudeRunner:
     def available(claude_bin: str = "claude") -> str | None:
         return shutil.which(claude_bin)
 
+    def preflight(self, timeout_s: int = 45) -> dict[str, Any]:
+        """実 LLM の疎通確認（バイナリ有無 + ログイン状態）。
+
+        `available()` はバイナリの存在しか見ないため、未ログインでも True になり
+        「実LLM ON なのに毎回フォールバック」になりがち。ここで軽いプロンプトを
+        1 回だけ投げ、未ログイン等を human 向けメッセージで返す（生成本体はしない）。
+        """
+        resolved = shutil.which(self.claude_bin)
+        if resolved is None:
+            return {"ok": False, "reason": "no_binary",
+                    "detail": "claude CLI が見つかりません（未インストール or PATH 未設定）"}
+        try:
+            proc = subprocess.run(
+                self._argv(resolved), input="OK とだけ返してください。".encode("utf-8"),
+                capture_output=True, timeout=timeout_s, env=self._env())
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            return {"ok": False, "reason": "timeout",
+                    "detail": f"応答なし/起動失敗: {str(exc)[:120]}"}
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or b"").decode("utf-8", "replace").strip()
+            low = detail.lower()
+            reason = "not_logged_in" if any(
+                k in low for k in ("logged in", "log in", "/login", "unauthorized")) else "error"
+            return {"ok": False, "reason": reason, "detail": detail[:200]}
+        out = (proc.stdout or b"").decode("utf-8", "replace").strip()
+        return {"ok": True, "reason": "ok", "detail": out[:80]}
+
     def _env(self) -> dict[str, str]:
         env = os.environ.copy()
         if self.force_subscription:
