@@ -1,0 +1,250 @@
+"""Command-line entry point.
+
+    python -m trading_bot.cli <subcommand> [options]
+
+Subcommands: fetch-data, backtest, optimize, paper-trade, self-improve.
+Nothing in this CLI places a real exchange order — see README.md.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import pandas as pd
+
+from .backtest.engine import BacktestEngine
+from .data.fetch import OHLCVFetcher, load_csv
+from .optimize.optimizer import WalkForwardOptimizer
+from .paper.trader import PaperTrader
+from .self_improve.loop import SelfImprovementLoop
+from .strategy import STRATEGIES
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CACHE_DIR = REPO_ROOT / "data_cache"
+DEFAULT_STATE_DIR = REPO_ROOT / "state"
+
+
+def _strategy_cls(name: str):
+    try:
+        return STRATEGIES[name]
+    except KeyError:
+        raise SystemExit(f"Unknown strategy '{name}'. Choices: {sorted(STRATEGIES)}")
+
+
+def _parse_params(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    return json.loads(raw)
+
+
+def _load_history(args) -> pd.DataFrame:
+    if args.csv:
+        return load_csv(Path(args.csv))
+    fetcher = OHLCVFetcher(exchange_id=args.exchange, cache_dir=Path(args.cache_dir))
+    return fetcher.fetch(args.symbol, timeframe=args.timeframe, max_candles=args.max_candles, refresh=args.refresh)
+
+
+def cmd_fetch_data(args) -> None:
+    fetcher = OHLCVFetcher(exchange_id=args.exchange, cache_dir=Path(args.cache_dir))
+    df = fetcher.fetch(args.symbol, timeframe=args.timeframe, max_candles=args.max_candles, refresh=args.refresh)
+    print(f"Fetched {len(df)} candles for {args.symbol} ({args.timeframe}) from {args.exchange}.")
+    print(df.tail())
+
+
+def cmd_backtest(args) -> None:
+    df = _load_history(args)
+    strategy_cls = _strategy_cls(args.strategy)
+    strategy = strategy_cls(**_parse_params(args.params))
+    engine = BacktestEngine(initial_cash=args.initial_cash, fee_rate=args.fee_rate)
+    result = engine.run(df, strategy, timeframe=args.timeframe)
+    print(f"Strategy: {strategy}")
+    print(json.dumps(result.metrics, indent=2))
+
+
+def cmd_optimize(args) -> None:
+    df = _load_history(args)
+    strategy_cls = _strategy_cls(args.strategy)
+    engine = BacktestEngine(initial_cash=args.initial_cash, fee_rate=args.fee_rate)
+    optimizer = WalkForwardOptimizer(engine=engine, n_splits=args.n_splits)
+    result = optimizer.optimize(df, strategy_cls, timeframe=args.timeframe)
+    print(json.dumps(result.to_dict(), indent=2, default=str))
+
+
+def _build_data_provider(args):
+    """A zero-arg callable returning the latest OHLCV window for one step.
+
+    With `--csv`, replays the file bar-by-bar (an expanding cursor, advanced
+    on every call) instead of hitting the network — this is what lets
+    paper-trade/self-improve be demoed and tested with no exchange access.
+    """
+    if args.csv:
+        full_df = load_csv(Path(args.csv))
+        cursor = {"i": args.window}
+
+        def replay_provider() -> pd.DataFrame:
+            idx = min(cursor["i"], len(full_df))
+            window_df = full_df.iloc[max(0, idx - args.window) : idx].reset_index(drop=True)
+            cursor["i"] = min(cursor["i"] + 1, len(full_df))
+            return window_df
+
+        return replay_provider
+
+    fetcher = OHLCVFetcher(exchange_id=args.exchange, cache_dir=Path(args.cache_dir))
+
+    def live_provider() -> pd.DataFrame:
+        return fetcher.fetch(
+            args.symbol,
+            timeframe=args.timeframe,
+            max_candles=args.window,
+            use_cache=False,
+        )
+
+    return live_provider
+
+
+def cmd_paper_trade(args) -> None:
+    strategy_cls = _strategy_cls(args.strategy)
+    trader = PaperTrader(
+        symbol=args.symbol,
+        strategy_cls=strategy_cls,
+        params=_parse_params(args.params),
+        data_provider=_build_data_provider(args),
+        state_dir=Path(args.state_dir),
+        timeframe=args.timeframe,
+        initial_cash=args.initial_cash,
+        fee_rate=args.fee_rate,
+    )
+    iterations = None if args.iterations <= 0 else args.iterations
+    for record in trader.run_loop(iterations=iterations, sleep_seconds=args.sleep_seconds):
+        print(json.dumps(record, default=str))
+
+
+def cmd_self_improve(args) -> None:
+    strategy_cls = _strategy_cls(args.strategy)
+    trader = PaperTrader(
+        symbol=args.symbol,
+        strategy_cls=strategy_cls,
+        params=_parse_params(args.params),
+        data_provider=_build_data_provider(args),
+        state_dir=Path(args.state_dir),
+        timeframe=args.timeframe,
+        initial_cash=args.initial_cash,
+        fee_rate=args.fee_rate,
+    )
+
+    if args.csv:
+        full_history_df = load_csv(Path(args.csv))
+
+        def history_provider() -> pd.DataFrame:
+            return full_history_df.tail(args.history_candles).reset_index(drop=True)
+
+    else:
+        fetcher = OHLCVFetcher(exchange_id=args.exchange, cache_dir=Path(args.cache_dir))
+
+        def history_provider() -> pd.DataFrame:
+            return fetcher.fetch(
+                args.symbol,
+                timeframe=args.timeframe,
+                max_candles=args.history_candles,
+                use_cache=False,
+            )
+
+    loop = SelfImprovementLoop(
+        trader=trader,
+        optimizer=WalkForwardOptimizer(
+            engine=BacktestEngine(initial_cash=args.initial_cash, fee_rate=args.fee_rate),
+            n_splits=args.n_splits,
+        ),
+        strategy_cls=strategy_cls,
+        history_provider=history_provider,
+        state_dir=Path(args.state_dir),
+        timeframe=args.timeframe,
+        min_walk_forward_score=args.min_walk_forward_score,
+        min_improvement_margin=args.min_improvement_margin,
+    )
+
+    iterations = None if args.iterations <= 0 else args.iterations
+    for record in loop.run_loop(iterations=iterations, interval_seconds=args.interval_seconds):
+        print(json.dumps(record, default=str))
+        trader.step()
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="trading-bot", description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    def add_data_args(p, window_default=None, window_help=""):
+        p.add_argument("--exchange", default="binance")
+        p.add_argument("--symbol", default="BTC/USDT")
+        p.add_argument("--timeframe", default="1h")
+        p.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
+        p.add_argument("--csv", default=None, help="load OHLCV from this CSV instead of fetching")
+        if window_default is not None:
+            p.add_argument("--window", type=int, default=window_default, help=window_help)
+
+    fd = sub.add_parser("fetch-data", help="Fetch and cache public OHLCV candles")
+    add_data_args(fd)
+    fd.add_argument("--max-candles", type=int, default=2000)
+    fd.add_argument("--refresh", action="store_true")
+    fd.set_defaults(func=cmd_fetch_data)
+
+    bt = sub.add_parser("backtest", help="Run a single backtest")
+    add_data_args(bt)
+    bt.add_argument("--max-candles", type=int, default=2000)
+    bt.add_argument("--refresh", action="store_true")
+    bt.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
+    bt.add_argument("--params", default=None, help='JSON, e.g. \'{"fast_window": 10, "slow_window": 50}\'')
+    bt.add_argument("--initial-cash", type=float, default=10_000.0)
+    bt.add_argument("--fee-rate", type=float, default=0.001)
+    bt.set_defaults(func=cmd_backtest)
+
+    opt = sub.add_parser("optimize", help="Walk-forward grid search for strategy parameters")
+    add_data_args(opt)
+    opt.add_argument("--max-candles", type=int, default=3000)
+    opt.add_argument("--refresh", action="store_true")
+    opt.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
+    opt.add_argument("--initial-cash", type=float, default=10_000.0)
+    opt.add_argument("--fee-rate", type=float, default=0.001)
+    opt.add_argument("--n-splits", type=int, default=4)
+    opt.set_defaults(func=cmd_optimize)
+
+    pt = sub.add_parser("paper-trade", help="Run the (simulated-only) paper trading loop")
+    add_data_args(pt, window_default=300, window_help="how many recent candles to keep for signal calc")
+    pt.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
+    pt.add_argument("--params", default=None, help="JSON params for the strategy")
+    pt.add_argument("--initial-cash", type=float, default=10_000.0)
+    pt.add_argument("--fee-rate", type=float, default=0.001)
+    pt.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
+    pt.add_argument("--iterations", type=int, default=1, help="0 = run forever")
+    pt.add_argument("--sleep-seconds", type=float, default=60.0)
+    pt.set_defaults(func=cmd_paper_trade)
+
+    si = sub.add_parser("self-improve", help="Paper-trade while periodically re-optimizing params")
+    add_data_args(si, window_default=300, window_help="how many recent candles to keep for signal calc")
+    si.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
+    si.add_argument("--params", default=None, help="JSON starting params for the strategy")
+    si.add_argument("--initial-cash", type=float, default=10_000.0)
+    si.add_argument("--fee-rate", type=float, default=0.001)
+    si.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
+    si.add_argument("--iterations", type=int, default=1, help="0 = run forever")
+    si.add_argument("--interval-seconds", type=float, default=86_400.0)
+    si.add_argument("--n-splits", type=int, default=4)
+    si.add_argument("--history-candles", type=int, default=3000)
+    si.add_argument("--min-walk-forward-score", type=float, default=0.0)
+    si.add_argument("--min-improvement-margin", type=float, default=0.05)
+    si.set_defaults(func=cmd_self_improve)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    args.func(args)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

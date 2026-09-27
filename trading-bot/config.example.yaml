@@ -1,0 +1,25 @@
+# Copy to config.yaml and adjust. Nothing here is a credential — this bot
+# never holds an exchange API key or places real orders (see README.md).
+
+exchange: binance      # any ccxt exchange id with public OHLCV (no key needed)
+symbol: "BTC/USDT"
+timeframe: "1h"
+
+strategy: sma_crossover
+params:
+  fast_window: 10
+  slow_window: 50
+
+backtest:
+  initial_cash: 10000.0
+  fee_rate: 0.001        # 0.1% per side, adjust to your exchange's taker fee
+
+optimize:
+  n_splits: 4
+  min_trades: 5          # candidates with fewer trades in a fold score -inf
+
+self_improve:
+  history_candles: 3000
+  interval_seconds: 86400        # re-optimize once per day
+  min_walk_forward_score: 0.0    # candidate must be OOS-profitable (risk-adjusted)
+  min_improvement_margin: 0.05   # ...and clearly better than what's live, or don't switch
