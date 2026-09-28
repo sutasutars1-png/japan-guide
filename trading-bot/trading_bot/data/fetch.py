@@ -72,9 +72,17 @@ class OHLCVFetcher:
             # network, but breaks under a TLS-intercepting egress proxy
             # (e.g. this sandbox's), which presents its own CA. Point it at
             # the same CA bundle other tools already trust, if one is set.
+            #
+            # ccxt.Exchange.fetch() passes `verify=self.verify and
+            # self.validateServerSsl` to requests — since self.verify is the
+            # boolean True by default, that `and` discards a CA-bundle path
+            # assigned to `.session.verify` or `.verify` and evaluates to
+            # plain `True`. Assigning the path to `validateServerSsl`
+            # instead is what actually survives that expression.
             ca_bundle = os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
             if ca_bundle:
                 self._exchange.session.verify = ca_bundle
+                self._exchange.validateServerSsl = ca_bundle
         return self._exchange
 
     def fetch(
