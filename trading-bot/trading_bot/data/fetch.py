@@ -61,10 +61,20 @@ class OHLCVFetcher:
 
     def _get_exchange(self):
         if self._exchange is None:
+            import os
+
             import ccxt  # lazy import — optional dependency
 
             exchange_cls = getattr(ccxt, self.exchange_id)
             self._exchange = exchange_cls({"enableRateLimit": True})
+            # ccxt's requests.Session is built with trust_env=False, so it
+            # ignores REQUESTS_CA_BUNDLE/SSL_CERT_FILE — fine on a normal
+            # network, but breaks under a TLS-intercepting egress proxy
+            # (e.g. this sandbox's), which presents its own CA. Point it at
+            # the same CA bundle other tools already trust, if one is set.
+            ca_bundle = os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
+            if ca_bundle:
+                self._exchange.session.verify = ca_bundle
         return self._exchange
 
     def fetch(
