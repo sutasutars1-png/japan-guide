@@ -118,7 +118,7 @@ python -m trading_bot.cli paper-trade --symbol BTC/USDT --timeframe 1h \
 python -m trading_bot.cli self-improve --exchange kraken --symbol BTC/USD --timeframe 1h \
   --params '{"fast_window": 10, "slow_window": 50}' \
   --steps 0 --step-seconds 3600 --reoptimize-every 24 \
-  --history-candles 720 --n-splits 3 --min-trades 3 \
+  --history-candles 1440 --n-splits 4 --min-trades 5 \
   --min-walk-forward-score 0.0 --min-improvement-margin 0.05
 ```
 
@@ -131,6 +131,8 @@ python -m trading_bot.cli self-improve --exchange kraken --symbol BTC/USD --time
      現行と異なる / 現行の再採点スコアを `--min-improvement-margin` 以上上回る
   4. 結果は昇格の有無に関わらず `state/optimization_history_<strategy>.jsonl` に理由コード付きで記録
 - 再起動時は `state/active_params_<strategy>.json` の最後に昇格したパラメータから再開
+- 学習に使う直近1440本(60日)は Kraken の1h足APIの上限(約720本)を超えるため、
+  先に `backfill` でストアを延ばしておくこと(稼働中は毎バー自動で追記される)
 
 ### 6. 自己改善システム自体の検証(リプレイ)
 
@@ -139,14 +141,29 @@ python -m trading_bot.cli self-improve --exchange kraken --symbol BTC/USD --time
 
 ```bash
 python -m trading_bot.cli replay --exchange kraken --symbol BTC/USD \
-  --history-candles 360 --reoptimize-every 24 --export-json state/replay.json
+  --history-candles 1440 --reoptimize-every 24 --export-json state/replay.json
 ```
 
 自己改善システム / 初期パラメータ固定 / バイ&ホールドの3本を同じ期間で比較し、
 全サイクルの判定(候補・スコア・昇格/却下理由)を出力します。
 
-> Kraken の公開OHLC APIは直近約720本しか返さないため(1h足で約30日)、検証区間は短く、
-> 結果の統計的な信頼度は限定的です。`--min-trades` を下げるほど判定は緩くなります。
+#### 180日分(2026-04〜09, Kraken BTC/USD 1h, 開始 10/50, 24本ごと)での検証結果
+
+| 学習本数 | 分割 | 最低取引 | 昇格/サイクル | 自己改善 | Sharpe | 最大DD |
+|---:|---:|---:|---:|---:|---:|---:|
+| 360 | 3 | 3 | 4/166 | +17.4% | 1.34 | -15.2% |
+| 360 | 4 | 5 | 0/166 | +14.0% | 1.13 | -15.4% |
+| 720 | 3 | 3 | 9/151 | +12.4% | 0.97 | -18.5% |
+| 720 | 4 | 5 | 2/151 | +25.8% | 1.86 | -10.3% |
+| 1440 | 3 | 3 | 2/121 | +20.3% | 1.53 | -13.1% |
+| **1440** | **4** | **5** | **6/121** | **+22.2%** | **1.66** | **-13.3%** |
+
+比較: 開始パラメータ固定 +14.0%(Sharpe 1.13)/ バイ&ホールド +22.3%(12通り中の抜粋。全体では自己改善が固定を上回ったのは10通り、バイ&ホールドを上回ったのは1通り)。
+
+- 既定値(太字)は成績最大の設定ではなく、学習1440本の4通りがいずれも固定以上で安定していたこと、
+  検証区間が360本あり最低取引5件を満たせることから選んでいる。最良の設定を選ぶこと自体が過剰最適化になるため
+- 上昇相場ではロングオンリーのSMAクロスはバイ&ホールドに届きにくい。自己改善の効果は「固定パラメータより良い」の範囲
+- 取引回数は180日で50〜70回(週2〜3回)。1h足のまま取引機会を維持している
 
 ## テスト
 
