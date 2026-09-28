@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import requests
 
 from trading_bot.data.fetch import load_csv
 from trading_bot.data.kraken_trades import KrakenTradeHistory, aggregate_trades
@@ -81,6 +82,8 @@ class FakeSession:
         self.calls += 1
         if self.rate_limit_first and self.calls == 1:
             return _Resp({"error": ["EGeneral:Too many requests"]})
+        if self.rate_limit_first and self.calls == 2:
+            raise requests.ConnectionError("proxy closed the connection")
         since_s = params["since"] / 1e9
         rows = [t for t in self.trades if t[0] > since_s][: self.page]
         last = int(rows[-1][0] * 1e9) if rows else params["since"]
@@ -95,7 +98,7 @@ class _Resp:
         return self.body
 
 
-def test_trade_history_pages_until_window_end_and_retries_rate_limit():
+def test_trade_history_pages_until_window_end_and_retries_transient_errors():
     s = T0 / 1000
     trades = [(s + i * 900 + 1, 100.0 + i, 1.0) for i in range(12)]  # 4 trades/hour for 3 hours
     session = FakeSession(trades, page=5, rate_limit_first=True)
@@ -105,4 +108,4 @@ def test_trade_history_pages_until_window_end_and_retries_rate_limit():
     assert len(df) == 2
     assert df["open"].tolist() == [100.0, 104.0]
     assert df["close"].tolist() == [103.0, 107.0]
-    assert session.calls >= 3  # one rate-limited retry, then paging
+    assert session.calls >= 4  # a rate-limit reply and a dropped connection are retried, then paging

@@ -71,9 +71,20 @@ class KrakenTradeHistory:
 
     def _get(self, since_ns: int) -> tuple[list, int]:
         backoff = 5.0
+        failures = 0
         while True:
-            resp = self.session.get(API_URL, params={"pair": self.pair, "since": since_ns, "count": 1000}, timeout=30)
-            body = resp.json()
+            try:
+                resp = self.session.get(API_URL, params={"pair": self.pair, "since": since_ns, "count": 1000}, timeout=30)
+                body = resp.json()
+            except (requests.RequestException, ValueError):
+                # Dropped connections / proxy hiccups / non-JSON error pages are
+                # transient on a multi-hour backfill; retry rather than abort.
+                failures += 1
+                if failures > 8:
+                    raise
+                self.sleep(backoff)
+                backoff = min(backoff * 2, 120.0)
+                continue
             self.calls += 1
             errors = body.get("error") or []
             if not errors:
