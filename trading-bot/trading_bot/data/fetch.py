@@ -85,6 +85,11 @@ class OHLCVFetcher:
                 self._exchange.validateServerSsl = ca_bundle
         return self._exchange
 
+    def store(self, symbol: str, timeframe: str):
+        from .store import OHLCVStore
+
+        return OHLCVStore(self.cache_dir, self.exchange_id, symbol, timeframe)
+
     def fetch(
         self,
         symbol: str,
@@ -95,15 +100,25 @@ class OHLCVFetcher:
         use_cache: bool = True,
         refresh: bool = False,
     ) -> pd.DataFrame:
-        """Fetch OHLCV candles, paging through the exchange's public endpoint.
+        """Return the newest `max_candles` bars, accumulating history on disk.
 
-        Results are cached to CSV under `cache_dir`; set `refresh=True` to
-        re-fetch from the network instead of returning the cached copy.
+        With `use_cache`, newly downloaded candles are merged into the
+        persistent store (never replacing older stored history) and the
+        result comes from the store, so history grows beyond what the
+        exchange serves in one request. Without `refresh`, an existing store
+        is returned as-is with no network call.
         """
-        path = cache_path(self.exchange_id, symbol, timeframe, self.cache_dir)
-        if use_cache and not refresh and path.exists():
-            return load_csv(path)
+        store = self.store(symbol, timeframe)
+        if use_cache and not refresh and store.path.exists():
+            return store.ohlcv(tail=max_candles)
 
+        df = self._download(symbol, timeframe, since_ms, limit_per_call, max_candles)
+        if not use_cache:
+            return df
+        store.merge(df, source="exchange_ohlc")
+        return store.ohlcv(tail=max_candles)
+
+    def _download(self, symbol: str, timeframe: str, since_ms, limit_per_call: int, max_candles: int) -> pd.DataFrame:
         exchange = self._get_exchange()
         all_rows: list[list] = []
         cursor = since_ms
@@ -126,8 +141,4 @@ class OHLCVFetcher:
         df = pd.DataFrame(all_rows, columns=OHLCV_COLUMNS)
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
         df = df.drop_duplicates(subset="timestamp").sort_values("timestamp").reset_index(drop=True)
-        df = df.tail(max_candles).reset_index(drop=True)
-
-        if use_cache:
-            save_csv(df, path)
-        return df
+        return df.tail(max_candles).reset_index(drop=True)

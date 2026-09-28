@@ -50,15 +50,34 @@ cp config.example.yaml config.yaml   # 現状 config.yaml は参考用(CLI引数
 
 ## 使い方
 
-### 1. 相場データの取得(公開API、APIキー不要)
+### 1. 相場データ(公開API、APIキー不要)— 保存して積み上げる
+
+取引所のローソク足APIは遡れる本数に上限があります(Kraken は直近約720本 = 1h足で約30日)。
+そこで履歴は毎回取り直すのではなく **`data_cache/` のストアに保存し、統合して積み上げます**。
 
 ```bash
-python -m trading_bot.cli fetch-data --exchange binance --symbol BTC/USDT --timeframe 1h --max-candles 3000
+# 最新の足をストアに統合(古い足は消さない)。bot稼働中は毎バー自動で行われる
+python -m trading_bot.cli fetch-data --exchange kraken --symbol BTC/USD
+
+# 720本より古い期間を、Kraken の公開約定履歴(Trades)から1h足に再構成して補完
+# 中断しても再実行すれば欠けている期間だけを続きから埋める(1秒1回ペース)
+python -m trading_bot.cli backfill --exchange kraken --symbol BTC/USD --days 180
+
+# Kraken 公式の一括ダウンロード(OHLCVT CSV)があれば取り込み可能
+python -m trading_bot.cli import-csv --exchange kraken --symbol BTC/USD --file XBTUSD_60.csv --format kraken-ohlcvt
+
+# ストアの期間・欠損・データ出所を確認
+python -m trading_bot.cli data-status --exchange kraken --symbol BTC/USD
 ```
 
-`data_cache/` にCSVとしてキャッシュされます。ネットワークが使えない環境では、
-同じ列(`timestamp, open, high, low, close, volume`)を持つCSVを用意し、
-以降のコマンドに `--csv path/to/file.csv` を渡してください。
+- 各足には出所(`exchange_ohlc` / `exchange_csv` / `trades` / `gap_fill`)を記録し、
+  同じ時刻では優先度の高い出所が勝ちます(約定からの再構成が公式足を上書きすることはない)
+- 約定から再構成した足は、公式OHLCと重なる48本で始値・高値・安値・終値が完全一致することを確認済み
+  (出来高は最大2%程度の差。戦略は価格のみ使用)
+- 約定が1件もない時間帯は直前の終値を引き継ぎ、出来高0の `gap_fill` として記録
+- 取得期間を延ばすために長い足(4h・日足)に切り替える必要はなく、1h足のまま取引機会を維持できます
+
+ストアのCSVは `--csv data_cache/kraken_BTC-USD_1h.csv` としてそのまま各コマンドに渡せます。
 
 ### 2. バックテスト
 

@@ -2,7 +2,7 @@
 
     python -m trading_bot.cli <subcommand> [options]
 
-Subcommands: fetch-data, backtest, optimize, paper-trade, self-improve, replay.
+Subcommands: fetch-data, backfill, import-csv, data-status, backtest, optimize, paper-trade, self-improve, replay.
 Nothing in this CLI places a real exchange order — see README.md.
 """
 from __future__ import annotations
@@ -49,9 +49,63 @@ def _load_history(args) -> pd.DataFrame:
 
 def cmd_fetch_data(args) -> None:
     fetcher = OHLCVFetcher(exchange_id=args.exchange, cache_dir=Path(args.cache_dir))
-    df = fetcher.fetch(args.symbol, timeframe=args.timeframe, max_candles=args.max_candles, refresh=args.refresh)
-    print(f"Fetched {len(df)} candles for {args.symbol} ({args.timeframe}) from {args.exchange}.")
+    df = fetcher.fetch(args.symbol, timeframe=args.timeframe, max_candles=args.max_candles, refresh=True)
+    print(f"Merged the latest {args.exchange} candles for {args.symbol} ({args.timeframe}) into the store.")
+    print(json.dumps(fetcher.store(args.symbol, args.timeframe).status(), indent=2))
     print(df.tail())
+
+
+def cmd_backfill(args) -> None:
+    import time as _time
+
+    from .data.kraken_trades import KrakenTradeHistory
+    from .data.store import OHLCVStore
+
+    if args.exchange != "kraken":
+        raise SystemExit("backfill currently rebuilds candles from Kraken's public trade history only")
+    store = OHLCVStore(Path(args.cache_dir), args.exchange, args.symbol, args.timeframe)
+    now_ms = int(_time.time() * 1000)
+    end_ms = now_ms - now_ms % store.step_ms  # complete bars only
+    start_ms = end_ms - int(args.days * 86_400_000)
+    history = KrakenTradeHistory(args.symbol, min_interval_s=args.min_interval)
+    ranges = store.missing_ranges(start_ms, end_ms)
+    print(f"{len(ranges)} missing range(s), {sum((b - a) // store.step_ms for a, b in ranges)} bars to rebuild", flush=True)
+    chunk = int(args.chunk_days * 86_400_000)
+    for a, b in ranges:  # newest first, so stored history extends contiguously backwards
+        hi = b
+        while hi > a:
+            lo = max(a, hi - chunk)
+            df = history.candles(lo, hi, store.step_ms)
+            filled = df.pop("filled")
+            stats = store.merge(df[~filled], source="trades")
+            if filled.any():
+                store.merge(df[filled], source="gap_fill")
+            print(json.dumps({
+                "from": pd.Timestamp(lo, unit="ms", tz="UTC").isoformat(),
+                "to": pd.Timestamp(hi, unit="ms", tz="UTC").isoformat(),
+                "bars": len(df), "gap_filled": int(filled.sum()), "api_calls": history.calls, **stats,
+            }), flush=True)
+            hi = lo
+    print(json.dumps(store.status(), indent=2))
+
+
+def cmd_import_csv(args) -> None:
+    from .data.store import OHLCVStore
+
+    store = OHLCVStore(Path(args.cache_dir), args.exchange, args.symbol, args.timeframe)
+    if args.format == "kraken-ohlcvt":  # Kraken's bulk OHLCVT download: no header, epoch seconds
+        df = pd.read_csv(args.file, header=None, names=["timestamp", "open", "high", "low", "close", "volume", "trades"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", utc=True)
+    else:
+        df = load_csv(Path(args.file))
+    print(json.dumps(store.merge(df, source="exchange_csv")))
+    print(json.dumps(store.status(), indent=2))
+
+
+def cmd_data_status(args) -> None:
+    from .data.store import OHLCVStore
+
+    print(json.dumps(OHLCVStore(Path(args.cache_dir), args.exchange, args.symbol, args.timeframe).status(), indent=2))
 
 
 def cmd_backtest(args) -> None:
@@ -99,7 +153,7 @@ def _build_data_provider(args):
             args.symbol,
             timeframe=args.timeframe,
             max_candles=args.window,
-            use_cache=False,
+            refresh=True,  # merge the newest bars into the accumulating store
         )
 
     return live_provider
@@ -149,7 +203,7 @@ def cmd_self_improve(args) -> None:
                 args.symbol,
                 timeframe=args.timeframe,
                 max_candles=args.history_candles,
-                use_cache=False,
+                refresh=True,
             )
 
     loop = SelfImprovementLoop(
@@ -215,11 +269,27 @@ def build_parser() -> argparse.ArgumentParser:
         if window_default is not None:
             p.add_argument("--window", type=int, default=window_default, help=window_help)
 
-    fd = sub.add_parser("fetch-data", help="Fetch and cache public OHLCV candles")
+    fd = sub.add_parser("fetch-data", help="Fetch the latest candles and merge them into the stored history")
     add_data_args(fd)
     fd.add_argument("--max-candles", type=int, default=2000)
-    fd.add_argument("--refresh", action="store_true")
     fd.set_defaults(func=cmd_fetch_data)
+
+    bf = sub.add_parser("backfill", help="Rebuild older candles from the exchange's public trade history")
+    add_data_args(bf)
+    bf.add_argument("--days", type=float, default=180, help="how far back the store should reach")
+    bf.add_argument("--chunk-days", type=float, default=2, help="merge into the store after every N days rebuilt")
+    bf.add_argument("--min-interval", type=float, default=1.0, help="seconds between API calls")
+    bf.set_defaults(func=cmd_backfill)
+
+    ic = sub.add_parser("import-csv", help="Merge an OHLCV CSV (e.g. Kraken's OHLCVT download) into the store")
+    add_data_args(ic)
+    ic.add_argument("--file", required=True)
+    ic.add_argument("--format", choices=["ohlcv", "kraken-ohlcvt"], default="ohlcv")
+    ic.set_defaults(func=cmd_import_csv)
+
+    ds = sub.add_parser("data-status", help="Show how much history the store holds")
+    add_data_args(ds)
+    ds.set_defaults(func=cmd_data_status)
 
     bt = sub.add_parser("backtest", help="Run a single backtest")
     add_data_args(bt)

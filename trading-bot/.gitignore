@@ -5,6 +5,8 @@ __pycache__/
 # Downloaded market data and paper-trading state are runtime artifacts,
 # not source — and state/ can contain your paper P&L history.
 data_cache/*.csv
+data_cache/*.lock
+data_cache/*.tmp
 state/*.json
 state/*.jsonl
 
