@@ -96,9 +96,14 @@ def cmd_import_csv(args) -> None:
     if args.format == "kraken-ohlcvt":  # Kraken's bulk OHLCVT download: no header, epoch seconds
         df = pd.read_csv(args.file, header=None, names=["timestamp", "open", "high", "low", "close", "volume", "trades"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", utc=True)
+        print(json.dumps(store.merge(df, source="exchange_csv")))
+    elif "source" in pd.read_csv(args.file, nrows=0).columns:  # another store's CSV (e.g. seed_data/): keep provenance
+        src = OHLCVStore(Path(args.file).parent, args.exchange, args.symbol, args.timeframe)
+        src.path = Path(args.file)
+        for source, rows in src.load().groupby("source"):
+            print(json.dumps({"source": source, **store.merge(rows, source=source)}))
     else:
-        df = load_csv(Path(args.file))
-    print(json.dumps(store.merge(df, source="exchange_csv")))
+        print(json.dumps(store.merge(load_csv(Path(args.file)), source="exchange_csv")))
     print(json.dumps(store.status(), indent=2))
 
 

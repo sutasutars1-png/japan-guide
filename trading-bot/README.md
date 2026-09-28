@@ -79,6 +79,15 @@ python -m trading_bot.cli data-status --exchange kraken --symbol BTC/USD
 
 ストアのCSVは `--csv data_cache/kraken_BTC-USD_1h.csv` としてそのまま各コマンドに渡せます。
 
+**保存済みの180日分から始める**: `seed_data/kraken_BTC-USD_1h.csv` は 2026-04-01〜09-28 の
+Kraken BTC/USD 1h足(4,325本、出所つき)のスナップショットです。新しい環境では数時間かかる
+`backfill` の代わりにこれを取り込み、以降は `fetch-data` / bot の稼働で追記されます。
+
+```bash
+python -m trading_bot.cli import-csv --exchange kraken --symbol BTC/USD --file seed_data/kraken_BTC-USD_1h.csv
+python -m trading_bot.cli backfill --exchange kraken --symbol BTC/USD --days 180   # スナップショット以降の欠けだけ埋まる
+```
+
 ### 2. バックテスト
 
 ```bash
