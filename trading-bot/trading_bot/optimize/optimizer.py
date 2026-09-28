@@ -90,13 +90,15 @@ class WalkForwardOptimizer:
         self,
         engine: Optional[BacktestEngine] = None,
         n_splits: int = 4,
-        score_fn: ScoreFn = default_score,
+        score_fn: Optional[ScoreFn] = None,
+        min_trades: int = 5,
     ):
         if n_splits < 2:
             raise ValueError("n_splits must be >= 2 (need at least one train/test pair)")
         self.engine = engine or BacktestEngine()
         self.n_splits = n_splits
-        self.score_fn = score_fn
+        self.min_trades = min_trades
+        self.score_fn = score_fn or (lambda metrics: default_score(metrics, min_trades=min_trades))
 
     def _grid_search(self, df: pd.DataFrame, strategy_cls: type[Strategy], timeframe: str):
         """Return (best_params, best_score, leaderboard) over `df`."""
@@ -134,7 +136,7 @@ class WalkForwardOptimizer:
             if chosen_params is None:
                 continue
 
-            test_result = self.engine.run(test_df, strategy_cls(**chosen_params), timeframe=timeframe)
+            test_result = self._run_fold(df, strategy_cls, chosen_params, test_start_idx, test_end_idx, timeframe)
             test_score = self.score_fn(test_result.metrics)
 
             folds.append(
@@ -164,6 +166,32 @@ class WalkForwardOptimizer:
             folds=folds,
             leaderboard=leaderboard[:20],
         )
+
+    def evaluate_params(
+        self, df: pd.DataFrame, strategy_cls: type[Strategy], params: dict, timeframe: str = "1h"
+    ) -> float:
+        """Mean out-of-sample score of one *fixed* param set on the same test folds
+        `optimize()` uses — how the incumbent holds up on today's data, so the
+        promotion gate compares candidate and incumbent on identical folds."""
+        fold_bounds = self._fold_bounds(len(df), self.n_splits)
+        scores = []
+        for i in range(1, self.n_splits):
+            start, end = fold_bounds[i], fold_bounds[i + 1]
+            if end - start < 5 or start < 10:
+                continue
+            score = self.score_fn(self._run_fold(df, strategy_cls, params, start, end, timeframe).metrics)
+            if score != float("-inf"):
+                scores.append(score)
+        return sum(scores) / len(scores) if scores else float("-inf")
+
+    def _run_fold(self, df: pd.DataFrame, strategy_cls: type[Strategy], params: dict, start: int, end: int, timeframe: str):
+        """Backtest `params` on bars [start, end) only, with indicators warmed up
+        on the bars before `start`. Signals are causal, so this uses no data
+        from after each bar — but unlike re-running the strategy on the fold
+        slice alone, a 200-bar SMA doesn't spend most of a short fold flat."""
+        positions = strategy_cls(**params).generate_positions(df.iloc[:end]).fillna(0.0).to_numpy()[start:end]
+        test_df = df.iloc[start:end].reset_index(drop=True)
+        return self.engine.run_positions(test_df, positions, timeframe=timeframe)
 
     @staticmethod
     def _fold_bounds(n_rows: int, n_splits: int) -> list[int]:

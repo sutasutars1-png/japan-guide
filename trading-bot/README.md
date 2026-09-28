@@ -32,7 +32,7 @@ trading_bot/
 ├── backtest/    ベクトル化バックテストエンジン + 指標(Sharpe/DD/勝率等)
 ├── optimize/    ウォークフォワード・グリッドサーチ最適化
 ├── paper/       仮想ポートフォリオ + ペーパートレードループ(実発注なし)
-├── self_improve/ 定期的な再最適化 + 安全ゲート付きパラメータ昇格
+├── self_improve/ 定期的な再最適化 + 安全ゲート付きパラメータ昇格 + 過去データでのリプレイ検証
 └── cli.py       上記すべてのコマンドラインエントリポイント
 ```
 
@@ -91,21 +91,43 @@ python -m trading_bot.cli paper-trade --symbol BTC/USDT --timeframe 1h \
 `state/portfolio_<symbol>.json` に仮想ポートフォリオ、
 `state/decisions_<symbol>.jsonl` に毎回の判断ログが保存されます。
 
-### 5. 自己改善ループ(最適化 + ペーパートレードの継続運用)
+### 5. 自己改善システム(自動運用)
+
+パラメータは人が手で調整せず、システムが決められたスケジュールとルールで自動更新します。
 
 ```bash
-python -m trading_bot.cli self-improve --symbol BTC/USDT --timeframe 1h \
-  --strategy sma_crossover --params '{"fast_window": 10, "slow_window": 50}' \
-  --iterations 0 --interval-seconds 86400 \
+python -m trading_bot.cli self-improve --exchange kraken --symbol BTC/USD --timeframe 1h \
+  --params '{"fast_window": 10, "slow_window": 50}' \
+  --steps 0 --step-seconds 3600 --reoptimize-every 24 \
+  --history-candles 720 --n-splits 3 --min-trades 3 \
   --min-walk-forward-score 0.0 --min-improvement-margin 0.05
 ```
 
-サイクルごとに:
-1. 直近 `--history-candles` 本のデータでウォークフォワード最適化を実行
-2. `walk_forward_score` が `--min-walk-forward-score` 以上、かつ現在の稼働パラメータの
-   スコアより `--min-improvement-margin` 以上優れている場合のみ、パラメータを昇格
-3. 昇格の有無に関わらず、`state/optimization_history_<strategy>.jsonl` に全試行を記録
-   (無条件のパラメータ切り替えは行わない、監査可能な仕組み)
+- **毎バー(1時間ごと)** に稼働中パラメータで売買判断(ペーパートレード)
+- **`--reoptimize-every` バーごと(既定24 = 1日1回)** に再最適化サイクルを実行:
+  1. 直近 `--history-candles` 本でウォークフォワード最適化 → 挑戦者(候補)を選出
+  2. 現行パラメータ(防衛者)を **同じデータ・同じ検証区間で毎回再採点**
+  3. 以下のゲートを全て通過した場合のみ昇格(`decide()`):
+     有効な候補がある / 検証スコアが `--min-walk-forward-score` 以上 /
+     現行と異なる / 現行の再採点スコアを `--min-improvement-margin` 以上上回る
+  4. 結果は昇格の有無に関わらず `state/optimization_history_<strategy>.jsonl` に理由コード付きで記録
+- 再起動時は `state/active_params_<strategy>.json` の最後に昇格したパラメータから再開
+
+### 6. 自己改善システム自体の検証(リプレイ)
+
+「自己改善を入れたら本当に良くなるのか」を、実運用と **同じ判定ロジック** で過去データ上に
+1本ずつ再現して確かめます。各サイクルはその時点までのデータしか見ません(先読みなし)。
+
+```bash
+python -m trading_bot.cli replay --exchange kraken --symbol BTC/USD \
+  --history-candles 360 --reoptimize-every 24 --export-json state/replay.json
+```
+
+自己改善システム / 初期パラメータ固定 / バイ&ホールドの3本を同じ期間で比較し、
+全サイクルの判定(候補・スコア・昇格/却下理由)を出力します。
+
+> Kraken の公開OHLC APIは直近約720本しか返さないため(1h足で約30日)、検証区間は短く、
+> 結果の統計的な信頼度は限定的です。`--min-trades` を下げるほど判定は緩くなります。
 
 ## テスト
 

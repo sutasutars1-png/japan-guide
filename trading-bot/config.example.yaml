@@ -19,7 +19,10 @@ optimize:
   min_trades: 5          # candidates with fewer trades in a fold score -inf
 
 self_improve:
-  history_candles: 3000
-  interval_seconds: 86400        # re-optimize once per day
+  history_candles: 720           # Kraken's public OHLC endpoint returns ~720 bars
+  step_seconds: 3600             # trade decision every bar (1h)
+  reoptimize_every: 24           # re-optimize every 24 bars (once per day)
+  n_splits: 3
+  min_trades: 3                  # per walk-forward fold; folds are short, see README
   min_walk_forward_score: 0.0    # candidate must be OOS-profitable (risk-adjusted)
-  min_improvement_margin: 0.05   # ...and clearly better than what's live, or don't switch
+  min_improvement_margin: 0.05   # ...and beat the re-scored incumbent by this much, or don't switch

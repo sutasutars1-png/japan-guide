@@ -2,7 +2,7 @@
 
     python -m trading_bot.cli <subcommand> [options]
 
-Subcommands: fetch-data, backtest, optimize, paper-trade, self-improve.
+Subcommands: fetch-data, backtest, optimize, paper-trade, self-improve, replay.
 Nothing in this CLI places a real exchange order — see README.md.
 """
 from __future__ import annotations
@@ -18,7 +18,8 @@ from .backtest.engine import BacktestEngine
 from .data.fetch import OHLCVFetcher, load_csv
 from .optimize.optimizer import WalkForwardOptimizer
 from .paper.trader import PaperTrader
-from .self_improve.loop import SelfImprovementLoop
+from .self_improve.loop import GateConfig, SelfImprovementLoop
+from .self_improve.replay import replay
 from .strategy import STRATEGIES
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -67,7 +68,7 @@ def cmd_optimize(args) -> None:
     df = _load_history(args)
     strategy_cls = _strategy_cls(args.strategy)
     engine = BacktestEngine(initial_cash=args.initial_cash, fee_rate=args.fee_rate)
-    optimizer = WalkForwardOptimizer(engine=engine, n_splits=args.n_splits)
+    optimizer = WalkForwardOptimizer(engine=engine, n_splits=args.n_splits, min_trades=args.min_trades)
     result = optimizer.optimize(df, strategy_cls, timeframe=args.timeframe)
     print(json.dumps(result.to_dict(), indent=2, default=str))
 
@@ -156,6 +157,7 @@ def cmd_self_improve(args) -> None:
         optimizer=WalkForwardOptimizer(
             engine=BacktestEngine(initial_cash=args.initial_cash, fee_rate=args.fee_rate),
             n_splits=args.n_splits,
+            min_trades=args.min_trades,
         ),
         strategy_cls=strategy_cls,
         history_provider=history_provider,
@@ -165,10 +167,39 @@ def cmd_self_improve(args) -> None:
         min_improvement_margin=args.min_improvement_margin,
     )
 
-    iterations = None if args.iterations <= 0 else args.iterations
-    for record in loop.run_loop(iterations=iterations, interval_seconds=args.interval_seconds):
-        print(json.dumps(record, default=str))
-        trader.step()
+    steps = None if args.steps <= 0 else args.steps
+    for event in loop.run_schedule(
+        steps=steps, step_seconds=args.step_seconds, reoptimize_every=args.reoptimize_every
+    ):
+        print(json.dumps(event, default=str))
+
+
+def cmd_replay(args) -> None:
+    df = _load_history(args)
+    strategy_cls = _strategy_cls(args.strategy)
+    result = replay(
+        df,
+        strategy_cls,
+        initial_params=dict(strategy_cls(**_parse_params(args.params)).params),
+        optimizer=WalkForwardOptimizer(
+            engine=BacktestEngine(initial_cash=args.initial_cash, fee_rate=args.fee_rate),
+            n_splits=args.n_splits,
+            min_trades=args.min_trades,
+        ),
+        gate=GateConfig(args.min_walk_forward_score, args.min_improvement_margin),
+        history_candles=args.history_candles,
+        reoptimize_every=args.reoptimize_every,
+        timeframe=args.timeframe,
+    )
+    promoted = sum(1 for c in result.cycles if c["promoted"])
+    print(f"{len(result.cycles)} cycles, {promoted} promotions; final active params: {result.params_list[result.active_by_bar[-1]]}")
+    for name, m in result.metrics.items():
+        print(f"  {name:15s} return={m['total_return']:+.4f} sharpe={m['sharpe']} max_dd={m['max_drawdown']:+.4f} trades={m['num_trades']}")
+    if args.export_json:
+        out = Path(args.export_json)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(result.to_dict()), encoding="utf-8")
+        print(f"wrote {out}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -208,6 +239,7 @@ def build_parser() -> argparse.ArgumentParser:
     opt.add_argument("--initial-cash", type=float, default=10_000.0)
     opt.add_argument("--fee-rate", type=float, default=0.001)
     opt.add_argument("--n-splits", type=int, default=4)
+    opt.add_argument("--min-trades", type=int, default=5)
     opt.set_defaults(func=cmd_optimize)
 
     pt = sub.add_parser("paper-trade", help="Run the (simulated-only) paper trading loop")
@@ -221,20 +253,35 @@ def build_parser() -> argparse.ArgumentParser:
     pt.add_argument("--sleep-seconds", type=float, default=60.0)
     pt.set_defaults(func=cmd_paper_trade)
 
-    si = sub.add_parser("self-improve", help="Paper-trade while periodically re-optimizing params")
+    def add_gate_args(p, history_default):
+        p.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
+        p.add_argument("--params", default=None, help="JSON starting params for the strategy")
+        p.add_argument("--initial-cash", type=float, default=10_000.0)
+        p.add_argument("--fee-rate", type=float, default=0.001)
+        p.add_argument("--n-splits", type=int, default=3)
+        p.add_argument("--min-trades", type=int, default=3,
+                       help="closed trades a fold needs before its score counts (folds here are short)")
+        p.add_argument("--history-candles", type=int, default=history_default,
+                       help="trailing bars each re-optimization sees")
+        p.add_argument("--reoptimize-every", type=int, default=24, help="re-optimize every N bars")
+        p.add_argument("--min-walk-forward-score", type=float, default=0.0)
+        p.add_argument("--min-improvement-margin", type=float, default=0.05)
+
+    si = sub.add_parser("self-improve", help="Run the self-improving system: trade every bar, re-optimize on a schedule")
     add_data_args(si, window_default=300, window_help="how many recent candles to keep for signal calc")
-    si.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
-    si.add_argument("--params", default=None, help="JSON starting params for the strategy")
-    si.add_argument("--initial-cash", type=float, default=10_000.0)
-    si.add_argument("--fee-rate", type=float, default=0.001)
+    add_gate_args(si, history_default=720)
     si.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
-    si.add_argument("--iterations", type=int, default=1, help="0 = run forever")
-    si.add_argument("--interval-seconds", type=float, default=86_400.0)
-    si.add_argument("--n-splits", type=int, default=4)
-    si.add_argument("--history-candles", type=int, default=3000)
-    si.add_argument("--min-walk-forward-score", type=float, default=0.0)
-    si.add_argument("--min-improvement-margin", type=float, default=0.05)
+    si.add_argument("--steps", type=int, default=1, help="bars to run; 0 = run forever")
+    si.add_argument("--step-seconds", type=float, default=3600.0, help="wall-clock seconds per bar")
     si.set_defaults(func=cmd_self_improve)
+
+    rp = sub.add_parser("replay", help="Backtest the self-improving system itself over history")
+    add_data_args(rp)
+    add_gate_args(rp, history_default=360)
+    rp.add_argument("--max-candles", type=int, default=3000)
+    rp.add_argument("--refresh", action="store_true")
+    rp.add_argument("--export-json", default=None, help="write the full replay (cycles, equity) as JSON")
+    rp.set_defaults(func=cmd_replay)
 
     return parser
 

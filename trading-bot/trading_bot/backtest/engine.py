@@ -73,8 +73,14 @@ class BacktestEngine:
     def run(self, df: pd.DataFrame, strategy: Strategy, timeframe: str = "1h") -> BacktestResult:
         if df.empty:
             raise ValueError("Cannot backtest an empty OHLCV DataFrame")
+        return self.run_positions(df, strategy.generate_positions(df), timeframe=timeframe)
 
-        raw_position = strategy.generate_positions(df).fillna(0.0)
+    def run_positions(self, df: pd.DataFrame, raw_position: pd.Series, timeframe: str = "1h") -> BacktestResult:
+        """Backtest a precomputed position series (decided at each bar's close)."""
+        if df.empty:
+            raise ValueError("Cannot backtest an empty OHLCV DataFrame")
+
+        raw_position = pd.Series(raw_position, index=df.index, dtype=float).fillna(0.0)
         executed_position = raw_position.shift(1).fillna(0.0)
 
         bar_return = df["close"].pct_change().fillna(0.0)
