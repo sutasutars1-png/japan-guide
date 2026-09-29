@@ -27,12 +27,14 @@
 
 ```
 trading_bot/
-├── data/        OHLCV取得(ccxt, 公開エンドポイントのみ)+ CSVキャッシュ
-├── strategy/    戦略インターフェース + SMAクロスオーバー戦略
+├── data/        OHLCV取得(ccxt, 公開エンドポイントのみ)+ 積み上げ式ストア + 約定履歴からの補完
+├── strategy/    戦略インターフェース + SMAクロス / ブレイクアウト / RSI逆張り / 全戦略(multi)
 ├── backtest/    ベクトル化バックテストエンジン + 指標(Sharpe/DD/勝率等)
 ├── optimize/    ウォークフォワード・グリッドサーチ最適化
 ├── paper/       仮想ポートフォリオ + ペーパートレードループ(実発注なし)
 ├── self_improve/ 定期的な再最適化 + 安全ゲート付きパラメータ昇格 + 過去データでのリプレイ検証
+├── research/    選び方ルールの期間分割検証(holdout)
+├── dashboard/   ダッシュボード(1ファイルのHTML)の生成 + ブラウザ用の計算エンジン
 └── cli.py       上記すべてのコマンドラインエントリポイント
 ```
 
@@ -45,8 +47,11 @@ trading_bot/
 ```bash
 cd trading-bot
 pip install -r requirements.txt
-cp config.example.yaml config.yaml   # 現状 config.yaml は参考用(CLI引数が優先)
+python -m trading_bot.cli bootstrap --days 180   # 保存済みデータの取り込み → 最新足 → 欠けの補完を1コマンドで
 ```
+
+以降のコマンドは既定で Kraken / BTC/USD / 1h 足を対象にします(`--exchange` `--symbol` で変更可)。
+`--params` は JSON か `fast_window=10,slow_window=50` の形式で指定できます(後者は Windows でも引用符不要)。
 
 ## 使い方
 
@@ -84,24 +89,27 @@ Kraken BTC/USD 1h足(4,325本、出所つき)のスナップショットです�
 `backfill` の代わりにこれを取り込み、以降は `fetch-data` / bot の稼働で追記されます。
 
 ```bash
-python -m trading_bot.cli import-csv --exchange kraken --symbol BTC/USD --file seed_data/kraken_BTC-USD_1h.csv
-python -m trading_bot.cli backfill --exchange kraken --symbol BTC/USD --days 180   # スナップショット以降の欠けだけ埋まる
+python -m trading_bot.cli bootstrap --days 180   # = seed_data の取り込み + 最新の公式足 + 欠けの backfill
 ```
+
+**確定した足だけを使う**: 取引所は形成中の足を最後の1本として返すため、取得時に確定前の足を捨てます。
+売買判断は確定足だけで行い、同じ足で二度判断しません。
 
 ### 2. バックテスト
 
 ```bash
-python -m trading_bot.cli backtest --symbol BTC/USDT --timeframe 1h \
-  --strategy sma_crossover --params '{"fast_window": 10, "slow_window": 50}'
+python -m trading_bot.cli backtest --strategy sma_crossover --params fast_window=10,slow_window=50
 ```
+
+コストは `--fee-rate`(既定0.1%)と `--slippage-rate`(成行の不利な約定分、既定0.05%)の片道合計で、
+売買のたびに差し引きます。
 
 `total_return / cagr / sharpe / max_drawdown / win_rate / num_trades` を出力します。
 
 ### 3. パラメータ最適化(ウォークフォワード)
 
 ```bash
-python -m trading_bot.cli optimize --symbol BTC/USDT --timeframe 1h \
-  --strategy sma_crossover --n-splits 4
+python -m trading_bot.cli optimize --strategy sma_crossover --n-splits 4
 ```
 
 - `walk_forward_score`: 「過去に同じ手順で再最適化していたら、実際どうだったか」を
@@ -111,8 +119,7 @@ python -m trading_bot.cli optimize --symbol BTC/USDT --timeframe 1h \
 ### 4. ペーパートレード(実発注なし)
 
 ```bash
-python -m trading_bot.cli paper-trade --symbol BTC/USDT --timeframe 1h \
-  --strategy sma_crossover --params '{"fast_window": 10, "slow_window": 50}' \
+python -m trading_bot.cli paper-trade --strategy sma_crossover --params fast_window=10,slow_window=50 \
   --iterations 0 --sleep-seconds 3600   # 0 = 無限ループ(1時間ごとに判定)
 ```
 
@@ -124,24 +131,27 @@ python -m trading_bot.cli paper-trade --symbol BTC/USDT --timeframe 1h \
 パラメータは人が手で調整せず、システムが決められたスケジュールとルールで自動更新します。
 
 ```bash
-python -m trading_bot.cli self-improve --exchange kraken --symbol BTC/USD --timeframe 1h \
-  --params '{"fast_window": 10, "slow_window": 50}' \
-  --steps 0 --step-seconds 3600 --reoptimize-every 24 \
-  --history-candles 1440 --n-splits 4 --min-trades 5 \
-  --min-walk-forward-score 0.0 --min-improvement-margin 0.05
+python -m trading_bot.cli self-improve --strategy sma_crossover --params fast_window=10,slow_window=50 \
+  --steps 0 --reoptimize-every 24 --history-candles 1440 --n-splits 4 --min-trades 5 \
+  --min-walk-forward-score 0.0 --min-improvement-margin 0.05 \
+  --dashboard-out state/dashboard.html
 ```
 
-- **毎バー(1時間ごと)** に稼働中パラメータで売買判断(ペーパートレード)
+- **足が確定するたび(1時間ごと、確定の20秒後に起床)** に稼働中パラメータで売買判断(ペーパートレード)。
+  取引所がまだ新しい足を出していなければ60秒ごとに再試行し、同じ足で二度判断しない
 - **`--reoptimize-every` バーごと(既定24 = 1日1回)** に再最適化サイクルを実行:
   1. 直近 `--history-candles` 本でウォークフォワード最適化 → 挑戦者(候補)を選出
   2. 現行パラメータ(防衛者)を **同じデータ・同じ検証区間で毎回再採点**
   3. 以下のゲートを全て通過した場合のみ昇格(`decide()`):
      有効な候補がある / 検証スコアが `--min-walk-forward-score` 以上 /
-     現行と異なる / 現行の再採点スコアを `--min-improvement-margin` 以上上回る
+     現行と異なる / 現行の再採点スコアを必要改善幅以上上回る。
+     必要改善幅は `--min-improvement-margin` × √(候補数 ÷ 15)(候補が多いほど偶然の当たりを拾いやすいため)
   4. 結果は昇格の有無に関わらず `state/optimization_history_<strategy>.jsonl` に理由コード付きで記録
 - 再起動時は `state/active_params_<strategy>.json` の最後に昇格したパラメータから再開
 - 学習に使う直近1440本(60日)は Kraken の1h足APIの上限(約720本)を超えるため、
-  先に `backfill` でストアを延ばしておくこと(稼働中は毎バー自動で追記される)
+  先に `bootstrap` でストアを用意しておくこと(稼働中は毎バー自動で追記される)
+- `--strategy multi` で SMAクロス・ブレイクアウト・RSI逆張りの35候補から戦略ごと選ぶ(検証結果は下記。既定は `sma_crossover`)
+- 起動時の設定は `state/run_config.json` に記録。`--dashboard-out` を付けると再最適化のたびにダッシュボードを更新
 
 ### 6. 自己改善システム自体の検証(リプレイ)
 
@@ -156,7 +166,7 @@ python -m trading_bot.cli replay --exchange kraken --symbol BTC/USD \
 自己改善システム / 初期パラメータ固定 / バイ&ホールドの3本を同じ期間で比較し、
 全サイクルの判定(候補・スコア・昇格/却下理由)を出力します。
 
-#### 180日分(2026-04〜09, Kraken BTC/USD 1h, 開始 10/50, 24本ごと)での検証結果
+#### 180日分(2026-04〜09, Kraken BTC/USD 1h, 開始 10/50, 24本ごと)での検証結果(旧コスト: 手数料0.1%のみ・スリッページなし)
 
 | 学習本数 | 分割 | 最低取引 | 昇格/サイクル | 自己改善 | Sharpe | 最大DD |
 |---:|---:|---:|---:|---:|---:|---:|
@@ -174,6 +184,32 @@ python -m trading_bot.cli replay --exchange kraken --symbol BTC/USD \
 - 上昇相場ではロングオンリーのSMAクロスはバイ&ホールドに届きにくい。自己改善の効果は「固定パラメータより良い」の範囲
 - 取引回数は180日で50〜70回(週2〜3回)。1h足のまま取引機会を維持している
 
+### 7. 選び方ルールの期間分割検証(holdout)
+
+リプレイ結果は選び方ルール(学習本数・分割数・最低取引数)で大きく変わるため、同じデータで選んで
+同じデータで評価すると成績を過大に見積もります。`holdout` は古い期間でルールを選び、
+その選択に使っていない最新期間で確認します。
+
+```bash
+python -m trading_bot.cli holdout --strategy sma_crossover --confirm-days 120 --export-json state/holdout.json
+```
+
+1. 選択期間(古いデータ): ルールの組み合わせ12通りをリプレイし、各設定と隣接設定の Sharpe の平均で選ぶ
+   (単独の最高値ではなく、安定している領域を選ぶ)
+2. 確認期間(最新 `--confirm-days` 日): 全設定を採点し、選んだ設定の順位も隠さず表示
+3. 選んだ設定をコスト水準(片道0.05%〜0.45%)を変えて再評価
+
+### 8. ダッシュボード
+
+```bash
+python -m trading_bot.cli dashboard --out state/dashboard.html
+```
+
+1ファイルのHTMLで、オフラインで開けます。リプレイを選び方ルールを変えながらその場で再計算でき、
+bot の稼働記録(`state/`)があれば「実運用」パネルに仮想ポートフォリオの推移・同じ期間のリプレイ・
+B&H を並べ、判断が2時間以上止まっていれば警告します。ブラウザ側の計算は Python と一致することを
+テストで確認しています(Node.js がある環境のみ)。
+
 ## テスト
 
 ```bash
@@ -185,11 +221,11 @@ pytest -q
 
 ## 既知の制約・今後の検討事項
 
-- 長期(ロング)のみ、単一銘柄、成行相当の約定モデル(手数料はターンオーバーに
-  比例するドラッグとしてのみ考慮、スリッページ・板の厚み・部分約定は未考慮)。
-- 戦略はSMAクロスオーバーのみ実装。`trading_bot/strategy/base.py` の
-  `Strategy` を継承すれば新戦略を追加でき、`STRATEGIES` レジストリに登録するだけで
-  CLI・最適化・自己改善ループ全てから利用可能。
+- 長期(ロング)のみ、単一銘柄、成行相当の約定モデル(手数料とスリッページを片道の固定率で考慮。
+  板の厚み・部分約定は未考慮)。
+- 新戦略は `trading_bot/strategy/base.py` の `Strategy` を継承し `STRATEGIES` と `more.MEMBERS` に登録する。
+  ダッシュボードで扱うには `trading_bot/dashboard/engine.js` にも同じ計算を追加し、
+  `tests/test_dashboard.py` で一致を確認する。
 - 実弾発注(実際の注文実行)は意図的に未実装です。追加する場合は、本READMEの
   「重要な注意事項」を踏まえ、最小限のスコープ・明示的な承認フロー・監視/停止機構を
   併せて設計してください。

@@ -1,8 +1,8 @@
 # Copy to config.yaml and adjust. Nothing here is a credential — this bot
 # never holds an exchange API key or places real orders (see README.md).
 
-exchange: binance      # any ccxt exchange id with public OHLCV (no key needed)
-symbol: "BTC/USDT"
+exchange: kraken       # any ccxt exchange id with public OHLCV (no key needed)
+symbol: "BTC/USD"
 timeframe: "1h"
 
 strategy: sma_crossover
@@ -13,6 +13,7 @@ params:
 backtest:
   initial_cash: 10000.0
   fee_rate: 0.001        # 0.1% per side, adjust to your exchange's taker fee
+  slippage_rate: 0.0005  # 0.05% per side: spread/impact on market orders
 
 optimize:
   n_splits: 4
