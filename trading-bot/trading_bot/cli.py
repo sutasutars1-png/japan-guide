@@ -25,6 +25,8 @@ from .strategy import STRATEGIES
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CACHE_DIR = REPO_ROOT / "data_cache"
 DEFAULT_STATE_DIR = REPO_ROOT / "state"
+# Chosen by `holdout` on the older data (README "7"): margin long/short SMA cross.
+DEFAULT_STRATEGY = "sma_crossover_ls"
 SEED_DIR = REPO_ROOT / "seed_data"
 
 
@@ -468,7 +470,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ho = sub.add_parser("holdout", help="Choose self-improvement rules on older data, confirm on the newest period")
     add_data_args(ho)
-    ho.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
+    ho.add_argument("--strategy", default=DEFAULT_STRATEGY, choices=sorted(STRATEGIES))
     ho.add_argument("--max-candles", type=int, default=100_000)
     ho.add_argument("--refresh", action="store_true")
     ho.add_argument("--confirm-days", type=float, default=240)
@@ -500,7 +502,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_data_args(bt)
     bt.add_argument("--max-candles", type=int, default=2000)
     bt.add_argument("--refresh", action="store_true")
-    bt.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
+    bt.add_argument("--strategy", default=DEFAULT_STRATEGY, choices=sorted(STRATEGIES))
     bt.add_argument("--params", default=None, help='JSON, e.g. \'{"fast_window": 10, "slow_window": 50}\'')
     bt.add_argument("--initial-cash", type=float, default=10_000.0)
     bt.add_argument("--fee-rate", type=float, default=0.0002, help="per-side fee (default: 0.02%% limit/maker)")
@@ -514,7 +516,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_data_args(opt)
     opt.add_argument("--max-candles", type=int, default=3000)
     opt.add_argument("--refresh", action="store_true")
-    opt.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
+    opt.add_argument("--strategy", default=DEFAULT_STRATEGY, choices=sorted(STRATEGIES))
     opt.add_argument("--initial-cash", type=float, default=10_000.0)
     opt.add_argument("--fee-rate", type=float, default=0.0002, help="per-side fee (default: 0.02%% limit/maker)")
     opt.add_argument("--slippage-rate", type=float, default=0.0, help="per-side spread/impact (market orders)")
@@ -528,7 +530,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pt = sub.add_parser("paper-trade", help="Run the (simulated-only) paper trading loop")
     add_data_args(pt, window_default=300, window_help="how many recent candles to keep for signal calc")
-    pt.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
+    pt.add_argument("--strategy", default=DEFAULT_STRATEGY, choices=sorted(STRATEGIES))
     pt.add_argument("--params", default=None, help="JSON params for the strategy")
     pt.add_argument("--initial-cash", type=float, default=10_000.0)
     pt.add_argument("--fee-rate", type=float, default=0.0002, help="per-side fee (default: 0.02%% limit/maker)")
@@ -542,7 +544,7 @@ def build_parser() -> argparse.ArgumentParser:
     pt.set_defaults(func=cmd_paper_trade)
 
     def add_gate_args(p, history_default):
-        p.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
+        p.add_argument("--strategy", default=DEFAULT_STRATEGY, choices=sorted(STRATEGIES))
         p.add_argument("--params", default=None, help="JSON starting params for the strategy")
         p.add_argument("--initial-cash", type=float, default=10_000.0)
         p.add_argument("--fee-rate", type=float, default=0.0002, help="per-side fee (default: 0.02%% limit/maker)")
@@ -551,7 +553,7 @@ def build_parser() -> argparse.ArgumentParser:
                            help="limit: fills only if the next bar trades through the close")
         p.add_argument("--carry-rate-per-day", type=float, default=0.0004, help="margin carry on open positions")
         p.add_argument("--n-splits", type=int, default=3)
-        p.add_argument("--min-trades", type=int, default=3,
+        p.add_argument("--min-trades", type=int, default=5,
                        help="closed trades a fold needs before its score counts")
         p.add_argument("--history-candles", type=int, default=history_default,
                        help="trailing bars each re-optimization sees")

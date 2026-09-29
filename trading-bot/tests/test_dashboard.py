@@ -91,7 +91,7 @@ def test_build_dashboard_embeds_store_and_live_state(sample_ohlcv, tmp_path: Pat
     out = tmp_path / "dash.html"
     main(["self-improve", "--csv", str(store.path), "--state-dir", str(state), "--steps", "30", "--step-seconds", "0",
           "--reoptimize-every", "10", "--history-candles", "600", "--n-splits", "3", "--min-trades", "3",
-          "--params", "fast_window=5,slow_window=30", "--dashboard-out", str(out)])
+          "--strategy", "sma_crossover", "--params", "fast_window=5,slow_window=30", "--dashboard-out", str(out)])
     capsys.readouterr()
 
     html = out.read_text(encoding="utf-8")
