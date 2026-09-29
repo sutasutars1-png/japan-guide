@@ -9,6 +9,8 @@ data_cache/*.lock
 data_cache/*.tmp
 state/*.json
 state/*.jsonl
+state/*.html
+state/*.tmp
 
 config.yaml
 .env

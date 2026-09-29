@@ -2,7 +2,7 @@
 
     python -m trading_bot.cli <subcommand> [options]
 
-Subcommands: bootstrap, fetch-data, backfill, import-csv, data-status, backtest, optimize, paper-trade, self-improve, replay.
+Subcommands: dashboard, bootstrap, fetch-data, backfill, import-csv, data-status, backtest, optimize, paper-trade, self-improve, replay.
 Nothing in this CLI places a real exchange order — see README.md.
 """
 from __future__ import annotations
@@ -36,9 +36,27 @@ def _strategy_cls(name: str):
 
 
 def _parse_params(raw: str | None) -> dict:
+    """JSON (`'{"fast_window": 10}'`) or shell-friendly `fast_window=10,slow_window=50`.
+
+    The key=value form needs no quoting, so the same command works in bash,
+    Windows cmd and PowerShell."""
     if not raw:
         return {}
-    return json.loads(raw)
+    raw = raw.strip()
+    if raw.startswith("{"):
+        return json.loads(raw)
+    params = {}
+    for pair in raw.split(","):
+        key, _, value = pair.partition("=")
+        for cast in (int, float):
+            try:
+                params[key.strip()] = cast(value)
+                break
+            except ValueError:
+                continue
+        else:
+            params[key.strip()] = value.strip()
+    return params
 
 
 def _load_history(args) -> pd.DataFrame:
@@ -172,6 +190,16 @@ def cmd_holdout(args) -> None:
         Path(args.export_json).parent.mkdir(parents=True, exist_ok=True)
         Path(args.export_json).write_text(json.dumps(report.to_dict(), default=str), encoding="utf-8")
         print(f"wrote {args.export_json}")
+
+
+def cmd_dashboard(args) -> None:
+    from .dashboard.build import build_dashboard
+
+    store = _store(args)
+    if args.csv:
+        store.path = Path(args.csv)
+    out = build_dashboard(store, Path(args.out), Path(args.state_dir), args.exchange, args.symbol, args.strategy)
+    print(f"wrote {out} ({out.stat().st_size // 1024} KB)")
 
 
 def cmd_data_status(args) -> None:
@@ -318,13 +346,39 @@ def cmd_self_improve(args) -> None:
         min_improvement_margin=args.min_improvement_margin,
     )
 
+    state_dir = Path(args.state_dir)
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "run_config.json").write_text(json.dumps({
+        "strategy": args.strategy, "params": dict(trader.strategy.params), "exchange": args.exchange,
+        "symbol": args.symbol, "timeframe": args.timeframe, "history_candles": args.history_candles,
+        "reoptimize_every": args.reoptimize_every, "n_splits": args.n_splits, "min_trades": args.min_trades,
+        "min_walk_forward_score": args.min_walk_forward_score, "min_improvement_margin": args.min_improvement_margin,
+        "fee_rate": args.fee_rate, "slippage_rate": args.slippage_rate,
+    }, indent=2), encoding="utf-8")
+
+    def refresh_dashboard():
+        if not args.dashboard_out:
+            return
+        from .dashboard.build import build_dashboard
+
+        try:
+            store = OHLCVFetcher(exchange_id=args.exchange, cache_dir=Path(args.cache_dir)).store(args.symbol, args.timeframe)
+            if args.csv:
+                store.path = Path(args.csv)
+            build_dashboard(store, Path(args.dashboard_out), state_dir, args.exchange, args.symbol, args.strategy)
+        except Exception as exc:  # a report must never stop the trading loop
+            print(json.dumps({"event": "dashboard_error", "error": str(exc)}), flush=True)
+
     steps = None if args.steps <= 0 else args.steps
     if csv_replay is not None:  # a finite file: stop at its end instead of waiting for bars forever
         steps = csv_replay.remaining if steps is None else min(steps, csv_replay.remaining)
     for event in loop.run_schedule(
         steps=steps, step_seconds=args.step_seconds, reoptimize_every=args.reoptimize_every
     ):
-        print(json.dumps(event, default=str))
+        print(json.dumps(event, default=str), flush=True)
+        if event["event"] == "reoptimize":
+            refresh_dashboard()  # the daily summary: rebuilt once per re-optimization cycle
+    refresh_dashboard()
 
 
 def cmd_replay(args) -> None:
@@ -360,8 +414,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     def add_data_args(p, window_default=None, window_help=""):
-        p.add_argument("--exchange", default="binance")
-        p.add_argument("--symbol", default="BTC/USDT")
+        p.add_argument("--exchange", default="kraken")
+        p.add_argument("--symbol", default="BTC/USD")
         p.add_argument("--timeframe", default="1h")
         p.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
         p.add_argument("--csv", default=None, help="load OHLCV from this CSV instead of fetching")
@@ -407,6 +461,13 @@ def build_parser() -> argparse.ArgumentParser:
     ho.add_argument("--workers", type=int, default=4)
     ho.add_argument("--export-json", default=None)
     ho.set_defaults(func=cmd_holdout)
+
+    db = sub.add_parser("dashboard", help="Build the self-contained dashboard HTML (replay + live paper trading)")
+    add_data_args(db)
+    db.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
+    db.add_argument("--strategy", default=None, choices=sorted(STRATEGIES), help="live strategy (default: from run_config.json)")
+    db.add_argument("--out", default=str(DEFAULT_STATE_DIR / "dashboard.html"))
+    db.set_defaults(func=cmd_dashboard)
 
     ds = sub.add_parser("data-status", help="Show how much history the store holds")
     add_data_args(ds)
@@ -468,6 +529,7 @@ def build_parser() -> argparse.ArgumentParser:
     si.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
     si.add_argument("--steps", type=int, default=1, help="bars to run; 0 = run forever")
     si.add_argument("--step-seconds", type=float, default=3600.0, help="wall-clock seconds per bar")
+    si.add_argument("--dashboard-out", default=None, help="rebuild this dashboard HTML after every re-optimization")
     si.set_defaults(func=cmd_self_improve)
 
     rp = sub.add_parser("replay", help="Backtest the self-improving system itself over history")
