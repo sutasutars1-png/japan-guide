@@ -514,8 +514,8 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--initial-cash", type=float, default=10_000.0)
         p.add_argument("--fee-rate", type=float, default=0.001)
         p.add_argument("--slippage-rate", type=float, default=0.0005, help="per-side spread/impact on market orders")
-        p.add_argument("--n-splits", type=int, default=4)
-        p.add_argument("--min-trades", type=int, default=5,
+        p.add_argument("--n-splits", type=int, default=3)
+        p.add_argument("--min-trades", type=int, default=3,
                        help="closed trades a fold needs before its score counts")
         p.add_argument("--history-candles", type=int, default=history_default,
                        help="trailing bars each re-optimization sees")
@@ -525,7 +525,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     si = sub.add_parser("self-improve", help="Run the self-improving system: trade every bar, re-optimize on a schedule")
     add_data_args(si, window_default=300, window_help="how many recent candles to keep for signal calc")
-    add_gate_args(si, history_default=1440)
+    add_gate_args(si, history_default=720)
     si.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
     si.add_argument("--steps", type=int, default=1, help="bars to run; 0 = run forever")
     si.add_argument("--step-seconds", type=float, default=3600.0, help="wall-clock seconds per bar")
@@ -534,7 +534,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     rp = sub.add_parser("replay", help="Backtest the self-improving system itself over history")
     add_data_args(rp)
-    add_gate_args(rp, history_default=1440)
+    add_gate_args(rp, history_default=720)
     rp.add_argument("--max-candles", type=int, default=100_000)
     rp.add_argument("--refresh", action="store_true")
     rp.add_argument("--export-json", default=None, help="write the full replay (cycles, equity) as JSON")

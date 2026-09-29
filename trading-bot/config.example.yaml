@@ -20,10 +20,10 @@ optimize:
   min_trades: 5          # candidates with fewer trades in a fold score -inf
 
 self_improve:
-  history_candles: 1440          # 60 days; needs the store backfilled beyond Kraken's ~720-bar OHLC window
+  history_candles: 720           # 30 days; chosen by `holdout` on 2025-10..2026-05, confirmed on 2026-06..09
   step_seconds: 3600             # trade decision every bar (1h)
   reoptimize_every: 24           # re-optimize every 24 bars (once per day)
-  n_splits: 4
-  min_trades: 5                  # per walk-forward fold (360 bars each at the defaults)
+  n_splits: 3
+  min_trades: 3                  # per walk-forward fold (240 bars each at the defaults)
   min_walk_forward_score: 0.0    # candidate must be OOS-profitable (risk-adjusted)
   min_improvement_margin: 0.05   # ...and beat the re-scored incumbent by this much, or don't switch

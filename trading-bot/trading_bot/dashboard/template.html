@@ -554,7 +554,7 @@ __ENGINE_JS__
   ["text", "text-dim", "text-mute", "good", "critical", "warn", "violet", "blue", "surface-2"].forEach(k => { C[k] = css.getPropertyValue("--" + k).trim(); });
   const MONO = "'IBM Plex Mono', ui-monospace, Menlo, monospace";
 
-  const BASE_DEFAULTS = { strategy: "sma_crossover", every: 24, history: 1440, nSplits: 4, minTrades: 5, minWf: 0, margin: 0.05, fee: 0.1, slip: 0.05, start: null };
+  const BASE_DEFAULTS = { strategy: "sma_crossover", every: 24, history: 720, nSplits: 3, minTrades: 3, minWf: 0, margin: 0.05, fee: 0.1, slip: 0.05, start: null };
   const DEFAULTS = Object.assign({}, BASE_DEFAULTS, CONF.defaults || {});
   const cfg = Object.assign({}, DEFAULTS);
   let R = null, ovCache = null, selectedCycle = -1;
