@@ -2,7 +2,7 @@
 
     python -m trading_bot.cli <subcommand> [options]
 
-Subcommands: fetch-data, backfill, import-csv, data-status, backtest, optimize, paper-trade, self-improve, replay.
+Subcommands: bootstrap, fetch-data, backfill, import-csv, data-status, backtest, optimize, paper-trade, self-improve, replay.
 Nothing in this CLI places a real exchange order — see README.md.
 """
 from __future__ import annotations
@@ -25,6 +25,7 @@ from .strategy import STRATEGIES
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CACHE_DIR = REPO_ROOT / "data_cache"
 DEFAULT_STATE_DIR = REPO_ROOT / "state"
+SEED_DIR = REPO_ROOT / "seed_data"
 
 
 def _strategy_cls(name: str):
@@ -55,22 +56,26 @@ def cmd_fetch_data(args) -> None:
     print(df.tail())
 
 
-def cmd_backfill(args) -> None:
+def _store(args):
+    from .data.store import OHLCVStore
+
+    return OHLCVStore(Path(args.cache_dir), args.exchange, args.symbol, args.timeframe)
+
+
+def _backfill(store, exchange: str, symbol: str, days: float, min_interval: float, chunk_days: float) -> None:
     import time as _time
 
     from .data.kraken_trades import KrakenTradeHistory
-    from .data.store import OHLCVStore
 
-    if args.exchange != "kraken":
+    if exchange != "kraken":
         raise SystemExit("backfill currently rebuilds candles from Kraken's public trade history only")
-    store = OHLCVStore(Path(args.cache_dir), args.exchange, args.symbol, args.timeframe)
     now_ms = int(_time.time() * 1000)
     end_ms = now_ms - now_ms % store.step_ms  # complete bars only
-    start_ms = end_ms - int(args.days * 86_400_000)
-    history = KrakenTradeHistory(args.symbol, min_interval_s=args.min_interval)
+    start_ms = end_ms - int(days * 86_400_000)
+    history = KrakenTradeHistory(symbol, min_interval_s=min_interval)
     ranges = store.missing_ranges(start_ms, end_ms)
     print(f"{len(ranges)} missing range(s), {sum((b - a) // store.step_ms for a, b in ranges)} bars to rebuild", flush=True)
-    chunk = int(args.chunk_days * 86_400_000)
+    chunk = int(chunk_days * 86_400_000)
     for a, b in ranges:  # newest first, so stored history extends contiguously backwards
         hi = b
         while hi > a:
@@ -86,24 +91,52 @@ def cmd_backfill(args) -> None:
                 "bars": len(df), "gap_filled": int(filled.sum()), "api_calls": history.calls, **stats,
             }), flush=True)
             hi = lo
+
+
+def _import_file(store, path: Path, fmt: str) -> None:
+    from .data.store import OHLCVStore
+
+    if fmt == "kraken-ohlcvt":  # Kraken's bulk OHLCVT download: no header, epoch seconds
+        df = pd.read_csv(path, header=None, names=["timestamp", "open", "high", "low", "close", "volume", "trades"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", utc=True)
+        print(json.dumps(store.merge(df, source="exchange_csv")))
+    elif "source" in pd.read_csv(path, nrows=0).columns:  # another store's CSV (e.g. seed_data/): keep provenance
+        src = OHLCVStore(path.parent, "import", "import", store.timeframe)
+        src.path = path
+        for source, rows in src.load().groupby("source"):
+            print(json.dumps({"source": source, **store.merge(rows, source=source)}))
+    else:
+        print(json.dumps(store.merge(load_csv(path), source="exchange_csv")))
+
+
+def cmd_backfill(args) -> None:
+    store = _store(args)
+    _backfill(store, args.exchange, args.symbol, args.days, args.min_interval, args.chunk_days)
     print(json.dumps(store.status(), indent=2))
 
 
 def cmd_import_csv(args) -> None:
-    from .data.store import OHLCVStore
+    store = _store(args)
+    _import_file(store, Path(args.file), args.format)
+    print(json.dumps(store.status(), indent=2))
 
-    store = OHLCVStore(Path(args.cache_dir), args.exchange, args.symbol, args.timeframe)
-    if args.format == "kraken-ohlcvt":  # Kraken's bulk OHLCVT download: no header, epoch seconds
-        df = pd.read_csv(args.file, header=None, names=["timestamp", "open", "high", "low", "close", "volume", "trades"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", utc=True)
-        print(json.dumps(store.merge(df, source="exchange_csv")))
-    elif "source" in pd.read_csv(args.file, nrows=0).columns:  # another store's CSV (e.g. seed_data/): keep provenance
-        src = OHLCVStore(Path(args.file).parent, args.exchange, args.symbol, args.timeframe)
-        src.path = Path(args.file)
-        for source, rows in src.load().groupby("source"):
-            print(json.dumps({"source": source, **store.merge(rows, source=source)}))
+
+def cmd_bootstrap(args) -> None:
+    """Get a fresh machine to a ready store in one command: seed snapshot ->
+    latest official bars -> rebuild whatever is still missing."""
+    store = _store(args)
+    seed = SEED_DIR / store.path.name
+    if seed.exists():
+        print(f"[1/3] importing seed snapshot {seed}", flush=True)
+        _import_file(store, seed, "ohlcv")
     else:
-        print(json.dumps(store.merge(load_csv(Path(args.file)), source="exchange_csv")))
+        print(f"[1/3] no seed snapshot at {seed}; starting from the exchange", flush=True)
+    print("[2/3] merging the latest official bars", flush=True)
+    OHLCVFetcher(exchange_id=args.exchange, cache_dir=Path(args.cache_dir)).fetch(
+        args.symbol, timeframe=args.timeframe, refresh=True
+    )
+    print(f"[3/3] rebuilding anything missing in the last {args.days:g} days", flush=True)
+    _backfill(store, args.exchange, args.symbol, args.days, args.min_interval, args.chunk_days)
     print(json.dumps(store.status(), indent=2))
 
 
@@ -132,24 +165,43 @@ def cmd_optimize(args) -> None:
     print(json.dumps(result.to_dict(), indent=2, default=str))
 
 
-def _build_data_provider(args):
+class CsvReplay:
+    """Replays a CSV bar by bar for offline demos. `next_window()` reveals one
+    more bar per call (the trader's view); `window()` is everything revealed so
+    far, so the optimizer's history can never run ahead of the trader."""
+
+    def __init__(self, df: pd.DataFrame, start: int):
+        self.df = df
+        self.revealed = min(start - 1, len(df))
+
+    @property
+    def remaining(self) -> int:
+        return len(self.df) - self.revealed
+
+    def window(self, n: int) -> pd.DataFrame:
+        return self.df.iloc[max(0, self.revealed - n) : self.revealed].reset_index(drop=True)
+
+    def next_window(self, n: int) -> pd.DataFrame:
+        self.revealed = min(self.revealed + 1, len(self.df))
+        return self.window(n)
+
+    def upcoming_window(self, n: int) -> pd.DataFrame:
+        """History through the bar the trader will decide on next — what a
+        live re-optimization sees, since that bar has closed by then."""
+        end = min(self.revealed + 1, len(self.df))
+        return self.df.iloc[max(0, end - n) : end].reset_index(drop=True)
+
+
+def _build_data_provider(args, replay_state: "CsvReplay | None" = None):
     """A zero-arg callable returning the latest OHLCV window for one step.
 
-    With `--csv`, replays the file bar-by-bar (an expanding cursor, advanced
-    on every call) instead of hitting the network — this is what lets
-    paper-trade/self-improve be demoed and tested with no exchange access.
+    With `--csv`, replays the file bar-by-bar instead of hitting the network —
+    this is what lets paper-trade/self-improve be demoed and tested with no
+    exchange access.
     """
     if args.csv:
-        full_df = load_csv(Path(args.csv))
-        cursor = {"i": args.window}
-
-        def replay_provider() -> pd.DataFrame:
-            idx = min(cursor["i"], len(full_df))
-            window_df = full_df.iloc[max(0, idx - args.window) : idx].reset_index(drop=True)
-            cursor["i"] = min(cursor["i"] + 1, len(full_df))
-            return window_df
-
-        return replay_provider
+        replay_state = replay_state or CsvReplay(load_csv(Path(args.csv)), start=args.window)
+        return lambda: replay_state.next_window(args.window)
 
     fetcher = OHLCVFetcher(exchange_id=args.exchange, cache_dir=Path(args.cache_dir))
 
@@ -183,22 +235,26 @@ def cmd_paper_trade(args) -> None:
 
 def cmd_self_improve(args) -> None:
     strategy_cls = _strategy_cls(args.strategy)
+    csv_replay = None
+    if args.csv:
+        # Start once enough bars exist for the first re-optimization.
+        csv_replay = CsvReplay(load_csv(Path(args.csv)), start=max(args.window, args.history_candles))
     trader = PaperTrader(
         symbol=args.symbol,
         strategy_cls=strategy_cls,
         params=_parse_params(args.params),
-        data_provider=_build_data_provider(args),
+        data_provider=_build_data_provider(args, csv_replay),
         state_dir=Path(args.state_dir),
         timeframe=args.timeframe,
         initial_cash=args.initial_cash,
         fee_rate=args.fee_rate,
     )
 
-    if args.csv:
-        full_history_df = load_csv(Path(args.csv))
+    if csv_replay is not None:
 
         def history_provider() -> pd.DataFrame:
-            return full_history_df.tail(args.history_candles).reset_index(drop=True)
+            # Ends at the bar the trader is about to decide on, never later.
+            return csv_replay.upcoming_window(args.history_candles)
 
     else:
         fetcher = OHLCVFetcher(exchange_id=args.exchange, cache_dir=Path(args.cache_dir))
@@ -227,6 +283,8 @@ def cmd_self_improve(args) -> None:
     )
 
     steps = None if args.steps <= 0 else args.steps
+    if csv_replay is not None:  # a finite file: stop at its end instead of waiting for bars forever
+        steps = csv_replay.remaining if steps is None else min(steps, csv_replay.remaining)
     for event in loop.run_schedule(
         steps=steps, step_seconds=args.step_seconds, reoptimize_every=args.reoptimize_every
     ):
@@ -285,6 +343,13 @@ def build_parser() -> argparse.ArgumentParser:
     bf.add_argument("--chunk-days", type=float, default=2, help="merge into the store after every N days rebuilt")
     bf.add_argument("--min-interval", type=float, default=1.0, help="seconds between API calls")
     bf.set_defaults(func=cmd_backfill)
+
+    bs = sub.add_parser("bootstrap", help="One-command data setup: seed snapshot + latest bars + backfill of gaps")
+    add_data_args(bs)
+    bs.add_argument("--days", type=float, default=180, help="how far back the store should reach")
+    bs.add_argument("--chunk-days", type=float, default=4)
+    bs.add_argument("--min-interval", type=float, default=1.0, help="seconds between API calls")
+    bs.set_defaults(func=cmd_bootstrap)
 
     ic = sub.add_parser("import-csv", help="Merge an OHLCV CSV (e.g. Kraken's OHLCVT download) into the store")
     add_data_args(ic)

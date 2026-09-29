@@ -46,6 +46,17 @@ class PaperTrader:
 
         self.portfolio = Portfolio.load_or_create(self.portfolio_path, symbol, initial_cash, fee_rate)
         self.strategy = strategy_cls(**params)
+        self.last_decided_bar = self._last_logged_bar()
+
+    def _last_logged_bar(self) -> Optional[str]:
+        if not self.decisions_log_path.exists():
+            return None
+        last = None
+        with open(self.decisions_log_path, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    last = line
+        return json.loads(last)["timestamp"] if last else None
 
     def set_params(self, params: dict) -> None:
         """Swap the active strategy's parameters (used by the self-improve loop)."""
@@ -57,11 +68,16 @@ class PaperTrader:
         if df.empty:
             raise ValueError("data_provider returned an empty OHLCV DataFrame")
 
+        latest_ts = df["timestamp"].iloc[-1]
+        ts_str = latest_ts.isoformat() if hasattr(latest_ts, "isoformat") else str(latest_ts)
+        if ts_str == self.last_decided_bar:
+            # No new closed bar since the last decision (early wake-up, restart,
+            # or the exchange hasn't published the bar yet): never act twice on one bar.
+            return {"timestamp": ts_str, "action": "no_new_bar", "params": self.strategy.params}
+
         positions = self.strategy.generate_positions(df)
         desired_position = float(positions.iloc[-1])
         latest_price = float(df["close"].iloc[-1])
-        latest_ts = df["timestamp"].iloc[-1]
-        ts_str = latest_ts.isoformat() if hasattr(latest_ts, "isoformat") else str(latest_ts)
 
         action = "hold"
         if desired_position == 1.0 and self.portfolio.is_flat():
@@ -82,6 +98,7 @@ class PaperTrader:
             "params": self.strategy.params,
         }
         self._append_decision(record)
+        self.last_decided_bar = ts_str
         return record
 
     def _append_decision(self, record: dict) -> None:

@@ -22,6 +22,7 @@ Gates (all required to promote), evaluated by `decide()`:
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -183,19 +184,38 @@ class SelfImprovementLoop:
         steps: Optional[int] = None,
         step_seconds: float = 3600.0,
         reoptimize_every: int = 24,
+        settle_seconds: float = 20.0,
+        retry_seconds: float = 60.0,
+        clock: Callable[[], float] = time.time,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> Iterator[dict]:
-        """The live self-improving system: paper-trade every `step_seconds`
-        (one bar) and re-optimize every `reoptimize_every` steps, starting
-        with a re-optimization on step 0. Yields one event per action."""
-        import time
+        """The live self-improving system: decide once per closed bar and
+        re-optimize every `reoptimize_every` decided bars (starting with one
+        before the first decision). Yields one event per action.
 
+        Wakes `settle_seconds` after each bar boundary (a multiple of
+        `step_seconds`) rather than sleeping a fixed interval, so decisions
+        stay aligned to bar closes. If the exchange hasn't published the new
+        bar yet, retries every `retry_seconds` until it has; only decided
+        bars count toward `steps` and the re-optimization schedule."""
         if reoptimize_every < 1:
             raise ValueError("reoptimize_every must be >= 1")
-        count = 0
-        while steps is None or count < steps:
-            if count % reoptimize_every == 0:
+        bars = 0
+        last_reoptimized_at = None
+        while steps is None or bars < steps:
+            if bars % reoptimize_every == 0 and last_reoptimized_at != bars:
+                last_reoptimized_at = bars
                 yield {"event": "reoptimize", **self.maybe_improve()}
-            yield {"event": "step", **self.trader.step()}
-            count += 1
-            if steps is None or count < steps:
-                time.sleep(step_seconds)
+            record = self.trader.step()
+            yield {"event": "step", **record}
+            decided = record.get("action") != "no_new_bar"
+            if decided:
+                bars += 1
+            if steps is not None and bars >= steps:
+                break
+            if step_seconds <= 0:
+                continue
+            now = clock()
+            next_wake = (now // step_seconds + 1) * step_seconds + settle_seconds
+            wait = next_wake - now if decided else min(retry_seconds, next_wake - now)
+            sleep(max(0.0, wait))

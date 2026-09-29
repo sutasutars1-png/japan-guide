@@ -13,6 +13,8 @@ import pandas as pd
 
 OHLCV_COLUMNS = ["timestamp", "open", "high", "low", "close", "volume"]
 
+TIMEFRAME_MS = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000}
+
 DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[2] / "data_cache"
 
 
@@ -54,9 +56,10 @@ class OHLCVFetcher:
     queries orders — it has no code path that could touch a real account.
     """
 
-    def __init__(self, exchange_id: str = "binance", cache_dir: Path = DEFAULT_CACHE_DIR):
+    def __init__(self, exchange_id: str = "binance", cache_dir: Path = DEFAULT_CACHE_DIR, clock=time.time):
         self.exchange_id = exchange_id
         self.cache_dir = Path(cache_dir)
+        self.clock = clock
         self._exchange = None
 
     def _get_exchange(self):
@@ -139,6 +142,15 @@ class OHLCVFetcher:
             raise RuntimeError(f"No OHLCV data returned for {symbol} on {self.exchange_id}")
 
         df = pd.DataFrame(all_rows, columns=OHLCV_COLUMNS)
+        df = closed_bars(df, timeframe, now_ms=int(self.clock() * 1000))
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
         df = df.drop_duplicates(subset="timestamp").sort_values("timestamp").reset_index(drop=True)
         return df.tail(max_candles).reset_index(drop=True)
+
+
+def closed_bars(df: pd.DataFrame, timeframe: str, now_ms: int) -> pd.DataFrame:
+    """Drop bars still forming at `now_ms` (exchanges return the current,
+    uncommitted bar as the last row; deciding on it would use a price the bar
+    may not close at). `timestamp` is ms since epoch, the bar's open time."""
+    step = TIMEFRAME_MS[timeframe]
+    return df[df["timestamp"] + step <= now_ms]

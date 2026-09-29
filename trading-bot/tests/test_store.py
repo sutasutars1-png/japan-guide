@@ -62,6 +62,14 @@ def test_missing_ranges_newest_first(tmp_path: Path):
     ]
 
 
+def test_closed_bars_drops_the_bar_still_forming():
+    from trading_bot.data.fetch import closed_bars
+
+    df = pd.DataFrame({"timestamp": [T0, T0 + H, T0 + 2 * H], "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0})
+    assert closed_bars(df, "1h", now_ms=T0 + 2 * H + 10)["timestamp"].tolist() == [T0, T0 + H]
+    assert closed_bars(df, "1h", now_ms=T0 + 3 * H)["timestamp"].tolist() == [T0, T0 + H, T0 + 2 * H]
+
+
 def test_aggregate_trades_builds_ohlcv_and_fills_empty_hours():
     s = T0 / 1000
     trades = [(s + 10, 100.0, 1.0), (s + 20, 105.0, 2.0), (s + 30, 95.0, 1.0), (s + 40, 101.0, 1.0),

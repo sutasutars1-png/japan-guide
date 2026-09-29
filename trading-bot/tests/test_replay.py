@@ -88,23 +88,62 @@ def test_fold_scoring_warms_up_indicators(sample_ohlcv):
     assert warmed.position.iloc[1:].sum() > cold.position.sum()
 
 
-def test_run_schedule_trades_every_bar_and_reoptimizes_on_schedule(tmp_path: Path, sample_ohlcv):
+def _scheduled_loop(tmp_path: Path, df, publish):
+    """A loop whose data source reveals one more closed bar each time publish() says so."""
+    state = {"end": 600}
+
+    def provider():
+        if publish():
+            state["end"] += 1
+        return df.iloc[: state["end"]].reset_index(drop=True)
+
     trader = PaperTrader(
-        symbol="BTC/USDT",
-        strategy_cls=SMACrossoverStrategy,
-        params=A,
-        data_provider=lambda: sample_ohlcv,
-        state_dir=tmp_path,
+        symbol="BTC/USDT", strategy_cls=SMACrossoverStrategy, params=A, data_provider=provider, state_dir=tmp_path
     )
     loop = SelfImprovementLoop(
         trader=trader,
         optimizer=_optimizer(),
         strategy_cls=SMACrossoverStrategy,
-        history_provider=lambda: sample_ohlcv,
+        history_provider=lambda: df.iloc[: state["end"]].reset_index(drop=True),
         state_dir=tmp_path,
     )
+    return loop
+
+
+def test_run_schedule_trades_every_bar_and_reoptimizes_on_schedule(tmp_path: Path, sample_ohlcv):
+    loop = _scheduled_loop(tmp_path, sample_ohlcv, publish=lambda: True)
     events = [e["event"] for e in loop.run_schedule(steps=5, step_seconds=0, reoptimize_every=2)]
     assert events == ["reoptimize", "step", "step", "reoptimize", "step", "step", "reoptimize", "step"]
+
+
+def test_run_schedule_waits_for_unpublished_bars_without_counting_them(tmp_path: Path, sample_ohlcv):
+    published = iter([True, False, False, True, True])  # bar 2 arrives only on the 3rd retry
+    loop = _scheduled_loop(tmp_path, sample_ohlcv, publish=lambda: next(published))
+    clock = {"t": 7200.0 + 5}  # 5 s past a bar boundary
+    sleeps = []
+
+    def sleep(s):
+        sleeps.append(s)
+        clock["t"] += s
+
+    events = list(loop.run_schedule(steps=3, step_seconds=3600, reoptimize_every=24, settle_seconds=20,
+                                    retry_seconds=60, clock=lambda: clock["t"], sleep=sleep))
+    steps = [e for e in events if e["event"] == "step"]
+    assert [e["action"] == "no_new_bar" for e in steps] == [False, True, True, False, False]
+    assert sum(e["event"] == "reoptimize" for e in events) == 1  # retries don't re-trigger it
+    # After a decision it sleeps to 20 s past the next boundary; while waiting it retries every 60 s.
+    assert sleeps[0] == pytest.approx(3600 + 20 - 5)
+    assert sleeps[1] == 60 and sleeps[2] == 60
+
+
+def test_trader_never_decides_twice_on_the_same_bar_even_after_restart(tmp_path: Path, sample_ohlcv):
+    def make():
+        return PaperTrader(symbol="BTC/USDT", strategy_cls=SMACrossoverStrategy, params=A,
+                           data_provider=lambda: sample_ohlcv, state_dir=tmp_path)
+
+    assert make().step()["action"] != "no_new_bar"
+    assert make().step()["action"] == "no_new_bar"
+    assert len(make().decisions_log_path.read_text().strip().splitlines()) == 1
 
 
 def test_restart_resumes_promoted_params(tmp_path: Path, sample_ohlcv):

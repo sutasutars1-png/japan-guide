@@ -20,7 +20,7 @@ try:
 except ImportError:  # Windows: merges are not serialized across processes
     fcntl = None
 
-from .fetch import OHLCV_COLUMNS, cache_path
+from .fetch import OHLCV_COLUMNS, TIMEFRAME_MS, cache_path
 
 SOURCE_PRIORITY = {
     "exchange_ohlc": 3,     # the exchange's own candle endpoint
@@ -28,8 +28,6 @@ SOURCE_PRIORITY = {
     "trades": 2,            # candles aggregated from the exchange's public trade history
     "gap_fill": 1,          # an hour with no trades: previous close carried forward, zero volume
 }
-
-TIMEFRAME_MS = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000}
 
 
 def _to_ms(ts: pd.Series) -> pd.Series:
