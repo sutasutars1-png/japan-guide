@@ -85,6 +85,7 @@
   }
   .pill.long { color: var(--good); background: var(--good-tint); border-color: rgba(15,174,138,0.4); }
   .pill.flat { color: var(--text-dim); background: var(--surface-3); border-color: var(--border-strong); }
+  .pill.short { color: var(--critical); background: var(--critical-tint); border-color: rgba(229,72,77,0.4); }
   .pill.paper { color: var(--warn); background: var(--warn-tint); border-color: rgba(201,154,46,0.4); }
 
   /* system status strip */
@@ -407,6 +408,7 @@
               <tr>
                 <th>#</th>
                 <th>パラメータ</th>
+                <th>方向</th>
                 <th>エントリー (UTC)</th>
                 <th class="num">価格</th>
                 <th>エグジット (UTC)</th>
@@ -430,12 +432,28 @@
           <div class="field">
             <div class="field-head"><label class="field-label" for="strategy">候補にする戦略</label></div>
             <select id="strategy">
-              <option value="sma_crossover">SMAクロスのみ(15候補)</option>
-              <option value="multi">全戦略から選ぶ(35候補)</option>
-              <option value="donchian_breakout">ブレイクアウトのみ(11候補)</option>
-              <option value="rsi_reversion">RSI逆張りのみ(9候補)</option>
+              <optgroup label="信用(買い・売り)">
+                <option value="sma_crossover_ls">SMAクロス 買い/売り(45候補)</option>
+                <option value="multi_ls">全戦略 買い/売り(65候補)</option>
+                <option value="donchian_breakout_ls">ブレイクアウト 買い/売り(11候補)</option>
+                <option value="rsi_reversion_ls">RSI逆張り 買い/売り(9候補)</option>
+              </optgroup>
+              <optgroup label="買いのみ">
+                <option value="sma_crossover">SMAクロスのみ(15候補)</option>
+                <option value="multi">全戦略から選ぶ(35候補)</option>
+                <option value="donchian_breakout">ブレイクアウトのみ(11候補)</option>
+                <option value="rsi_reversion">RSI逆張りのみ(9候補)</option>
+              </optgroup>
             </select>
-            <div class="field-help">候補が多いほど偶然の当たりを拾いやすいため、昇格に必要な改善幅は候補数に応じて自動で大きくなります。</div>
+            <div class="field-help">買い/売りは下落局面で空売りします(証拠金取引、1倍)。候補が多いほど偶然の当たりを拾いやすいため、昇格に必要な改善幅は候補数に応じて自動で大きくなります。</div>
+          </div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="score">候補の採点基準</label></div>
+            <select id="score">
+              <option value="return">年率リターン</option>
+              <option value="sharpe">Sharpe(リスク調整後)</option>
+            </select>
+            <div class="field-help">最適化が候補を比べる物差し。下限・改善幅もこの単位で判定します。</div>
           </div>
 
           <div class="group-label">スケジュール</div>
@@ -464,7 +482,7 @@
           <div class="field">
             <div class="field-head"><label class="field-label" for="minWf">候補スコアの下限</label><span class="field-value" id="minWfV"></span></div>
             <input type="range" id="minWf" min="-3" max="3" step="0.25" value="0">
-            <div class="field-help">検証区間での年率換算Sharpeの平均。0なら「検証でプラス」が条件です。</div>
+            <div class="field-help">検証区間での採点基準(年率換算)の平均。0なら「検証でプラス」が条件です。</div>
           </div>
           <div class="field">
             <div class="field-head"><label class="field-label" for="margin">現行に対する必要改善幅</label><span class="field-value" id="marginV"></span></div>
@@ -480,7 +498,20 @@
           <div class="field">
             <div class="field-head"><label class="field-label" for="slip">スリッページ(片道)</label><span class="field-value" id="slipV"></span></div>
             <input type="range" id="slip" min="0" max="0.3" step="0.01" value="0.05">
-            <div class="field-help">成行注文で終値より不利に約定する分。手数料と合わせて1回の売買ごとに差し引きます。</div>
+            <div class="field-help">終値より不利に約定する分。指値なら0で、代わりに約定しない回があります。</div>
+          </div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="orderType">注文方法</label></div>
+            <select id="orderType">
+              <option value="limit">指値(判断した足の終値)</option>
+              <option value="market">成行</option>
+            </select>
+            <div class="field-help">指値は次の足がその価格を突き抜けたときだけ約定し、約定しなければ次の終値で出し直します。</div>
+          </div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="carry">建玉の金利(1日あたり)</label><span class="field-value" id="carryV"></span></div>
+            <input type="range" id="carry" min="0" max="0.1" step="0.01" value="0.04">
+            <div class="field-help">信用で建玉を持っている間、毎時かかる費用。買い持ちの比較対象(現物)にはかかりません。</div>
           </div>
           <div class="field">
             <div class="field-head"><label class="field-label" for="startParams">開始パラメータ</label></div>
@@ -520,7 +551,7 @@
       <section class="panel">
         <div class="panel-title">候補ランキング</div>
         <div class="panel-sub" id="rankSub" style="margin-bottom:10px;">-</div>
-        <div class="table-scroll"><table class="data rank"><thead><tr><th>#</th><th>候補</th><th class="num">Sharpe(学習窓)</th><th></th></tr></thead><tbody id="rankBody"></tbody></table></div>
+        <div class="table-scroll"><table class="data rank"><thead><tr><th>#</th><th>候補</th><th class="num" id="rankScoreHead">スコア(学習窓)</th><th></th></tr></thead><tbody id="rankBody"></tbody></table></div>
       </section>
     </div>
   </div>
@@ -554,7 +585,7 @@ __ENGINE_JS__
   ["text", "text-dim", "text-mute", "good", "critical", "warn", "violet", "blue", "surface-2"].forEach(k => { C[k] = css.getPropertyValue("--" + k).trim(); });
   const MONO = "'IBM Plex Mono', ui-monospace, Menlo, monospace";
 
-  const BASE_DEFAULTS = { strategy: "sma_crossover", every: 24, history: 720, nSplits: 3, minTrades: 3, minWf: 0, margin: 0.05, fee: 0.1, slip: 0.05, start: null };
+  const BASE_DEFAULTS = { strategy: "sma_crossover_ls", score: "return", orderType: "limit", every: 24, history: 720, nSplits: 3, minTrades: 3, minWf: 0, margin: 0.05, fee: 0.02, slip: 0, carry: 0.04, start: null };
   const DEFAULTS = Object.assign({}, BASE_DEFAULTS, CONF.defaults || {});
   const cfg = Object.assign({}, DEFAULTS);
   let R = null, ovCache = null, selectedCycle = -1;
@@ -570,7 +601,7 @@ __ENGINE_JS__
   const fmtScore = v => (Number.isFinite(v) ? v.toFixed(2) : "—");
   function fmtP(p) {
     if (!p) return "—";
-    const name = p.strategy || ("fast_window" in p ? "sma_crossover" : "entry_window" in p ? "donchian_breakout" : "period" in p ? "rsi_reversion" : null);
+    const name = p.strategy || ("band" in p ? "sma_crossover_ls" : "fast_window" in p ? "sma_crossover" : "entry_window" in p ? "donchian_breakout" : "period" in p ? "rsi_reversion" : null);
     return name ? SIL.STRATEGIES[name].label(p) : JSON.stringify(p);
   }
   const fmtDate = ts => { const d = new Date(ts); return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()) + " " + pad(d.getUTCHours()) + ":00"; };
@@ -593,7 +624,8 @@ __ENGINE_JS__
   }
 
   // ---------- controls ----------
-  const sliders = ["every", "history", "nSplits", "minTrades", "minWf", "margin", "fee", "slip"];
+  const sliders = ["every", "history", "nSplits", "minTrades", "minWf", "margin", "fee", "slip", "carry"];
+  const selects = ["score", "orderType"];
   function fillStartOptions() {
     const sel = $("startParams");
     sel.innerHTML = "";
@@ -619,17 +651,21 @@ __ENGINE_JS__
     $("marginV").textContent = cfg.margin.toFixed(2) + " × 候補数補正";
     $("feeV").textContent = cfg.fee.toFixed(2) + "%";
     $("slipV").textContent = cfg.slip.toFixed(2) + "%";
+    $("carryV").textContent = cfg.carry.toFixed(2) + "%";
+    $("rankScoreHead").textContent = (cfg.score === "return" ? "年率リターン" : "Sharpe") + "(学習窓)";
     $("cmdText").textContent =
       "python -m trading_bot.cli self-improve --exchange " + (CONF.exchange || "kraken") + " --symbol " + (CONF.symbol || "BTC/USD") +
       " --timeframe 1h --strategy " + cfg.strategy + " --params " + paramArg(cfg.start) +
       " --steps 0 --reoptimize-every " + cfg.every + " --history-candles " + cfg.history +
-      " --n-splits " + cfg.nSplits + " --min-trades " + cfg.minTrades +
+      " --n-splits " + cfg.nSplits + " --min-trades " + cfg.minTrades + " --score " + cfg.score +
       " --min-walk-forward-score " + cfg.minWf + " --min-improvement-margin " + cfg.margin +
       " --fee-rate " + +(cfg.fee / 100).toFixed(6) + " --slippage-rate " + +(cfg.slip / 100).toFixed(6) +
+      " --order-type " + cfg.orderType + " --carry-rate-per-day " + +(cfg.carry / 100).toFixed(6) +
       " --dashboard-out state/dashboard.html";
   }
   function writeControls() {
     sliders.forEach(k => { $(k).value = cfg[k]; });
+    selects.forEach(k => { $(k).value = cfg[k]; });
     $("strategy").value = cfg.strategy;
     fillStartOptions();
   }
@@ -637,6 +673,7 @@ __ENGINE_JS__
   function schedule() { clearTimeout(timer); timer = setTimeout(recompute, 90); }
   function bindControls() {
     sliders.forEach(k => $(k).addEventListener("input", e => { cfg[k] = parseFloat(e.target.value); syncLabels(); schedule(); }));
+    selects.forEach(k => $(k).addEventListener("change", e => { cfg[k] = e.target.value; syncLabels(); schedule(); }));
     $("strategy").addEventListener("change", e => { cfg.strategy = e.target.value; cfg.start = null; fillStartOptions(); syncLabels(); schedule(); });
     $("startParams").addEventListener("change", e => { cfg.start = strat().grid()[+e.target.value]; syncLabels(); schedule(); });
     $("resetBtn").addEventListener("click", () => { Object.assign(cfg, DEFAULTS); writeControls(); syncLabels(); recompute(); });
@@ -662,7 +699,8 @@ __ENGINE_JS__
   } catch (e) { worker = null; }
   function currentCfg() {
     return { strategy: cfg.strategy, initialParams: cfg.start, history: cfg.history, every: cfg.every, nSplits: cfg.nSplits,
-      minTrades: cfg.minTrades, minWf: cfg.minWf, margin: cfg.margin, cost: (cfg.fee + cfg.slip) / 100, cash: 10000 };
+      minTrades: cfg.minTrades, score: cfg.score, minWf: cfg.minWf, margin: cfg.margin, cost: (cfg.fee + cfg.slip) / 100, cash: 10000,
+      orderType: cfg.orderType, carryPerDay: cfg.carry / 100 };
   }
   function recompute() {
     $("busy").hidden = false;
@@ -697,9 +735,9 @@ __ENGINE_JS__
     $("stActive").textContent = fmtP(active);
     const lastPromo = [...R.cycles].reverse().find(c => c.promoted);
     $("stActiveNote").textContent = lastPromo ? fmtDate(lastPromo.time) + " に昇格" : "開始パラメータのまま(昇格なし)";
-    const long = R.systemPos[N - 1] === 1;
-    $("signalPill").textContent = long ? "● シグナル: ロング" : "○ シグナル: フラット";
-    $("signalPill").className = "pill " + (long ? "long" : "flat");
+    const sp = R.systemPos[N - 1];
+    $("signalPill").textContent = sp > 0 ? "● シグナル: 買い" : sp < 0 ? "● シグナル: 売り" : "○ シグナル: ノーポジ";
+    $("signalPill").className = "pill " + (sp > 0 ? "long" : sp < 0 ? "short" : "flat");
     const lc = R.cycles[R.cycles.length - 1];
     if (lc) {
       $("stLast").innerHTML = '<span class="' + (lc.promoted ? "up" : "") + '">' + esc(codeLabel[lc.code]) + "</span>";
@@ -839,12 +877,14 @@ __ENGINE_JS__
     });
     if (slot >= 1.2) R.runs.self_improving.trades.forEach(tr => {
       if (tr.exitIdx < v.i0) return;
-      let x = g.x(tr.entryIdx), y = g.y(BARS.l[tr.entryIdx]) + 9;
-      ctx.fillStyle = C.good;
-      ctx.beginPath(); ctx.moveTo(x, y - 4); ctx.lineTo(x - 4.5, y + 4); ctx.lineTo(x + 4.5, y + 4); ctx.closePath(); ctx.fill();
-      x = g.x(tr.exitIdx); y = g.y(BARS.h[tr.exitIdx]) - 9;
+      // Entry: ▲ under the bar for a long, ▼ over it for a short. Exit: the opposite, coloured by result.
+      const up = (tr.side || 1) > 0;
+      let x = g.x(tr.entryIdx), y = up ? g.y(BARS.l[tr.entryIdx]) + 9 : g.y(BARS.h[tr.entryIdx]) - 9, d = up ? 1 : -1;
+      ctx.fillStyle = up ? C.good : C.critical;
+      ctx.beginPath(); ctx.moveTo(x, y - 4 * d); ctx.lineTo(x - 4.5, y + 4 * d); ctx.lineTo(x + 4.5, y + 4 * d); ctx.closePath(); ctx.fill();
+      x = g.x(tr.exitIdx); y = up ? g.y(BARS.h[tr.exitIdx]) - 9 : g.y(BARS.l[tr.exitIdx]) + 9;
       ctx.fillStyle = tr.pnl == null ? C.warn : tr.pnl > 0 ? C.good : C.critical;
-      ctx.beginPath(); ctx.moveTo(x, y + 4); ctx.lineTo(x - 4.5, y - 4); ctx.lineTo(x + 4.5, y - 4); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x, y + 4 * d); ctx.lineTo(x - 4.5, y - 4 * d); ctx.lineTo(x + 4.5, y - 4 * d); ctx.closePath(); ctx.fill();
     });
     ctx.restore();
     $("rangeLabel").textContent = fmtDate(TIMES[v.i0]) + " 〜 " + fmtDate(TIMES[N - 1]) + " UTC · " + v.n + "本" + (slot < 2.5 ? "(終値と高安レンジで表示)" : "");
@@ -866,7 +906,7 @@ __ENGINE_JS__
       ovCache[a].forEach((o, k) => {
         html += '<div class="t-row"><span class="t-k"><span class="sw" style="background:' + (k ? C.blue : C.violet) + '"></span>' + esc(o.label) + "</span><span>" + (o.values[i] == null ? "—" : fmtPrice(o.values[i])) + "</span></div>";
       });
-      html += '<div class="t-row"><span class="t-k">シグナル</span><span class="' + (pos ? "up" : "mute") + '">' + (pos ? "LONG" : "FLAT") + "</span></div>";
+      html += '<div class="t-row"><span class="t-k">シグナル</span><span class="' + (pos > 0 ? "up" : pos < 0 ? "down" : "mute") + '">' + (pos > 0 ? "LONG" : pos < 0 ? "SHORT" : "FLAT") + "</span></div>";
       tip.innerHTML = html; tip.style.display = "block";
       const tw = tip.offsetWidth;
       tip.style.left = (mx + 14 + tw > rect.width ? mx - tw - 14 : mx + 14) + "px";
@@ -964,15 +1004,16 @@ __ENGINE_JS__
     body.innerHTML = "";
     const closed = run.metrics.num_trades, open = run.trades.length - closed;
     $("tradeLabel").textContent = closed + " 件の決済済み取引" + (open ? " + 保有中 " + open + " 件" : "");
-    if (!run.trades.length) { body.innerHTML = '<tr class="empty"><td colspan="8">この期間では取引が発生しませんでした</td></tr>'; return; }
+    if (!run.trades.length) { body.innerHTML = '<tr class="empty"><td colspan="9">この期間では取引が発生しませんでした</td></tr>'; return; }
     run.trades.slice().reverse().slice(0, 300).forEach((t, k) => {
-      const p = R.paramsList[R.activeByBar[Math.max(0, t.entryIdx - 1)]];
+      const p = R.paramsList[R.activeByBar[t.entryIdx]];
+      const side = t.side < 0 ? '<span class="down">売り</span>' : '<span class="up">買い</span>';
       let chip, pnl;
-      if (t.pnl == null) { chip = '<span class="chip open">保有中</span>'; pnl = '<span class="dim">' + fmtPct(t.exitPrice / t.entryPrice - 1) + "</span>"; }
+      if (t.pnl == null) { chip = '<span class="chip open">保有中</span>'; pnl = '<span class="dim">' + fmtPct(t.side * (t.exitPrice / t.entryPrice - 1)) + "</span>"; }
       else if (t.pnl > 0) { chip = '<span class="chip win">勝ち</span>'; pnl = '<span class="up">' + fmtPct(t.pnl) + "</span>"; }
       else { chip = '<span class="chip loss">負け</span>'; pnl = '<span class="down">' + fmtPct(t.pnl) + "</span>"; }
       const tr = document.createElement("tr");
-      tr.innerHTML = '<td class="mono">' + (run.trades.length - k) + '</td><td class="mono">' + esc(fmtP(p)) + '</td><td class="mono">' + fmtDate(TIMES[t.entryIdx]) +
+      tr.innerHTML = '<td class="mono">' + (run.trades.length - k) + '</td><td class="mono">' + esc(fmtP(p)) + "</td><td>" + side + '</td><td class="mono">' + fmtDate(TIMES[t.entryIdx]) +
         '</td><td class="num">' + fmtPrice(t.entryPrice) + '</td><td class="mono">' + (t.pnl == null ? "—" : fmtDate(TIMES[t.exitIdx])) +
         '</td><td class="num">' + (t.pnl == null ? "—" : fmtPrice(t.exitPrice)) + '</td><td class="num">' + pnl + "</td><td>" + chip + "</td>";
       body.appendChild(tr);
@@ -1025,11 +1066,11 @@ __ENGINE_JS__
     const built = CONF.built_at ? Date.parse(CONF.built_at) : last[0];
     const lagH = (built - (last[0] + 3600000)) / 3600000;
     const eq0 = first[2], eqN = last[2];
-    const pos = LIVE.portfolio && LIVE.portfolio.position_qty > 0;
+    const q = LIVE.portfolio ? (LIVE.portfolio.qty != null ? LIVE.portfolio.qty : LIVE.portfolio.position_qty) || 0 : 0;
     $("liveSub").textContent = fmtDate(first[0]) + " 〜 " + fmtDate(last[0]) + " UTC · " + d.length + " 回の判断 · 戦略 " + LIVE.strategy;
     $("liveStatus").innerHTML =
       (lagH > 2 ? '<span class="chip loss">判断が ' + lagH.toFixed(0) + " 時間止まっています</span> " : '<span class="chip win">稼働中</span> ') +
-      "最終判断 " + fmtDate(last[0]) + " · 稼働パラメータ " + esc(LIVE.active ? fmtP(LIVE.active) : "—") + " · 保有 " + (pos ? "ロング" : "なし") +
+      "最終判断 " + fmtDate(last[0]) + " · 稼働パラメータ " + esc(LIVE.active ? fmtP(LIVE.active) : "—") + " · 保有 " + (q > 0 ? "買い" : q < 0 ? "売り" : "なし") +
       " · 評価額 " + fmtUsd(eqN) + ' <span class="' + sign(eqN - eq0) + '">(開始比 ' + fmtPct(eqN / eq0 - 1) + ")</span>" +
       (LIVE.strategy !== cfg.strategy ? ' · <span class="mute">比較用リプレイは設定の戦略(' + cfg.strategy + ")で計算しています</span>" : "");
     // Align live decisions to bars and build % paths from the live start.

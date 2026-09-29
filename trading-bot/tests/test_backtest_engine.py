@@ -79,8 +79,11 @@ def test_short_profits_when_price_falls_and_pays_both_sides_on_a_flip():
     engine = BacktestEngine(initial_cash=100.0, fee_rate=0.001)
     res = engine.run_positions(df, [-1, -1, 1, 1])  # short from bar 0's close, flip long at bar 2's close
     assert res.position.tolist() == [0.0, -1.0, -1.0, 1.0]
-    # Each bar: position x return - turnover x cost (a flip turns over 2 units).
-    expected = 100 * (1 + 0.1 - 0.001) * (1 + 0.1) * (1 + (90 / 81 - 1) - 2 * 0.001)
+    # Money accounting: the short's quantity is fixed at the fill (equity / price
+    # net of the fee); a flip closes it (fee on the exit notional) then re-opens.
+    qty = 100 * (1 - 0.001) / 100
+    cash = 100 * (1 - 0.001) + qty * (100 - 81) - qty * 81 * 0.001
+    expected = cash * (1 - 0.001) * 90 / 81
     assert res.equity_curve.iloc[-1] == pytest.approx(expected)
     short = res.trades[0]
     assert short.side == -1 and short.entry_price == 100.0 and short.exit_price == 81.0

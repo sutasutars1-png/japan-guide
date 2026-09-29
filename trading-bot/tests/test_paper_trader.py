@@ -117,3 +117,34 @@ def test_portfolio_persists_across_trader_instances(tmp_path: Path):
         state_dir=tmp_path,
     )
     assert trader2.portfolio.position_qty == qty_after_buy
+
+
+def test_paper_margin_trading_tracks_the_backtest_engine(tmp_path: Path, sample_ohlcv):
+    """Same strategy, limit orders and carry: the paper account and the engine agree
+    closely (they differ only in that paper holds a fixed quantity between trades
+    while the engine rebalances to 1x each bar)."""
+    import pytest
+
+    from trading_bot.backtest.engine import BacktestEngine
+    from trading_bot.strategy import STRATEGIES
+
+    cls = STRATEGIES["sma_crossover_ls"]
+    params = {"fast_window": 10, "slow_window": 50, "band": 0.0}
+    start, end = 300, 700
+    state = {"end": start}
+
+    def provider():
+        state["end"] += 1
+        return sample_ohlcv.iloc[: state["end"]].reset_index(drop=True)
+
+    state["end"] = start - 1
+    trader = PaperTrader(symbol="BTC/USD", strategy_cls=cls, params=params, data_provider=provider, state_dir=tmp_path,
+                         initial_cash=10_000.0, fee_rate=0.0002, order_type="limit", carry_rate_per_day=0.0004)
+    records = [trader.step() for _ in range(end - start)]
+    assert any("short" in r["action"] for r in records) and any("buy" in r["action"] for r in records)
+
+    engine = BacktestEngine(initial_cash=10_000.0, fee_rate=0.0002, order_type="limit", carry_rate_per_day=0.0004)
+    window = sample_ohlcv.iloc[start - 1 : end - 1].reset_index(drop=True)
+    positions = cls(**params).generate_positions(sample_ohlcv).to_numpy()[start - 1 : end - 1]
+    expected = engine.run_positions(window, positions).equity_curve.iloc[-1]
+    assert records[-1]["equity"] == pytest.approx(expected, rel=0.02)

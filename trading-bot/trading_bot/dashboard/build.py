@@ -66,7 +66,8 @@ def load_live_state(state_dir: Path, symbol: str, strategy: Optional[str] = None
             for c in cycles
         ],
         "active": (active or {}).get("params"),
-        "portfolio": {k: portfolio.get(k) for k in ("cash", "position_qty", "realized_pnl")},
+        "portfolio": {"cash": portfolio.get("cash"), "qty": portfolio.get("qty", portfolio.get("position_qty")),
+                      "realized_pnl": portfolio.get("realized_pnl")},
         "run_config": run_config,
     }
 
@@ -82,12 +83,15 @@ def page_defaults(run_config: Optional[dict]) -> dict:
     keys = {
         "strategy": "strategy", "history_candles": "history", "reoptimize_every": "every", "n_splits": "nSplits",
         "min_trades": "minTrades", "min_walk_forward_score": "minWf", "min_improvement_margin": "margin",
+        "score": "score", "order_type": "orderType",
     }
     out = {page: run_config[k] for k, page in keys.items() if k in run_config}
     if "fee_rate" in run_config:
         out["fee"] = run_config["fee_rate"] * 100
     if "slippage_rate" in run_config:
         out["slip"] = run_config["slippage_rate"] * 100
+    if "carry_rate_per_day" in run_config:
+        out["carry"] = run_config["carry_rate_per_day"] * 100
     if run_config.get("params"):
         out["start"] = run_config["params"]
     return out

@@ -14,8 +14,12 @@ Assumptions (documented, not hidden):
     next close. Missed fills cluster exactly when price runs away, which is
     the real cost of passive orders; the engine keeps it rather than assuming
     every limit fills.
-- Costs: `fee_rate + slippage_rate` per unit of turnover (per side), plus a
-  margin carry of `carry_rate_per_day` on the absolute position for every
+- Accounting is a margin account in money, like `paper.Portfolio`: at each
+  fill the whole equity is committed (quantity = equity / price, net of the
+  fee) and that quantity is held until the next fill — a short is not
+  re-sized every bar, so its exposure drifts with price as a real one does.
+- Costs: `fee_rate + slippage_rate` on the notional of every fill (per side),
+  plus a margin carry of `carry_rate_per_day` on the open notional for every
   bar it is held (Japanese crypto margin charges about 0.04%/day on open
   positions, long or short).
 """
@@ -103,6 +107,33 @@ def execute(raw: np.ndarray, close: np.ndarray, high: np.ndarray, low: np.ndarra
     return np.array(out)
 
 
+def account_equity(held: np.ndarray, close: np.ndarray, cash: float, cost: float, carry_per_bar: float) -> np.ndarray:
+    """Equity at each close for a margin account holding `held[t]` during bar t.
+    A change of position fills at the previous close (where the order was placed):
+    close the old quantity, then commit the whole equity to the new side."""
+    h, c = held.tolist(), close.tolist()
+    out = [0.0] * len(h)
+    qty, entry, prev = 0.0, 0.0, 0.0
+    for t in range(len(h)):
+        pos = h[t]
+        if pos != prev:
+            price = c[t - 1]
+            if qty:
+                cash += qty * (price - entry) - abs(qty) * price * cost
+                qty = 0.0
+            if pos:
+                fee = cash * cost
+                cash -= fee
+                qty, entry = pos * cash / price, price
+            prev = pos
+        if qty:
+            cash -= abs(qty) * c[t] * carry_per_bar
+            out[t] = cash + qty * (c[t] - entry)
+        else:
+            out[t] = cash
+    return np.array(out)
+
+
 class BacktestEngine:
     def __init__(
         self,
@@ -141,14 +172,11 @@ class BacktestEngine:
 
         periods = periods_per_year_for(timeframe)
         carry_per_bar = self.carry_rate_per_day * 365 / periods
-        bar_return = np.zeros(len(close))
-        bar_return[1:] = close[1:] / close[:-1] - 1.0
-        turnover = np.abs(np.diff(held, prepend=0.0))
-        net = held * bar_return - turnover * self.cost_rate - np.abs(held) * carry_per_bar
+        eq = account_equity(held, close, self.initial_cash, self.cost_rate, carry_per_bar)
 
         index = df["timestamp"]
-        net_return = pd.Series(net, index=index)
-        equity = self.initial_cash * (1.0 + net_return).cumprod()
+        equity = pd.Series(eq, index=index)
+        net_return = pd.Series(np.diff(eq, prepend=self.initial_cash) / np.r_[self.initial_cash, eq[:-1]], index=index)
         executed_position = pd.Series(held, index=index)
         trades = self._extract_trades(df, held, self.cost_rate, carry_per_bar)
 

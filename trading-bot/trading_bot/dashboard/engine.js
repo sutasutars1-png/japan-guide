@@ -91,14 +91,60 @@ const SIL = (function () {
       overlays: () => [],
     },
   };
-  const MEMBERS = ["sma_crossover", "donchian_breakout", "rsi_reversion"];
-  STRATEGIES.multi = {
-    label: p => STRATEGIES[p.strategy].label(p),
-    grid: () => [].concat(...MEMBERS.map(m => STRATEGIES[m].grid().map(p => Object.assign({ strategy: m }, p)))),
-    defaults: Object.assign({ strategy: "sma_crossover" }, { fast_window: 10, slow_window: 50 }),
-    positions: (b, p) => STRATEGIES[p.strategy].positions(b, p),
-    overlays: (b, p) => STRATEGIES[p.strategy].overlays(b, p),
+  // Long/short variants (margin): -1 short, 0 flat, 1 long (strategy/more.py).
+  const pct = v => (v * 100).toFixed(1).replace(/\.0$/, "") + "%";
+  STRATEGIES.sma_crossover_ls = {
+    label: p => "SMA " + p.fast_window + "/" + p.slow_window + (p.band ? " ±" + pct(p.band) : "") + " 売買",
+    grid: () => product({ fast_window: [5, 10, 20, 30], slow_window: [30, 50, 100, 200], band: [0, 0.005, 0.01] }, p => p.fast_window < p.slow_window),
+    defaults: { fast_window: 10, slow_window: 50, band: 0 },
+    positions(b, p) {
+      const f = sma(b.c, p.fast_window), s = sma(b.c, p.slow_window);
+      return b.c.map((_, i) => (s[i] == null ? 0 : (f[i] > s[i] * (1 + p.band) ? 1 : 0) - (f[i] < s[i] * (1 - p.band) ? 1 : 0)));
+    },
+    overlays: STRATEGIES.sma_crossover.overlays,
   };
+  STRATEGIES.donchian_breakout_ls = {
+    label: p => "Donchian " + p.entry_window + "/" + p.exit_window + " 売買",
+    grid: STRATEGIES.donchian_breakout.grid,
+    defaults: STRATEGIES.donchian_breakout.defaults,
+    positions(b, p) {
+      const hiE = priorExtreme(b.h, p.entry_window, true), loE = priorExtreme(b.l, p.entry_window, false);
+      const hiX = priorExtreme(b.h, p.exit_window, true), loX = priorExtreme(b.l, p.exit_window, false);
+      const above = (x, i) => x[i] != null && b.c[i] > x[i], below = (x, i) => x[i] != null && b.c[i] < x[i];
+      const long_ = holdBetween(b.c.map((_, i) => above(hiE, i)), b.c.map((_, i) => below(loX, i)));
+      const short = holdBetween(b.c.map((_, i) => below(loE, i)), b.c.map((_, i) => above(hiX, i)));
+      return long_.map((v, i) => v - short[i]);
+    },
+    overlays: (b, p) => [
+      { label: "過去" + p.entry_window + "本の高値", values: priorExtreme(b.h, p.entry_window, true) },
+      { label: "過去" + p.entry_window + "本の安値", values: priorExtreme(b.l, p.entry_window, false) },
+    ],
+  };
+  STRATEGIES.rsi_reversion_ls = {
+    label: p => "RSI" + p.period + " " + p.lower + "/" + (100 - p.lower) + " 売買",
+    grid: STRATEGIES.rsi_reversion.grid,
+    defaults: STRATEGIES.rsi_reversion.defaults,
+    positions(b, p) {
+      const r = rsi(b.c, p.period);
+      const long_ = holdBetween(r.map(v => v != null && v < p.lower), r.map(v => v != null && v > p.upper));
+      const short = holdBetween(r.map(v => v != null && v > 100 - p.lower), r.map(v => v != null && v < 100 - p.upper));
+      return long_.map((v, i) => v - short[i]);
+    },
+    overlays: () => [],
+  };
+  function multi(members) {
+    const first = members[0];
+    return {
+      members,
+      label: p => STRATEGIES[p.strategy].label(p),
+      grid: () => [].concat(...members.map(m => STRATEGIES[m].grid().map(p => Object.assign({ strategy: m }, p)))),
+      defaults: Object.assign({ strategy: first }, STRATEGIES[first].defaults),
+      positions: (b, p) => STRATEGIES[p.strategy].positions(b, p),
+      overlays: (b, p) => STRATEGIES[p.strategy].overlays(b, p),
+    };
+  }
+  STRATEGIES.multi = multi(["sma_crossover", "donchian_breakout", "rsi_reversion"]);
+  STRATEGIES.multi_ls = multi(["sma_crossover_ls", "donchian_breakout_ls", "rsi_reversion_ls"]);
 
   function sameParams(a, b) {
     if (!a || !b) return false;
@@ -114,28 +160,54 @@ const SIL = (function () {
     for (const v of a) ss += (v - m) * (v - m);
     return Math.sqrt(ss / (a.length - 1));
   }
-  function runPositions(b, rawPos, cost, cash) {
-    const closes = b.c, n = closes.length;
-    const exec = new Array(n); exec[0] = 0;
-    for (let i = 1; i < n; i++) exec[i] = rawPos[i - 1];
-    const net = new Array(n), equity = new Array(n);
-    for (let i = 0; i < n; i++) {
-      const r = i === 0 ? 0 : closes[i] / closes[i - 1] - 1;
-      const turnover = i === 0 ? Math.abs(exec[0]) : Math.abs(exec[i] - exec[i - 1]);
-      net[i] = exec[i] * r - turnover * cost;
-      equity[i] = (i === 0 ? cash : equity[i - 1]) * (1 + net[i]);
+  // Position held during each bar, from targets decided at each close (engine.py `execute`).
+  function execute(b, raw, orderType) {
+    const n = raw.length, out = new Array(n).fill(0);
+    if (orderType !== "limit") { for (let t = 1; t < n; t++) out[t] = raw[t - 1]; return out; }
+    let cur = 0;
+    for (let t = 0; t < n - 1; t++) {
+      const target = raw[t];
+      if (target > cur) { if (b.l[t + 1] < b.c[t]) cur = target; }       // buy limit: next bar must trade below it
+      else if (target < cur) { if (b.h[t + 1] > b.c[t]) cur = target; }  // sell limit: next bar must trade above it
+      out[t + 1] = cur;
     }
+    return out;
+  }
+  // Margin account in money (engine.py `account_equity`): a fill commits the whole
+  // equity at the previous close and that quantity is held until the next fill.
+  function accountEquity(held, c, cash, cost, carryPerBar) {
+    const out = new Array(held.length);
+    let qty = 0, entry = 0, prev = 0;
+    for (let t = 0; t < held.length; t++) {
+      const pos = held[t];
+      if (pos !== prev) {
+        const price = c[t - 1];
+        if (qty) { cash += qty * (price - entry) - Math.abs(qty) * price * cost; qty = 0; }
+        if (pos) { const fee = cash * cost; cash -= fee; qty = pos * cash / price; entry = price; }
+        prev = pos;
+      }
+      if (qty) { cash -= Math.abs(qty) * c[t] * carryPerBar; out[t] = cash + qty * (c[t] - entry); }
+      else out[t] = cash;
+    }
+    return out;
+  }
+  // cfg: {cost (per side, fraction), cash, orderType, carryPerDay}
+  function runPositions(b, rawPos, cfg) {
+    const closes = b.c, n = closes.length, cost = cfg.cost;
+    const carryPerBar = (cfg.carryPerDay || 0) * 365 / PERIODS_PER_YEAR;
+    const exec = execute(b, rawPos, cfg.orderType);
+    const equity = accountEquity(exec, closes, cfg.cash, cost, carryPerBar);
+    const net = equity.map((e, i) => { const p = i === 0 ? cfg.cash : equity[i - 1]; return (e - p) / p; });
     const trades = [];
-    let open = null, prev = 0;
-    for (let i = 0; i < n; i++) {
-      const pos = exec[i];
-      if (prev === 0 && pos === 1) open = { entryIdx: i, entryPrice: closes[i], exitIdx: null, exitPrice: null, pnl: null };
-      else if (prev === 1 && pos === 0 && open) {
-        open.exitIdx = i; open.exitPrice = closes[i];
-        open.pnl = open.exitPrice / open.entryPrice - 1 - 2 * cost;
+    let open = null, openedAt = 0;
+    for (let t = 1; t < n; t++) { // a position held from bar t was filled at bar t-1's close
+      if (exec[t] === exec[t - 1]) continue;
+      if (open) {
+        open.exitIdx = t - 1; open.exitPrice = closes[t - 1];
+        open.pnl = open.side * (open.exitPrice / open.entryPrice - 1) - 2 * cost - carryPerBar * (t - openedAt);
         trades.push(open); open = null;
       }
-      prev = pos;
+      if (exec[t] !== 0) { open = { side: Math.sign(exec[t]), entryIdx: t - 1, entryPrice: closes[t - 1], exitIdx: null, exitPrice: null, pnl: null }; openedAt = t; }
     }
     if (open) { open.exitIdx = n - 1; open.exitPrice = closes[n - 1]; trades.push(open); }
     const years = (n - 1) / PERIODS_PER_YEAR;
@@ -150,6 +222,7 @@ const SIL = (function () {
       metrics: {
         total_return: equity[0] === 0 ? 0 : equity[n - 1] / equity[0] - 1, cagr,
         sharpe: sd === 0 || Number.isNaN(sd) ? 0 : (mean(net) / sd) * Math.sqrt(PERIODS_PER_YEAR),
+        ann_return: n ? mean(net) * PERIODS_PER_YEAR : 0,
         max_drawdown: mdd,
         win_rate: closed.length ? closed.filter(t => t.pnl > 0).length / closed.length : 0,
         num_trades: closed.length, final_equity: equity[n - 1],
@@ -159,9 +232,11 @@ const SIL = (function () {
   function slice(b, s, e) { return { c: b.c.slice(s, e), h: b.h.slice(s, e), l: b.l.slice(s, e), t: b.t.slice(s, e) }; }
 
   // ---------- optimizer + gate (trading_bot/optimize, self_improve/loop.py) ----------
-  function score(m, minTrades) { return m.num_trades < minTrades ? NEG_INF : m.sharpe; }
+  function score(m, cfg) { // optimizer.py default_score: annualized Sharpe or annualized mean return
+    return m.num_trades < cfg.minTrades ? NEG_INF : cfg.score === "return" ? m.ann_return : m.sharpe;
+  }
   function gridSearch(b, strat, grid, cfg) {
-    const board = grid.map(p => ({ params: p, score: score(runPositions(b, strat.positions(b, p), cfg.cost, cfg.cash).metrics, cfg.minTrades) }));
+    const board = grid.map(p => ({ params: p, score: score(runPositions(b, strat.positions(b, p), cfg).metrics, cfg) }));
     board.sort((x, y) => (x.score === y.score ? 0 : x.score > y.score ? -1 : 1)); // stable, like Python's sort
     if (!board.length || board[0].score === NEG_INF) return { best: null, bestScore: NEG_INF, board };
     return { best: board[0].params, bestScore: board[0].score, board };
@@ -169,7 +244,7 @@ const SIL = (function () {
   function foldBounds(n, k) { const step = Math.floor(n / k), b = []; for (let i = 0; i < k; i++) b.push(i * step); b.push(n); return b; }
   function runFold(b, strat, p, start, end, cfg) { // indicators warmed up on bars before `start`
     const pos = strat.positions(slice(b, 0, end), p).slice(start, end);
-    return runPositions(slice(b, start, end), pos, cfg.cost, cfg.cash);
+    return runPositions(slice(b, start, end), pos, cfg);
   }
   function optimize(b, strat, grid, cfg) {
     const n = b.c.length, bounds = foldBounds(n, cfg.nSplits), tests = [];
@@ -178,7 +253,7 @@ const SIL = (function () {
       if (end - start < 5 || start < 10) continue;
       const chosen = gridSearch(slice(b, 0, start), strat, grid, cfg).best;
       if (!chosen) continue;
-      tests.push(score(runFold(b, strat, chosen, start, end, cfg).metrics, cfg.minTrades));
+      tests.push(score(runFold(b, strat, chosen, start, end, cfg).metrics, cfg));
     }
     const finite = tests.filter(s => s !== NEG_INF);
     const g = gridSearch(b, strat, grid, cfg);
@@ -189,7 +264,7 @@ const SIL = (function () {
     for (let i = 1; i < cfg.nSplits; i++) {
       const start = bounds[i], end = bounds[i + 1];
       if (end - start < 5 || start < 10) continue;
-      const s = score(runFold(b, strat, p, start, end, cfg).metrics, cfg.minTrades);
+      const s = score(runFold(b, strat, p, start, end, cfg).metrics, cfg);
       if (s !== NEG_INF) scores.push(s);
     }
     return scores.length ? mean(scores) : NEG_INF;
@@ -208,7 +283,8 @@ const SIL = (function () {
   }
 
   // ---------- replay (trading_bot/self_improve/replay.py) ----------
-  // bars: {c, h, l, t}; cfg: {strategy, initialParams, history, every, nSplits, minTrades, minWf, margin, cost, cash}
+  // bars: {c, h, l, t}; cfg: {strategy, initialParams, history, every, nSplits, minTrades, score, minWf, margin,
+  //   cost, cash, orderType, carryPerDay, evalStart}
   function replay(bars, cfg) {
     const strat = STRATEGIES[cfg.strategy], grid = strat.grid(), n = bars.c.length;
     const paramsList = [cfg.initialParams];
@@ -232,16 +308,19 @@ const SIL = (function () {
     }
     const posByParams = paramsList.map(p => strat.positions(bars, p));
     const systemPos = activeByBar.map((a, t) => posByParams[a][t]);
+    // Score only bars from evalStart on; cycles before it still learn from them.
+    const e0 = cfg.evalStart || 0, scored = slice(bars, e0, n);
     return {
-      paramsList, activeByBar, cycles, systemPos,
+      paramsList, activeByBar, cycles, systemPos, evalStart: e0,
       runs: {
-        self_improving: runPositions(bars, systemPos, cfg.cost, cfg.cash),
-        static: runPositions(bars, posByParams[0], cfg.cost, cfg.cash),
-        buy_hold: runPositions(bars, new Array(n).fill(1), cfg.cost, cfg.cash),
+        self_improving: runPositions(scored, systemPos.slice(e0), cfg),
+        static: runPositions(scored, posByParams[0].slice(e0), cfg),
+        // The benchmark is holding spot BTC: no margin, so no carry.
+        buy_hold: runPositions(scored, new Array(n - e0).fill(1), Object.assign({}, cfg, { carryPerDay: 0 })),
       },
     };
   }
 
-  return { replay, STRATEGIES, sameParams, NEG_INF };
+  return { replay, runPositions, STRATEGIES, sameParams, NEG_INF };
 })();
 if (typeof module !== "undefined") module.exports = SIL;

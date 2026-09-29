@@ -22,20 +22,31 @@ const fin = v => (Number.isFinite(v) ? v : null);
 process.stdout.write(JSON.stringify({
   cycles: r.cycles.map(c => ({bar: c.barIndex, code: c.code, candidate: c.candidate, wf: fin(c.candidateWf), inc: fin(c.incumbentScore)})),
   final: Object.fromEntries(Object.entries(r.runs).map(([k, v]) => [k, v.metrics.final_equity])),
+  trades: Object.fromEntries(Object.entries(r.runs).map(([k, v]) => [k, v.metrics.num_trades])),
 }));
 """
 
 
+MARKET = {"fee": 0.001, "slip": 0.0005, "order_type": "market", "carry": 0.0, "score": "sharpe", "eval_start": 0}
+LIMIT = {"fee": 0.0002, "slip": 0.0, "order_type": "limit", "carry": 0.0004, "score": "return", "eval_start": 600}
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
-@pytest.mark.parametrize("strategy", ["sma_crossover", "donchian_breakout", "rsi_reversion", "multi"])
-def test_dashboard_engine_matches_python_replay(strategy, sample_ohlcv, tmp_path: Path):
+@pytest.mark.parametrize("strategy,costs", [
+    ("sma_crossover", MARKET), ("donchian_breakout", MARKET), ("rsi_reversion", MARKET), ("multi", MARKET),
+    ("sma_crossover_ls", LIMIT), ("donchian_breakout_ls", LIMIT), ("rsi_reversion_ls", LIMIT), ("multi_ls", LIMIT),
+    ("sma_crossover_ls", MARKET),
+])
+def test_dashboard_engine_matches_python_replay(strategy, costs, sample_ohlcv, tmp_path: Path):
     df = sample_ohlcv.iloc[:1000].reset_index(drop=True)
     cls = STRATEGIES[strategy]
     initial = dict(cls().params)
     # A loose gate so every outcome (promotion, same, margin, floor) actually occurs.
-    fee, slip, hist, every, splits, min_trades, floor = 0.001, 0.0005, 360, 24, 3, 1, -5.0
-    py = replay(df, cls, initial, WalkForwardOptimizer(BacktestEngine(fee_rate=fee, slippage_rate=slip), n_splits=splits,
-                min_trades=min_trades), GateConfig(floor, 0.05), history_candles=hist, reoptimize_every=every)
+    hist, every, splits, min_trades, floor = 360, 24, 3, 1, -5.0
+    engine = BacktestEngine(fee_rate=costs["fee"], slippage_rate=costs["slip"], order_type=costs["order_type"],
+                            carry_rate_per_day=costs["carry"])
+    py = replay(df, cls, initial, WalkForwardOptimizer(engine, n_splits=splits, min_trades=min_trades, score=costs["score"]),
+                GateConfig(floor, 0.05), history_candles=hist, reoptimize_every=every, eval_start=costs["eval_start"])
 
     runner = tmp_path / "run.js"
     runner.write_text(RUNNER)
@@ -43,7 +54,9 @@ def test_dashboard_engine_matches_python_replay(strategy, sample_ohlcv, tmp_path
         "bars": {"c": df["close"].tolist(), "h": df["high"].tolist(), "l": df["low"].tolist(),
                  "t": [int(t.timestamp() * 1000) for t in df["timestamp"]]},
         "cfg": {"strategy": strategy, "initialParams": initial, "history": hist, "every": every, "nSplits": splits,
-                "minTrades": min_trades, "minWf": floor, "margin": 0.05, "cost": fee + slip, "cash": 10000},
+                "minTrades": min_trades, "score": costs["score"], "minWf": floor, "margin": 0.05,
+                "cost": costs["fee"] + costs["slip"], "cash": 10000, "orderType": costs["order_type"],
+                "carryPerDay": costs["carry"], "evalStart": costs["eval_start"]},
     }
     out = subprocess.run(["node", str(runner), str(ENGINE_JS)], input=json.dumps(payload), capture_output=True,
                          text=True, check=True)
@@ -59,6 +72,7 @@ def test_dashboard_engine_matches_python_replay(strategy, sample_ohlcv, tmp_path
             assert (a is None and b is None) or math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-9)
     for k in ("self_improving", "static", "buy_hold"):
         assert math.isclose(js["final"][k], py.metrics[k]["final_equity"], rel_tol=1e-9)
+        assert js["trades"][k] == py.metrics[k]["num_trades"]
 
 
 def _embedded(html: str, script_id: str):

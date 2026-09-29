@@ -16,10 +16,15 @@ from typing import Callable, Iterator, Optional
 
 import pandas as pd
 
+from ..backtest.engine import periods_per_year_for
 from ..strategy.base import Strategy
 from .portfolio import Portfolio
 
 DataProvider = Callable[[], pd.DataFrame]
+
+
+def _iso(ts) -> str:
+    return ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
 
 
 class PaperTrader:
@@ -34,6 +39,8 @@ class PaperTrader:
         initial_cash: float = 10_000.0,
         fee_rate: float = 0.001,
         slippage_rate: float = 0.0,
+        order_type: str = "market",
+        carry_rate_per_day: float = 0.0,
     ):
         self.symbol = symbol
         self.strategy_cls = strategy_cls
@@ -45,7 +52,10 @@ class PaperTrader:
         self.portfolio_path = self.state_dir / f"portfolio_{safe_symbol}.json"
         self.decisions_log_path = self.state_dir / f"decisions_{safe_symbol}.jsonl"
 
-        self.portfolio = Portfolio.load_or_create(self.portfolio_path, symbol, initial_cash, fee_rate, slippage_rate)
+        self.portfolio = Portfolio.load_or_create(
+            self.portfolio_path, symbol, initial_cash, fee_rate, slippage_rate, carry_rate_per_day, order_type
+        )
+        self.carry_per_bar = self.portfolio.carry_rate_per_day * 365 / periods_per_year_for(timeframe)
         self.strategy = strategy_cls(**params)
         self.last_decided_bar = self._last_logged_bar()
 
@@ -70,31 +80,35 @@ class PaperTrader:
             raise ValueError("data_provider returned an empty OHLCV DataFrame")
 
         latest_ts = df["timestamp"].iloc[-1]
-        ts_str = latest_ts.isoformat() if hasattr(latest_ts, "isoformat") else str(latest_ts)
+        ts_str = _iso(latest_ts)
         if ts_str == self.last_decided_bar:
             # No new closed bar since the last decision (early wake-up, restart,
             # or the exchange hasn't published the bar yet): never act twice on one bar.
             return {"timestamp": ts_str, "action": "no_new_bar", "params": self.strategy.params}
 
+        # Every bar closed since the last decision: fill a resting limit if a bar
+        # traded through it, and charge carry for each bar held (also catches up
+        # after downtime, one bar at a time).
+        fills: list[str] = []
+        new_bars = df
+        if self.last_decided_bar is not None:
+            new_bars = df[df["timestamp"] > pd.Timestamp(self.last_decided_bar)]
+        for bar in new_bars.itertuples():
+            fills += self.portfolio.on_bar(bar.high, bar.low, bar.close, _iso(bar.timestamp), self.carry_per_bar)
+
         positions = self.strategy.generate_positions(df)
         desired_position = float(positions.iloc[-1])
         latest_price = float(df["close"].iloc[-1])
-
-        action = "hold"
-        if desired_position == 1.0 and self.portfolio.is_flat():
-            self.portfolio.buy_all_in(latest_price, ts_str)
-            action = "buy"
-        elif desired_position == 0.0 and not self.portfolio.is_flat():
-            self.portfolio.sell_all(latest_price, ts_str)
-            action = "sell"
-
+        orders = self.portfolio.submit(int(desired_position), latest_price, ts_str)
+        actions = fills + orders
         self.portfolio.save(self.portfolio_path)
 
         record = {
             "timestamp": ts_str,
             "price": latest_price,
             "desired_position": desired_position,
-            "action": action,
+            "position": self.portfolio.side(),
+            "action": "+".join(actions) if actions else "hold",
             "equity": self.portfolio.equity(latest_price),
             "params": self.strategy.params,
         }

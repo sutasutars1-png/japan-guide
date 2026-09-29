@@ -302,6 +302,8 @@ def cmd_paper_trade(args) -> None:
         initial_cash=args.initial_cash,
         fee_rate=args.fee_rate,
         slippage_rate=args.slippage_rate,
+        order_type=args.order_type,
+        carry_rate_per_day=args.carry_rate_per_day,
     )
     iterations = None if args.iterations <= 0 else args.iterations
     for record in trader.run_loop(iterations=iterations, sleep_seconds=args.sleep_seconds):
@@ -324,6 +326,8 @@ def cmd_self_improve(args) -> None:
         initial_cash=args.initial_cash,
         fee_rate=args.fee_rate,
         slippage_rate=args.slippage_rate,
+        order_type=args.order_type,
+        carry_rate_per_day=args.carry_rate_per_day,
     )
 
     if csv_replay is not None:
@@ -366,7 +370,8 @@ def cmd_self_improve(args) -> None:
         "symbol": args.symbol, "timeframe": args.timeframe, "history_candles": args.history_candles,
         "reoptimize_every": args.reoptimize_every, "n_splits": args.n_splits, "min_trades": args.min_trades,
         "min_walk_forward_score": args.min_walk_forward_score, "min_improvement_margin": args.min_improvement_margin,
-        "fee_rate": args.fee_rate, "slippage_rate": args.slippage_rate,
+        "fee_rate": args.fee_rate, "slippage_rate": args.slippage_rate, "score": args.score,
+        "order_type": args.order_type, "carry_rate_per_day": args.carry_rate_per_day,
     }, indent=2), encoding="utf-8")
 
     def refresh_dashboard():
