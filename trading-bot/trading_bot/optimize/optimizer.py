@@ -72,6 +72,7 @@ class OptimizationResult:
     final_score: float
     walk_forward_score: float
     folds: list[FoldResult] = field(default_factory=list)
+    n_candidates: int = 0  # parameter sets searched; the promotion gate tightens as this grows
     leaderboard: list[dict] = field(default_factory=list)  # sorted, best first
 
     def to_dict(self) -> dict:
@@ -80,6 +81,7 @@ class OptimizationResult:
             "final_params": self.final_params,
             "final_score": self.final_score,
             "walk_forward_score": self.walk_forward_score,
+            "n_candidates": self.n_candidates,
             "folds": [f.to_dict() for f in self.folds],
             "leaderboard": self.leaderboard,
         }
@@ -164,7 +166,8 @@ class WalkForwardOptimizer:
             final_score=final_score,
             walk_forward_score=walk_forward_score,
             folds=folds,
-            leaderboard=leaderboard[:20],
+            leaderboard=leaderboard,
+            n_candidates=len(leaderboard),
         )
 
     def evaluate_params(

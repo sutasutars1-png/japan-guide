@@ -55,7 +55,11 @@ def replay(
     history_candles: int = 360,
     reoptimize_every: int = 24,
     timeframe: str = "1h",
+    eval_start: int = 0,
 ) -> ReplayResult:
+    """`eval_start` scores only bars from that index on (equity and metrics),
+    while re-optimization cycles still run over — and learn from — everything
+    before it. That is how a later period is judged out-of-sample."""
     if reoptimize_every < 1:
         raise ValueError("reoptimize_every must be >= 1")
     if history_candles > len(df):
@@ -104,10 +108,13 @@ def replay(
     positions_by_params = [strategy_cls(**p).generate_positions(df).fillna(0.0).to_numpy() for p in params_list]
     system_pos = [positions_by_params[active_by_bar[t]][t] for t in range(n)]
 
+    if not 0 <= eval_start < n:
+        raise ValueError(f"eval_start {eval_start} outside 0..{n - 1}")
+    scored = df.iloc[eval_start:].reset_index(drop=True)
     runs = {
-        "self_improving": engine.run_positions(df, system_pos, timeframe=timeframe),
-        "static": engine.run(df, strategy_cls(**initial_params), timeframe=timeframe),
-        "buy_hold": engine.run_positions(df, [1.0] * n, timeframe=timeframe),
+        "self_improving": engine.run_positions(scored, system_pos[eval_start:], timeframe=timeframe),
+        "static": engine.run_positions(scored, positions_by_params[0][eval_start:], timeframe=timeframe),
+        "buy_hold": engine.run_positions(scored, [1.0] * (n - eval_start), timeframe=timeframe),
     }
 
     return ReplayResult(
@@ -121,8 +128,11 @@ def replay(
             "min_walk_forward_score": gate.min_walk_forward_score,
             "min_improvement_margin": gate.min_improvement_margin,
             "fee_rate": engine.fee_rate,
+            "slippage_rate": engine.slippage_rate,
             "initial_cash": engine.initial_cash,
             "timeframe": timeframe,
+            "eval_start": eval_start,
+            "eval_start_timestamp": df["timestamp"].iloc[eval_start].isoformat(),
         },
         cycles=cycles,
         active_by_bar=active_by_bar,

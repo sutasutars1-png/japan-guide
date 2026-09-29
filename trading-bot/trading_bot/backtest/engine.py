@@ -4,9 +4,10 @@ Simplifying assumptions (documented, not hidden):
 - A strategy's position for bar t is decided from data available *through*
   bar t's close, but only takes effect from bar t+1 onward (`shift(1)`) —
   no lookahead.
-- Fees are charged as a return drag proportional to the fraction of the
-  portfolio that changes position (`fee_rate` per unit turnover); there is
-  no separate slippage model. This is deliberately simple, not a claim of
+- Costs are charged as a return drag proportional to the fraction of the
+  portfolio that changes position: `fee_rate + slippage_rate` per unit
+  turnover, where slippage stands for spread and price impact on a market
+  order. A flat per-side rate is deliberately simple, not a claim of
   realistic execution.
 - Long-only, single asset, no leverage: position is either 0 (cash) or 1
   (fully invested), matching spot trading.
@@ -66,9 +67,15 @@ class BacktestResult:
 
 
 class BacktestEngine:
-    def __init__(self, initial_cash: float = 10_000.0, fee_rate: float = 0.001):
+    def __init__(self, initial_cash: float = 10_000.0, fee_rate: float = 0.001, slippage_rate: float = 0.0):
         self.initial_cash = initial_cash
         self.fee_rate = fee_rate
+        self.slippage_rate = slippage_rate
+
+    @property
+    def cost_rate(self) -> float:
+        """Total per-side cost as a fraction of the traded notional."""
+        return self.fee_rate + self.slippage_rate
 
     def run(self, df: pd.DataFrame, strategy: Strategy, timeframe: str = "1h") -> BacktestResult:
         if df.empty:
@@ -86,7 +93,7 @@ class BacktestEngine:
         bar_return = df["close"].pct_change().fillna(0.0)
         turnover = executed_position.diff().abs()
         turnover.iloc[0] = executed_position.iloc[0]
-        fee_drag = turnover * self.fee_rate
+        fee_drag = turnover * self.cost_rate
 
         net_return = executed_position * bar_return - fee_drag
         equity = self.initial_cash * (1.0 + net_return).cumprod()
@@ -94,7 +101,7 @@ class BacktestEngine:
         net_return.index = df["timestamp"]
         executed_position.index = df["timestamp"]
 
-        trades = self._extract_trades(df, executed_position, self.fee_rate)
+        trades = self._extract_trades(df, executed_position, self.cost_rate)
 
         result_metrics = metrics_mod.summarize(
             equity=equity,
@@ -123,7 +130,7 @@ class BacktestEngine:
                 open_trade.exit_time = ts
                 open_trade.exit_price = float(close)
                 gross = open_trade.exit_price / open_trade.entry_price - 1.0
-                open_trade.pnl = gross - 2 * fee_rate  # entry + exit fee
+                open_trade.pnl = gross - 2 * fee_rate  # entry + exit cost
                 trades.append(open_trade)
                 open_trade = None
             prev_pos = pos

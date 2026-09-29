@@ -43,6 +43,14 @@ NEG_INF = float("-inf")
 class GateConfig:
     min_walk_forward_score: float = 0.0
     min_improvement_margin: float = 0.05
+    # The more candidates searched, the likelier the best one won by luck, so
+    # the required margin grows with sqrt(candidates / candidate_baseline)
+    # once the search is larger than the original 15-combo SMA grid.
+    candidate_baseline: int = 15
+
+    def margin_for(self, n_candidates: int) -> float:
+        scale = max(1.0, (n_candidates / self.candidate_baseline) ** 0.5) if n_candidates else 1.0
+        return self.min_improvement_margin * scale
 
 
 @dataclass
@@ -64,12 +72,13 @@ def decide(result: OptimizationResult, incumbent_params: dict, incumbent_score: 
         )
     if result.final_params == incumbent_params:
         return Decision(False, "same_as_active", "candidate is identical to the active params — nothing to change")
-    if wf < incumbent_score + gate.min_improvement_margin:
+    margin = gate.margin_for(result.n_candidates)
+    if wf < incumbent_score + margin:
         return Decision(
             False,
             "insufficient_margin",
             f"walk-forward score {wf:.4f} does not beat the incumbent's re-scored {incumbent_score:.4f} "
-            f"by the required margin {gate.min_improvement_margin:.4f} — not promoted",
+            f"by the required margin {margin:.4f} ({result.n_candidates} candidates) — not promoted",
         )
     return Decision(
         True,

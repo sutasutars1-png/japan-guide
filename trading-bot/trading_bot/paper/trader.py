@@ -33,6 +33,7 @@ class PaperTrader:
         timeframe: str = "1h",
         initial_cash: float = 10_000.0,
         fee_rate: float = 0.001,
+        slippage_rate: float = 0.0,
     ):
         self.symbol = symbol
         self.strategy_cls = strategy_cls
@@ -44,7 +45,7 @@ class PaperTrader:
         self.portfolio_path = self.state_dir / f"portfolio_{safe_symbol}.json"
         self.decisions_log_path = self.state_dir / f"decisions_{safe_symbol}.jsonl"
 
-        self.portfolio = Portfolio.load_or_create(self.portfolio_path, symbol, initial_cash, fee_rate)
+        self.portfolio = Portfolio.load_or_create(self.portfolio_path, symbol, initial_cash, fee_rate, slippage_rate)
         self.strategy = strategy_cls(**params)
         self.last_decided_bar = self._last_logged_bar()
 

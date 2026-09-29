@@ -15,6 +15,7 @@ class Portfolio:
     cash: float = 10_000.0
     position_qty: float = 0.0
     fee_rate: float = 0.001
+    slippage_rate: float = 0.0  # simulated fills are this much worse than the bar close
     realized_pnl: float = 0.0
     entry_price: Optional[float] = None
     trade_log: list[dict] = field(default_factory=list)
@@ -28,31 +29,33 @@ class Portfolio:
     def buy_all_in(self, price: float, timestamp: str) -> None:
         if not self.is_flat():
             return
+        fill = price * (1 + self.slippage_rate)
         spend = self.cash
         fee = spend * self.fee_rate
-        qty = (spend - fee) / price
+        qty = (spend - fee) / fill
         self.cash = 0.0
         self.position_qty = qty
-        self.entry_price = price
+        self.entry_price = fill
         self.trade_log.append(
-            {"timestamp": timestamp, "side": "buy", "price": price, "qty": qty, "fee": fee}
+            {"timestamp": timestamp, "side": "buy", "price": fill, "qty": qty, "fee": fee}
         )
 
     def sell_all(self, price: float, timestamp: str) -> None:
         if self.is_flat():
             return
-        proceeds = self.position_qty * price
+        fill = price * (1 - self.slippage_rate)
+        proceeds = self.position_qty * fill
         fee = proceeds * self.fee_rate
         pnl = None
         if self.entry_price is not None:
-            pnl = (price / self.entry_price - 1.0) - 2 * self.fee_rate
+            pnl = (fill / self.entry_price - 1.0) - 2 * self.fee_rate
             self.realized_pnl += pnl
         self.cash += proceeds - fee
         self.trade_log.append(
             {
                 "timestamp": timestamp,
                 "side": "sell",
-                "price": price,
+                "price": fill,
                 "qty": self.position_qty,
                 "fee": fee,
                 "pnl": pnl,
@@ -73,8 +76,10 @@ class Portfolio:
         path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
 
     @classmethod
-    def load_or_create(cls, path: Path, symbol: str, initial_cash: float = 10_000.0, fee_rate: float = 0.001) -> "Portfolio":
+    def load_or_create(
+        cls, path: Path, symbol: str, initial_cash: float = 10_000.0, fee_rate: float = 0.001, slippage_rate: float = 0.0
+    ) -> "Portfolio":
         if path.exists():
             data = json.loads(path.read_text(encoding="utf-8"))
             return cls.from_dict(data)
-        return cls(symbol=symbol, cash=initial_cash, fee_rate=fee_rate)
+        return cls(symbol=symbol, cash=initial_cash, fee_rate=fee_rate, slippage_rate=slippage_rate)
