@@ -1,6 +1,6 @@
 from trading_bot.research.holdout import _neighbours, run_holdout
 
-GRID = {"history_candles": [240, 360], "n_splits": [3], "min_trades": [2, 3]}
+GRID = {"history_candles": [240, 360], "n_splits": [3], "min_trades": [2, 3], "score": ["sharpe"]}
 
 
 def test_neighbours_differ_in_exactly_one_axis_by_one_step():

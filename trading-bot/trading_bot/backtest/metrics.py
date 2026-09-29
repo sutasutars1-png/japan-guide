@@ -55,6 +55,7 @@ def summarize(equity: pd.Series, returns: pd.Series, trades: list[dict], periods
         "total_return": total_return(equity),
         "cagr": cagr(equity, periods_per_year),
         "sharpe": sharpe_ratio(returns, periods_per_year),
+        "ann_return": float(returns.mean() * periods_per_year) if len(returns) else 0.0,
         "max_drawdown": max_drawdown(equity),
         "win_rate": win_rate(trades),
         "num_trades": len([t for t in trades if t.get("pnl") is not None]),

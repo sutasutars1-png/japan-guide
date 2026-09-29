@@ -32,11 +32,16 @@ from ..strategy.base import Strategy
 ScoreFn = Callable[[dict], float]
 
 
-def default_score(metrics: dict, min_trades: int = 5) -> float:
-    """Sharpe ratio, penalized to -inf if too few trades to be meaningful."""
+SCORES = {"sharpe": "sharpe", "return": "ann_return"}
+
+
+def default_score(metrics: dict, min_trades: int = 5, score: str = "sharpe") -> float:
+    """Annualized Sharpe (risk-adjusted) or annualized mean return, penalized
+    to -inf if too few trades to be meaningful. Both are annualized so the
+    promotion floor and margin mean the same thing across fold lengths."""
     if metrics.get("num_trades", 0) < min_trades:
         return float("-inf")
-    return metrics["sharpe"]
+    return metrics[SCORES[score]]
 
 
 @dataclass
@@ -94,13 +99,17 @@ class WalkForwardOptimizer:
         n_splits: int = 4,
         score_fn: Optional[ScoreFn] = None,
         min_trades: int = 5,
+        score: str = "sharpe",
     ):
+        if score not in SCORES:
+            raise ValueError(f"score must be one of {sorted(SCORES)}")
         if n_splits < 2:
             raise ValueError("n_splits must be >= 2 (need at least one train/test pair)")
         self.engine = engine or BacktestEngine()
         self.n_splits = n_splits
         self.min_trades = min_trades
-        self.score_fn = score_fn or (lambda metrics: default_score(metrics, min_trades=min_trades))
+        self.score = score
+        self.score_fn = score_fn or (lambda metrics: default_score(metrics, min_trades=min_trades, score=score))
 
     def _grid_search(self, df: pd.DataFrame, strategy_cls: type[Strategy], timeframe: str):
         """Return (best_params, best_score, leaderboard) over `df`."""

@@ -83,3 +83,42 @@ def test_gate_margin_grows_with_candidate_count():
     incumbent = {"strategy": "sma_crossover"}
     assert decide(few, incumbent, 1.0, gate).promoted is True
     assert decide(many, incumbent, 1.0, gate).reason_code == "insufficient_margin"
+
+
+from trading_bot.optimize.optimizer import WalkForwardOptimizer, default_score  # noqa: E402
+
+LS = ["sma_crossover_ls", "donchian_breakout_ls", "rsi_reversion_ls", "multi_ls"]
+
+
+@pytest.mark.parametrize("name", LS)
+def test_long_short_strategies_go_both_ways_without_lookahead(name, sample_ohlcv):
+    strategy = STRATEGIES[name]()
+    full = strategy.generate_positions(sample_ohlcv)
+    assert set(full.unique().tolist()) <= {-1.0, 0.0, 1.0}
+    assert (full == -1).any() and (full == 1).any()
+    for cut in (300, 700):
+        assert (strategy.generate_positions(sample_ohlcv.iloc[:cut]).to_numpy() == full.iloc[:cut].to_numpy()).all()
+
+
+def test_sma_long_short_mirrors_the_long_only_signal_and_band_adds_a_flat_zone(sample_ohlcv):
+    long_only = SMACrossoverStrategy(10, 50).generate_positions(sample_ohlcv)
+    ls = STRATEGIES["sma_crossover_ls"](fast_window=10, slow_window=50, band=0.0).generate_positions(sample_ohlcv)
+    warm = sample_ohlcv.index >= 49
+    assert (ls[warm] == 2 * long_only[warm] - 1).all()
+    banded = STRATEGIES["sma_crossover_ls"](fast_window=10, slow_window=50, band=0.01).generate_positions(sample_ohlcv)
+    assert (banded[warm] == 0).sum() > (ls[warm] == 0).sum()
+
+
+def test_multi_long_short_spans_all_long_short_members():
+    combos = list(STRATEGIES["multi_ls"].param_combinations())
+    assert len(combos) == 45 + 11 + 9
+    assert {c["strategy"] for c in combos} == {"sma_crossover_ls", "donchian_breakout_ls", "rsi_reversion_ls"}
+    assert STRATEGIES["multi_ls"]().params["strategy"] == "sma_crossover_ls"
+
+
+def test_return_score_uses_annualized_mean_return():
+    m = {"num_trades": 9, "sharpe": 1.5, "ann_return": 0.42}
+    assert default_score(m, 5, "return") == 0.42 and default_score(m, 5, "sharpe") == 1.5
+    assert default_score(m, 10, "return") == float("-inf")
+    with pytest.raises(ValueError):
+        WalkForwardOptimizer(score="profit")

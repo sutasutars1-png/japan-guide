@@ -114,7 +114,9 @@ def replay(
     runs = {
         "self_improving": engine.run_positions(scored, system_pos[eval_start:], timeframe=timeframe),
         "static": engine.run_positions(scored, positions_by_params[0][eval_start:], timeframe=timeframe),
-        "buy_hold": engine.run_positions(scored, [1.0] * (n - eval_start), timeframe=timeframe),
+        # The benchmark is holding spot BTC: no margin, so no carry.
+        "buy_hold": BacktestEngine(engine.initial_cash, engine.fee_rate, engine.slippage_rate, engine.order_type, 0.0)
+        .run_positions(scored, [1.0] * (n - eval_start), timeframe=timeframe),
     }
 
     return ReplayResult(
@@ -125,6 +127,9 @@ def replay(
             "reoptimize_every": reoptimize_every,
             "n_splits": optimizer.n_splits,
             "min_trades": optimizer.min_trades,
+            "score": optimizer.score,
+            "order_type": engine.order_type,
+            "carry_rate_per_day": engine.carry_rate_per_day,
             "min_walk_forward_score": gate.min_walk_forward_score,
             "min_improvement_margin": gate.min_improvement_margin,
             "fee_rate": engine.fee_rate,

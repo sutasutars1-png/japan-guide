@@ -81,9 +81,11 @@ MEMBERS: tuple[type[Strategy], ...] = (SMACrossoverStrategy, DonchianBreakoutStr
 
 class MultiStrategy(Strategy):
     name = "multi"
+    members: tuple = ()  # set below, after the long/short members are defined
 
-    def __init__(self, strategy: str = "sma_crossover", **params):
-        members = {m.name: m for m in MEMBERS}
+    def __init__(self, strategy: str = "", **params):
+        members = {m.name: m for m in self.members}
+        strategy = strategy or self.members[0].name
         if strategy not in members:
             raise ValueError(f"unknown member strategy {strategy!r}; choose from {sorted(members)}")
         self.inner = members[strategy](**params)
@@ -94,6 +96,82 @@ class MultiStrategy(Strategy):
 
     @classmethod
     def param_combinations(cls):
-        for member in MEMBERS:
+        for member in cls.members:
             for combo in member.param_combinations():
                 yield {"strategy": member.name, **combo}
+
+
+# ---------------------------------------------------------------------------
+# Long/short variants (margin). Same signals, mirrored for the short side, so
+# a downtrend can be traded instead of only sat out. Positions: -1, 0, 1.
+# ---------------------------------------------------------------------------
+
+
+class SMACrossoverLongShort(Strategy):
+    """Long when fast SMA is above slow by more than `band`, short when below by
+    more than `band`, flat in between. The band keeps the system out of the
+    market (no fees, no margin carry) while the two averages are tangled."""
+
+    name = "sma_crossover_ls"
+    param_grid = {"fast_window": [5, 10, 20, 30], "slow_window": [30, 50, 100, 200], "band": [0.0, 0.005, 0.01]}
+
+    def __init__(self, fast_window: int = 10, slow_window: int = 50, band: float = 0.0):
+        if fast_window >= slow_window:
+            raise ValueError("fast_window must be < slow_window")
+        super().__init__(fast_window=fast_window, slow_window=slow_window, band=band)
+        self.fast_window, self.slow_window, self.band = fast_window, slow_window, band
+
+    def generate_positions(self, df: pd.DataFrame) -> pd.Series:
+        close = df["close"]
+        fast = close.rolling(self.fast_window, min_periods=self.fast_window).mean()
+        slow = close.rolling(self.slow_window, min_periods=self.slow_window).mean()
+        pos = (fast > slow * (1 + self.band)).astype(float) - (fast < slow * (1 - self.band)).astype(float)
+        pos[slow.isna()] = 0.0
+        return pos.rename("position")
+
+    @classmethod
+    def param_combinations(cls):
+        for combo in super().param_combinations():
+            if combo["fast_window"] < combo["slow_window"]:
+                yield combo
+
+
+class DonchianBreakoutLongShort(DonchianBreakoutStrategy):
+    """Long on an upside breakout, short on a downside breakdown; each side
+    exits on the opposite `exit_window` extreme."""
+
+    name = "donchian_breakout_ls"
+
+    def generate_positions(self, df: pd.DataFrame) -> pd.Series:
+        high_e = df["high"].rolling(self.entry_window, min_periods=self.entry_window).max().shift(1)
+        low_e = df["low"].rolling(self.entry_window, min_periods=self.entry_window).min().shift(1)
+        high_x = df["high"].rolling(self.exit_window, min_periods=self.exit_window).max().shift(1)
+        low_x = df["low"].rolling(self.exit_window, min_periods=self.exit_window).min().shift(1)
+        close = df["close"]
+        long_ = hold_between(close > high_e, close < low_x)
+        short = hold_between(close < low_e, close > high_x)
+        return (long_ - short).rename("position")
+
+
+class RSIReversionLongShort(RSIReversionStrategy):
+    """Long below `lower` until above `upper`; short above 100-`lower` until
+    below 100-`upper`. If both sides are live at once the position is flat."""
+
+    name = "rsi_reversion_ls"
+
+    def generate_positions(self, df: pd.DataFrame) -> pd.Series:
+        r = rsi(df["close"], self.period)
+        long_ = hold_between(r < self.lower, r > self.upper)
+        short = hold_between(r > 100 - self.lower, r < 100 - self.upper)
+        return (long_ - short).rename("position")
+
+
+LS_MEMBERS: tuple[type[Strategy], ...] = (SMACrossoverLongShort, DonchianBreakoutLongShort, RSIReversionLongShort)
+
+
+class MultiLongShort(MultiStrategy):
+    name = "multi_ls"
+    members = LS_MEMBERS
+
+
+MultiStrategy.members = MEMBERS

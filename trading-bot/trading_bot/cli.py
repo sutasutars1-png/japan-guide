@@ -28,6 +28,13 @@ DEFAULT_STATE_DIR = REPO_ROOT / "state"
 SEED_DIR = REPO_ROOT / "seed_data"
 
 
+def _engine(args) -> BacktestEngine:
+    return BacktestEngine(
+        initial_cash=args.initial_cash, fee_rate=args.fee_rate, slippage_rate=args.slippage_rate,
+        order_type=args.order_type, carry_rate_per_day=args.carry_rate_per_day,
+    )
+
+
 def _strategy_cls(name: str):
     try:
         return STRATEGIES[name]
@@ -162,20 +169,25 @@ def cmd_holdout(args) -> None:
     from .research.holdout import run_holdout
 
     df = _load_history(args)
+    from .research.holdout import DEFAULT_GRID
+
+    grid = dict(DEFAULT_GRID, score=args.scores.split(","))
     report = run_holdout(
-        df, args.strategy, confirm_bars=int(args.confirm_days * 24), reoptimize_every=args.reoptimize_every,
-        fee_rate=args.fee_rate, slippage_rate=args.slippage_rate,
+        df, args.strategy, confirm_bars=int(args.confirm_days * 24), grid=grid, reoptimize_every=args.reoptimize_every,
+        fee_rate=args.fee_rate, slippage_rate=args.slippage_rate, order_type=args.order_type,
+        carry_rate_per_day=args.carry_rate_per_day, select_by=args.select_by,
         min_walk_forward_score=args.min_walk_forward_score, min_improvement_margin=args.min_improvement_margin,
         workers=args.workers,
     )
     pct = lambda v: f"{v:+.1%}" if v is not None else "n/a"
     print(f"strategy={report.strategy}  confirmation period starts {report.split_timestamp}")
-    print(f"chosen on the selection period (by neighbour-averaged Sharpe): {report.chosen}")
-    print("setting (hist/splits/minT) | selection Sharpe robust | confirm return  Sharpe  maxDD  promo")
+    print(f"chosen on the selection period (by neighbour-averaged {args.select_by}): {report.chosen}")
+    print("setting (hist/splits/minT/score) | selection return Sharpe robust | confirm return  Sharpe  maxDD  promo")
     for sel, conf in zip(report.selection, report.confirmation):
-        st, m = conf["setting"], conf["metrics"]["self_improving"]
-        print(f"{st['history_candles']:5d}/{st['n_splits']}/{st['min_trades']}{' *' if conf['chosen'] else '  '}           |"
-              f" {sel['metrics']['self_improving']['sharpe']:6.2f} {sel['robust_score']:6.2f} |"
+        st, m, sm = conf["setting"], conf["metrics"]["self_improving"], sel["metrics"]["self_improving"]
+        tag = f"{st['history_candles']}/{st['n_splits']}/{st['min_trades']}/{st['score']}"
+        print(f"{tag:>24}{' *' if conf['chosen'] else '  '}      |"
+              f" {pct(sm['total_return']):>7} {sm['sharpe']:6.2f} {sel['robust_score']:7.3f} |"
               f" {pct(m['total_return']):>7} {m['sharpe']:6.2f} {pct(m['max_drawdown']):>6} {conf['promotions']:5d}")
     base = report.confirmation[0]["metrics"]
     print(f"confirmation baselines: static {pct(base['static']['total_return'])} (Sharpe {base['static']['sharpe']:.2f}),"
@@ -212,7 +224,7 @@ def cmd_backtest(args) -> None:
     df = _load_history(args)
     strategy_cls = _strategy_cls(args.strategy)
     strategy = strategy_cls(**_parse_params(args.params))
-    engine = BacktestEngine(initial_cash=args.initial_cash, fee_rate=args.fee_rate, slippage_rate=args.slippage_rate)
+    engine = _engine(args)
     result = engine.run(df, strategy, timeframe=args.timeframe)
     print(f"Strategy: {strategy}")
     print(json.dumps(result.metrics, indent=2))
@@ -221,8 +233,8 @@ def cmd_backtest(args) -> None:
 def cmd_optimize(args) -> None:
     df = _load_history(args)
     strategy_cls = _strategy_cls(args.strategy)
-    engine = BacktestEngine(initial_cash=args.initial_cash, fee_rate=args.fee_rate, slippage_rate=args.slippage_rate)
-    optimizer = WalkForwardOptimizer(engine=engine, n_splits=args.n_splits, min_trades=args.min_trades)
+    engine = _engine(args)
+    optimizer = WalkForwardOptimizer(engine=engine, n_splits=args.n_splits, min_trades=args.min_trades, score=args.score)
     result = optimizer.optimize(df, strategy_cls, timeframe=args.timeframe)
     print(json.dumps(result.to_dict(), indent=2, default=str))
 
@@ -334,9 +346,10 @@ def cmd_self_improve(args) -> None:
     loop = SelfImprovementLoop(
         trader=trader,
         optimizer=WalkForwardOptimizer(
-            engine=BacktestEngine(initial_cash=args.initial_cash, fee_rate=args.fee_rate, slippage_rate=args.slippage_rate),
+            engine=_engine(args),
             n_splits=args.n_splits,
             min_trades=args.min_trades,
+            score=args.score,
         ),
         strategy_cls=strategy_cls,
         history_provider=history_provider,
@@ -389,9 +402,10 @@ def cmd_replay(args) -> None:
         strategy_cls,
         initial_params=dict(strategy_cls(**_parse_params(args.params)).params),
         optimizer=WalkForwardOptimizer(
-            engine=BacktestEngine(initial_cash=args.initial_cash, fee_rate=args.fee_rate, slippage_rate=args.slippage_rate),
+            engine=_engine(args),
             n_splits=args.n_splits,
             min_trades=args.min_trades,
+            score=args.score,
         ),
         gate=GateConfig(args.min_walk_forward_score, args.min_improvement_margin),
         history_candles=args.history_candles,
@@ -454,8 +468,12 @@ def build_parser() -> argparse.ArgumentParser:
     ho.add_argument("--refresh", action="store_true")
     ho.add_argument("--confirm-days", type=float, default=240)
     ho.add_argument("--reoptimize-every", type=int, default=24)
-    ho.add_argument("--fee-rate", type=float, default=0.001)
-    ho.add_argument("--slippage-rate", type=float, default=0.0005)
+    ho.add_argument("--fee-rate", type=float, default=0.0002)
+    ho.add_argument("--slippage-rate", type=float, default=0.0)
+    ho.add_argument("--order-type", choices=["limit", "market"], default="limit")
+    ho.add_argument("--carry-rate-per-day", type=float, default=0.0004)
+    ho.add_argument("--scores", default="sharpe,return", help="optimizer objectives to include in the grid")
+    ho.add_argument("--select-by", choices=["return", "sharpe"], default="return")
     ho.add_argument("--min-walk-forward-score", type=float, default=0.0)
     ho.add_argument("--min-improvement-margin", type=float, default=0.05)
     ho.add_argument("--workers", type=int, default=4)
@@ -480,8 +498,11 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
     bt.add_argument("--params", default=None, help='JSON, e.g. \'{"fast_window": 10, "slow_window": 50}\'')
     bt.add_argument("--initial-cash", type=float, default=10_000.0)
-    bt.add_argument("--fee-rate", type=float, default=0.001)
-    bt.add_argument("--slippage-rate", type=float, default=0.0005, help="per-side spread/impact on market orders")
+    bt.add_argument("--fee-rate", type=float, default=0.0002, help="per-side fee (default: 0.02%% limit/maker)")
+    bt.add_argument("--slippage-rate", type=float, default=0.0, help="per-side spread/impact (market orders)")
+    bt.add_argument("--order-type", choices=["limit", "market"], default="limit",
+                       help="limit: fills only if the next bar trades through the close")
+    bt.add_argument("--carry-rate-per-day", type=float, default=0.0004, help="margin carry on open positions")
     bt.set_defaults(func=cmd_backtest)
 
     opt = sub.add_parser("optimize", help="Walk-forward grid search for strategy parameters")
@@ -490,10 +511,14 @@ def build_parser() -> argparse.ArgumentParser:
     opt.add_argument("--refresh", action="store_true")
     opt.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
     opt.add_argument("--initial-cash", type=float, default=10_000.0)
-    opt.add_argument("--fee-rate", type=float, default=0.001)
-    opt.add_argument("--slippage-rate", type=float, default=0.0005, help="per-side spread/impact on market orders")
+    opt.add_argument("--fee-rate", type=float, default=0.0002, help="per-side fee (default: 0.02%% limit/maker)")
+    opt.add_argument("--slippage-rate", type=float, default=0.0, help="per-side spread/impact (market orders)")
+    opt.add_argument("--order-type", choices=["limit", "market"], default="limit",
+                       help="limit: fills only if the next bar trades through the close")
+    opt.add_argument("--carry-rate-per-day", type=float, default=0.0004, help="margin carry on open positions")
     opt.add_argument("--n-splits", type=int, default=4)
     opt.add_argument("--min-trades", type=int, default=5)
+    opt.add_argument("--score", choices=["sharpe", "return"], default="sharpe")
     opt.set_defaults(func=cmd_optimize)
 
     pt = sub.add_parser("paper-trade", help="Run the (simulated-only) paper trading loop")
@@ -501,8 +526,11 @@ def build_parser() -> argparse.ArgumentParser:
     pt.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
     pt.add_argument("--params", default=None, help="JSON params for the strategy")
     pt.add_argument("--initial-cash", type=float, default=10_000.0)
-    pt.add_argument("--fee-rate", type=float, default=0.001)
-    pt.add_argument("--slippage-rate", type=float, default=0.0005, help="per-side spread/impact on market orders")
+    pt.add_argument("--fee-rate", type=float, default=0.0002, help="per-side fee (default: 0.02%% limit/maker)")
+    pt.add_argument("--slippage-rate", type=float, default=0.0, help="per-side spread/impact (market orders)")
+    pt.add_argument("--order-type", choices=["limit", "market"], default="limit",
+                       help="limit: fills only if the next bar trades through the close")
+    pt.add_argument("--carry-rate-per-day", type=float, default=0.0004, help="margin carry on open positions")
     pt.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
     pt.add_argument("--iterations", type=int, default=1, help="0 = run forever")
     pt.add_argument("--sleep-seconds", type=float, default=60.0)
@@ -512,14 +540,19 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--strategy", default="sma_crossover", choices=sorted(STRATEGIES))
         p.add_argument("--params", default=None, help="JSON starting params for the strategy")
         p.add_argument("--initial-cash", type=float, default=10_000.0)
-        p.add_argument("--fee-rate", type=float, default=0.001)
-        p.add_argument("--slippage-rate", type=float, default=0.0005, help="per-side spread/impact on market orders")
+        p.add_argument("--fee-rate", type=float, default=0.0002, help="per-side fee (default: 0.02%% limit/maker)")
+        p.add_argument("--slippage-rate", type=float, default=0.0, help="per-side spread/impact (market orders)")
+        p.add_argument("--order-type", choices=["limit", "market"], default="limit",
+                           help="limit: fills only if the next bar trades through the close")
+        p.add_argument("--carry-rate-per-day", type=float, default=0.0004, help="margin carry on open positions")
         p.add_argument("--n-splits", type=int, default=3)
         p.add_argument("--min-trades", type=int, default=3,
                        help="closed trades a fold needs before its score counts")
         p.add_argument("--history-candles", type=int, default=history_default,
                        help="trailing bars each re-optimization sees")
         p.add_argument("--reoptimize-every", type=int, default=24, help="re-optimize every N bars")
+        p.add_argument("--score", choices=["sharpe", "return"], default="sharpe",
+                       help="what the walk-forward optimizer maximizes (annualized)")
         p.add_argument("--min-walk-forward-score", type=float, default=0.0)
         p.add_argument("--min-improvement-margin", type=float, default=0.05)
 

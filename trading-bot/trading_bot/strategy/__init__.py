@@ -1,9 +1,21 @@
 from .base import Strategy
-from .more import DonchianBreakoutStrategy, MultiStrategy, RSIReversionStrategy
+from .more import (
+    DonchianBreakoutLongShort,
+    DonchianBreakoutStrategy,
+    MultiLongShort,
+    MultiStrategy,
+    RSIReversionLongShort,
+    RSIReversionStrategy,
+    SMACrossoverLongShort,
+)
 from .moving_average import SMACrossoverStrategy
 
 STRATEGIES = {
-    s.name: s for s in (SMACrossoverStrategy, DonchianBreakoutStrategy, RSIReversionStrategy, MultiStrategy)
+    s.name: s
+    for s in (
+        SMACrossoverStrategy, DonchianBreakoutStrategy, RSIReversionStrategy, MultiStrategy,
+        SMACrossoverLongShort, DonchianBreakoutLongShort, RSIReversionLongShort, MultiLongShort,
+    )
 }
 
 __all__ = [
