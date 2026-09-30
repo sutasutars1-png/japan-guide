@@ -32,3 +32,24 @@ def test_self_improve_csv_demo_stops_at_end_of_file(tmp_path: Path, sample_ohlcv
     steps = [json.loads(line) for line in capsys.readouterr().out.splitlines() if '"event": "step"' in line]
     assert len(steps) == 21  # bars 600..620 inclusive of the first decidable one
     assert all(s["action"] != "no_new_bar" for s in steps)
+
+
+def _small_grid(monkeypatch):
+    import trading_bot.research.holdout as holdout
+
+    monkeypatch.setattr(holdout, "DEFAULT_GRID", {"history_candles": [240, 360], "n_splits": [3], "min_trades": [2, 3],
+                                                  "score": ["sharpe"]})
+
+
+def test_holdout_and_rolling_commands_run_end_to_end(tmp_path: Path, sample_ohlcv, capsys, monkeypatch):
+    _small_grid(monkeypatch)
+    csv = tmp_path / "ohlcv.csv"
+    save_csv(sample_ohlcv, csv)
+    main(["holdout", "--csv", str(csv), "--confirm-days", "10", "--scores", "sharpe", "--workers", "2",
+          "--export-json", str(tmp_path / "h.json")])
+    assert json.loads((tmp_path / "h.json").read_text())["strategy"] == "sma_crossover_ls"
+    cache = tmp_path / "cache"
+    main(["rolling", "--csv", str(csv), "--window-days", "5", "--min-selection-days", "10", "--scores", "sharpe",
+          "--workers", "2", "--cache-positions", str(cache), "--export-json", str(tmp_path / "r.json")])
+    assert len(list(cache.glob("*.npy"))) == 4  # positions are reused by the next run
+    assert "chained" in capsys.readouterr().out

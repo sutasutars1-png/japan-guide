@@ -179,7 +179,7 @@ def cmd_holdout(args) -> None:
         fee_rate=args.fee_rate, slippage_rate=args.slippage_rate, order_type=args.order_type,
         carry_rate_per_day=args.carry_rate_per_day, select_by=args.select_by,
         min_walk_forward_score=args.min_walk_forward_score, min_improvement_margin=args.min_improvement_margin,
-        workers=args.workers, cache_dir=Path(args.cache_positions) if args.cache_positions else None,
+        workers=args.workers,
     )
     pct = lambda v: f"{v:+.1%}" if v is not None else "n/a"
     print(f"strategy={report.strategy}  confirmation period starts {report.split_timestamp}")
@@ -217,7 +217,7 @@ def cmd_rolling(args) -> None:
         fee_rate=args.fee_rate, slippage_rate=args.slippage_rate, order_type=args.order_type,
         carry_rate_per_day=args.carry_rate_per_day, select_by=args.select_by,
         min_walk_forward_score=args.min_walk_forward_score, min_improvement_margin=args.min_improvement_margin,
-        workers=args.workers,
+        workers=args.workers, cache_dir=Path(args.cache_positions) if args.cache_positions else None,
     )
     pct = lambda v: f"{v:+.1%}"
     keys = list(report.chained)
