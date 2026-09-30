@@ -206,6 +206,40 @@ def cmd_holdout(args) -> None:
         print(f"wrote {args.export_json}")
 
 
+def cmd_rolling(args) -> None:
+    from .research.holdout import DEFAULT_GRID
+    from .research.rolling import run_rolling
+
+    df = _load_history(args)
+    report = run_rolling(
+        df, args.strategy, window_days=args.window_days, min_selection_days=args.min_selection_days,
+        grid=dict(DEFAULT_GRID, score=args.scores.split(",")), reoptimize_every=args.reoptimize_every,
+        fee_rate=args.fee_rate, slippage_rate=args.slippage_rate, order_type=args.order_type,
+        carry_rate_per_day=args.carry_rate_per_day, select_by=args.select_by,
+        min_walk_forward_score=args.min_walk_forward_score, min_improvement_margin=args.min_improvement_margin,
+        workers=args.workers,
+    )
+    pct = lambda v: f"{v:+.1%}"
+    keys = list(report.chained)
+    print(f"strategy={report.strategy}  out-of-sample from {report.start_timestamp}, "
+          f"{len(report.windows)} windows of {report.window_bars} bars (rules re-chosen before each)")
+    print(f"{'window start':>12} {'chosen':>20} {'auto':>7} | " + " ".join(f"{k:>9}" for k in keys) + " | settings min/med/max")
+    for w in report.windows:
+        c = w["chosen"]
+        tag = f"{c['history_candles']}/{c['n_splits']}/{c['min_trades']}/{c['score']}"
+        sr = w["settings_return"]
+        print(f"{w['start'][:10]:>12} {tag:>20} {w['auto_variant']:>7} | " + " ".join(f"{pct(w['returns'][k]):>9}" for k in keys)
+              + f" | {pct(sr['min'])} / {pct(sr['median'])} / {pct(sr['max'])}")
+    print(f"{'chained':>42} | " + " ".join(f"{pct(report.chained[k]['total_return']):>9}" for k in keys))
+    print(f"{'Sharpe':>42} | " + " ".join(f"{report.chained[k]['sharpe']:>9.2f}" for k in keys))
+    print(f"{'max DD':>42} | " + " ".join(f"{pct(report.chained[k]['max_drawdown']):>9}" for k in keys))
+    print(f"{'trades':>42} | " + " ".join(f"{report.chained[k]['num_trades']:>9}" for k in keys))
+    if args.export_json:
+        Path(args.export_json).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.export_json).write_text(json.dumps(report.to_dict(), default=str), encoding="utf-8")
+        print(f"wrote {args.export_json}")
+
+
 def cmd_dashboard(args) -> None:
     from .dashboard.build import build_dashboard
 
@@ -486,6 +520,26 @@ def build_parser() -> argparse.ArgumentParser:
     ho.add_argument("--workers", type=int, default=4)
     ho.add_argument("--export-json", default=None)
     ho.set_defaults(func=cmd_holdout)
+
+    ro = sub.add_parser("rolling", help="Re-choose the rules before every window and chain the unseen windows")
+    add_data_args(ro)
+    ro.add_argument("--strategy", default=DEFAULT_STRATEGY, choices=sorted(STRATEGIES))
+    ro.add_argument("--max-candles", type=int, default=100_000)
+    ro.add_argument("--refresh", action="store_true")
+    ro.add_argument("--window-days", type=float, default=60)
+    ro.add_argument("--min-selection-days", type=float, default=120)
+    ro.add_argument("--reoptimize-every", type=int, default=24)
+    ro.add_argument("--fee-rate", type=float, default=0.0002)
+    ro.add_argument("--slippage-rate", type=float, default=0.0)
+    ro.add_argument("--order-type", choices=["limit", "market"], default="limit")
+    ro.add_argument("--carry-rate-per-day", type=float, default=0.0004)
+    ro.add_argument("--scores", default="sharpe,return", help="optimizer objectives to include in the grid")
+    ro.add_argument("--select-by", choices=["return", "sharpe"], default="return")
+    ro.add_argument("--min-walk-forward-score", type=float, default=0.0)
+    ro.add_argument("--min-improvement-margin", type=float, default=0.05)
+    ro.add_argument("--workers", type=int, default=4)
+    ro.add_argument("--export-json", default=None)
+    ro.set_defaults(func=cmd_rolling)
 
     db = sub.add_parser("dashboard", help="Build the self-contained dashboard HTML (replay + live paper trading)")
     add_data_args(db)

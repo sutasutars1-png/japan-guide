@@ -34,6 +34,9 @@ class ReplayResult:
     params_list: list[dict] = field(default_factory=list)
     equity: dict[str, list[float]] = field(default_factory=dict)
     metrics: dict[str, dict] = field(default_factory=dict)
+    # Target position the system decided at each bar's close (all bars, not only
+    # the scored ones). Kept out of to_dict(): research code stitches these.
+    system_position: list[float] = field(default_factory=list, repr=False)
 
     def to_dict(self) -> dict:
         return {
@@ -144,4 +147,5 @@ def replay(
         params_list=params_list,
         equity={k: [float(v) for v in r.equity_curve.to_numpy()] for k, r in runs.items()},
         metrics={k: {mk: _finite(mv) for mk, mv in r.metrics.items()} for k, r in runs.items()},
+        system_position=[float(x) for x in system_pos],
     )
