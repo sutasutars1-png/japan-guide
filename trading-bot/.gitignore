@@ -11,6 +11,7 @@ state/*.json
 state/*.jsonl
 state/*.html
 state/*.tmp
+state/rolling_cache/
 
 config.yaml
 .env

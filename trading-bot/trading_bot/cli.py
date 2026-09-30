@@ -179,7 +179,7 @@ def cmd_holdout(args) -> None:
         fee_rate=args.fee_rate, slippage_rate=args.slippage_rate, order_type=args.order_type,
         carry_rate_per_day=args.carry_rate_per_day, select_by=args.select_by,
         min_walk_forward_score=args.min_walk_forward_score, min_improvement_margin=args.min_improvement_margin,
-        workers=args.workers,
+        workers=args.workers, cache_dir=Path(args.cache_positions) if args.cache_positions else None,
     )
     pct = lambda v: f"{v:+.1%}" if v is not None else "n/a"
     print(f"strategy={report.strategy}  confirmation period starts {report.split_timestamp}")
@@ -538,6 +538,8 @@ def build_parser() -> argparse.ArgumentParser:
     ro.add_argument("--min-walk-forward-score", type=float, default=0.0)
     ro.add_argument("--min-improvement-margin", type=float, default=0.05)
     ro.add_argument("--workers", type=int, default=4)
+    ro.add_argument("--cache-positions", default=str(DEFAULT_STATE_DIR / "rolling_cache"),
+                    help="reuse each setting's replayed positions across runs ('' to disable)")
     ro.add_argument("--export-json", default=None)
     ro.set_defaults(func=cmd_rolling)
 

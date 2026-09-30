@@ -18,6 +18,7 @@ rule setting (`VARIANTS`):
   (exactly what `holdout` picks);
 - "vote3": majority vote of the top 3 settings' positions (-1/0/1), so one
   setting's bad streak is outvoted;
+- "vote_all": majority vote of every setting — no choice of setting at all;
 - "stopX": "single" with a stop: once a position is X% against its entry
   price, go flat until the signal changes side;
 - "auto": in each window, whichever of the variants above did best on the
@@ -25,9 +26,13 @@ rule setting (`VARIANTS`):
 """
 from __future__ import annotations
 
+import hashlib
 import itertools
+import json
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -40,7 +45,7 @@ from ..strategy import STRATEGIES
 from .holdout import DEFAULT_GRID, SELECT_METRIC, _neighbours
 
 STOP_LEVELS = (0.05, 0.10)
-BASE_VARIANTS = ("single", "vote3", *(f"stop{int(s * 100)}" for s in STOP_LEVELS))
+BASE_VARIANTS = ("single", "vote3", "vote_all", *(f"stop{int(s * 100)}" for s in STOP_LEVELS))
 
 
 def apply_stop(target: np.ndarray, close: np.ndarray, stop: float) -> np.ndarray:
@@ -116,7 +121,11 @@ def run_rolling(
     select_by: str = "return",
     workers: int = 4,
     timeframe: str = "1h",
+    cache_dir: Optional[Path] = None,
 ) -> RollingReport:
+    """`cache_dir` keeps each setting's replayed positions, keyed by everything
+    that determines them (setting, costs, gate, and the exact bars), so
+    re-analysing the same data skips the replays."""
     engine_kwargs = dict(fee_rate=fee_rate, slippage_rate=slippage_rate, order_type=order_type,
                          carry_rate_per_day=carry_rate_per_day)
     engine = BacktestEngine(**engine_kwargs)
@@ -134,8 +143,30 @@ def run_rolling(
     settings = list(itertools.product(*grid.values()))
     specs = [(_Spec(strategy, s, reoptimize_every, engine_kwargs, min_walk_forward_score, min_improvement_margin, warm), df)
              for s in settings]
-    with ProcessPoolExecutor(max_workers=workers) as pool:
-        positions = {s: np.array(p) for s, p in zip(settings, pool.map(_replay_positions, specs))}
+    def cache_path(spec: _Spec) -> Optional[Path]:
+        if cache_dir is None:
+            return None
+        key = json.dumps([asdict(spec), n, str(df["timestamp"].iloc[0]), str(df["timestamp"].iloc[-1]),
+                          float(df["close"].sum())], default=str)
+        return Path(cache_dir) / f"{strategy}_{hashlib.sha1(key.encode()).hexdigest()[:16]}.npy"
+
+    positions = {}
+    todo = []
+    for spec, frame in specs:
+        path = cache_path(spec)
+        if path is not None and path.exists():
+            positions[spec.setting] = np.load(path)
+        else:
+            todo.append((spec, frame))
+    if todo:
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            for (spec, _), pos in zip(todo, pool.map(_replay_positions, todo)):
+                positions[spec.setting] = np.array(pos)
+                path = cache_path(spec)
+                if path is not None:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    np.save(path, positions[spec.setting])
+    positions = {s: positions[s] for s in settings}
 
     close = df["close"].to_numpy(dtype=float)
     static = np.nan_to_num(STRATEGIES[strategy]().generate_positions(df).to_numpy(dtype=float))
@@ -144,9 +175,11 @@ def run_rolling(
     def score(pos: np.ndarray, a: int, b: int) -> dict:
         return engine.run_positions(df.iloc[a:b].reset_index(drop=True), pos[a:b], timeframe=timeframe).metrics
 
+    vote_all = majority(list(positions.values()))
+
     def variants_for(ranked: list[tuple]) -> dict[str, np.ndarray]:
         best = positions[ranked[0]]
-        out = {"single": best, "vote3": majority([positions[s] for s in ranked[:3]])}
+        out = {"single": best, "vote3": majority([positions[s] for s in ranked[:3]]), "vote_all": vote_all}
         for lvl in STOP_LEVELS:
             out[f"stop{int(lvl * 100)}"] = apply_stop(best, close, lvl)
         return out

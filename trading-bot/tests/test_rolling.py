@@ -20,8 +20,9 @@ def test_majority_vote_keeps_positions_discrete():
     assert votes.tolist() == [1.0, -1.0, -1.0, 1.0]
 
 
-def test_rolling_rechooses_before_each_window_and_chains_them(sample_ohlcv):
-    report = run_rolling(sample_ohlcv, "sma_crossover_ls", window_days=5, min_selection_days=10, grid=GRID, workers=2)
+def test_rolling_rechooses_before_each_window_and_chains_them(sample_ohlcv, tmp_path):
+    report = run_rolling(sample_ohlcv, "sma_crossover_ls", window_days=5, min_selection_days=10, grid=GRID, workers=2,
+                         cache_dir=tmp_path)
     n, warm, window = len(sample_ohlcv), 359, 120
     first = warm + 240
     assert report.start_timestamp == sample_ohlcv["timestamp"].iloc[first].isoformat()
@@ -34,3 +35,9 @@ def test_rolling_rechooses_before_each_window_and_chains_them(sample_ohlcv):
     for k in ("single", "buy_hold"):
         product = np.prod([1 + w["returns"][k] for w in report.windows]) - 1
         assert np.isclose(product, report.chained[k]["total_return"])
+
+    # A second run reads the cached positions and reproduces the report.
+    assert len(list(tmp_path.glob("*.npy"))) == 4
+    again = run_rolling(sample_ohlcv, "sma_crossover_ls", window_days=5, min_selection_days=10, grid=GRID, workers=2,
+                        cache_dir=tmp_path)
+    assert again.chained == report.chained
