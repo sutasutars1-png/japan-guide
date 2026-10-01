@@ -349,9 +349,16 @@ def cmd_paper_trade(args) -> None:
 def cmd_self_improve(args) -> None:
     strategy_cls = _strategy_cls(args.strategy)
     csv_replay = None
+    settings = None
+    if args.committee:
+        from .research.holdout import DEFAULT_GRID
+        from .self_improve.committee import all_settings
+
+        settings = all_settings(DEFAULT_GRID)
+    history_candles = max(s[0] for s in settings) if settings else args.history_candles
     if args.csv:
         # Start once enough bars exist for the first re-optimization.
-        csv_replay = CsvReplay(load_csv(Path(args.csv)), start=max(args.window, args.history_candles))
+        csv_replay = CsvReplay(load_csv(Path(args.csv)), start=max(args.window, history_candles))
     trader = PaperTrader(
         symbol=args.symbol,
         strategy_cls=strategy_cls,
@@ -370,7 +377,7 @@ def cmd_self_improve(args) -> None:
 
         def history_provider() -> pd.DataFrame:
             # Ends at the bar the trader is about to decide on, never later.
-            return csv_replay.upcoming_window(args.history_candles)
+            return csv_replay.upcoming_window(history_candles)
 
     else:
         fetcher = OHLCVFetcher(exchange_id=args.exchange, cache_dir=Path(args.cache_dir))
@@ -379,35 +386,48 @@ def cmd_self_improve(args) -> None:
             return fetcher.fetch(
                 args.symbol,
                 timeframe=args.timeframe,
-                max_candles=args.history_candles,
+                max_candles=history_candles,
                 refresh=True,
             )
 
-    loop = SelfImprovementLoop(
-        trader=trader,
-        optimizer=WalkForwardOptimizer(
-            engine=_engine(args),
-            n_splits=args.n_splits,
-            min_trades=args.min_trades,
-            score=args.score,
-        ),
-        strategy_cls=strategy_cls,
-        history_provider=history_provider,
-        state_dir=Path(args.state_dir),
-        timeframe=args.timeframe,
-        min_walk_forward_score=args.min_walk_forward_score,
-        min_improvement_margin=args.min_improvement_margin,
-    )
+    if settings:
+        from .self_improve.committee import CommitteeLoop
+
+        loop = CommitteeLoop(
+            trader=trader, strategy_cls=strategy_cls, settings=settings, engine=_engine(args),
+            history_provider=history_provider, state_dir=Path(args.state_dir), timeframe=args.timeframe,
+            min_walk_forward_score=args.min_walk_forward_score, min_improvement_margin=args.min_improvement_margin,
+            initial_params=_parse_params(args.params),
+        )
+    else:
+        loop = SelfImprovementLoop(
+            trader=trader,
+            optimizer=WalkForwardOptimizer(
+                engine=_engine(args),
+                n_splits=args.n_splits,
+                min_trades=args.min_trades,
+                score=args.score,
+            ),
+            strategy_cls=strategy_cls,
+            history_provider=history_provider,
+            state_dir=Path(args.state_dir),
+            timeframe=args.timeframe,
+            min_walk_forward_score=args.min_walk_forward_score,
+            min_improvement_margin=args.min_improvement_margin,
+        )
 
     state_dir = Path(args.state_dir)
     state_dir.mkdir(parents=True, exist_ok=True)
     (state_dir / "run_config.json").write_text(json.dumps({
-        "strategy": args.strategy, "params": dict(trader.strategy.params), "exchange": args.exchange,
+        "strategy": args.strategy, "exchange": args.exchange,
+        # A committee's trader votes; record the members' common starting params instead.
+        "params": dict(strategy_cls(**_parse_params(args.params)).params if settings else trader.strategy.params),
         "symbol": args.symbol, "timeframe": args.timeframe, "history_candles": args.history_candles,
         "reoptimize_every": args.reoptimize_every, "n_splits": args.n_splits, "min_trades": args.min_trades,
         "min_walk_forward_score": args.min_walk_forward_score, "min_improvement_margin": args.min_improvement_margin,
         "fee_rate": args.fee_rate, "slippage_rate": args.slippage_rate, "score": args.score,
         "order_type": args.order_type, "carry_rate_per_day": args.carry_rate_per_day,
+        "committee": [list(s) for s in settings] if settings else None,
     }, indent=2), encoding="utf-8")
 
     def refresh_dashboard():
@@ -625,6 +645,8 @@ def build_parser() -> argparse.ArgumentParser:
     si.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
     si.add_argument("--steps", type=int, default=1, help="bars to run; 0 = run forever")
     si.add_argument("--step-seconds", type=float, default=3600.0, help="wall-clock seconds per bar")
+    si.add_argument("--committee", action="store_true",
+                    help="run every rule setting of the holdout grid and trade their majority vote")
     si.add_argument("--dashboard-out", default=None, help="rebuild this dashboard HTML after every re-optimization")
     si.set_defaults(func=cmd_self_improve)
 
