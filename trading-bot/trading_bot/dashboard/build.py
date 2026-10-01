@@ -76,6 +76,28 @@ def _read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
 
+ROLLING_KEYS = ("vote_all", "single", "static", "buy_hold")
+
+
+def load_rolling(path: Optional[Path]) -> Optional[dict]:
+    """The latest `rolling --export-json` report, trimmed to what the page shows."""
+    if path is None or not Path(path).exists():
+        return None
+    r = json.loads(Path(path).read_text(encoding="utf-8"))
+    keys = [k for k in ROLLING_KEYS if k in r["chained"]]
+    tag = lambda c: f"{c['history_candles']}/{c['n_splits']}/{c['min_trades']}/{c['score']}"
+    return {
+        "strategy": r["strategy"],
+        "start": _ms(r["start_timestamp"]),
+        "window_bars": r["window_bars"],
+        "windows": [{"start": _ms(w["start"]), "end": _ms(w["end"]), "chosen": tag(w["chosen"]),
+                     "returns": {k: w["returns"][k] for k in keys}} for w in r["windows"]],
+        "chained": {k: {m: r["chained"][k][m] for m in ("total_return", "sharpe", "max_drawdown", "num_trades")}
+                    for k in keys},
+        "equity": {k: [round(v, 1) for v in r["equity"][k]] for k in keys},
+    }
+
+
 def page_defaults(run_config: Optional[dict]) -> dict:
     """Start the page on the live bot's own rules, so its replay is comparable."""
     if not run_config:
@@ -109,6 +131,7 @@ def build_dashboard(
     exchange: str = "kraken",
     symbol: str = "BTC/USD",
     strategy: Optional[str] = None,
+    rolling_path: Optional[Path] = None,
 ) -> Path:
     df = store.load()
     if df.empty:
@@ -130,6 +153,7 @@ def build_dashboard(
         html.replace("__CANDLE_JSON__", _embed(candles))
         .replace("__LIVE_JSON__", _embed(live))
         .replace("__CONFIG_JSON__", _embed(config))
+        .replace("__ROLLING_JSON__", _embed(load_rolling(rolling_path or (Path(state_dir) / "rolling.json" if state_dir else None))))
         .replace("__ENGINE_JS__", (HERE / "engine.js").read_text(encoding="utf-8"))
     )
     out_path = Path(out_path)

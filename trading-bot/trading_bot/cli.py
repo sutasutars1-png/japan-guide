@@ -246,7 +246,8 @@ def cmd_dashboard(args) -> None:
     store = _store(args)
     if args.csv:
         store.path = Path(args.csv)
-    out = build_dashboard(store, Path(args.out), Path(args.state_dir), args.exchange, args.symbol, args.strategy)
+    out = build_dashboard(store, Path(args.out), Path(args.state_dir), args.exchange, args.symbol, args.strategy,
+                          rolling_path=Path(args.rolling_json) if args.rolling_json else None)
     print(f"wrote {out} ({out.stat().st_size // 1024} KB)")
 
 
@@ -568,6 +569,8 @@ def build_parser() -> argparse.ArgumentParser:
     db.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
     db.add_argument("--strategy", default=None, choices=sorted(STRATEGIES), help="live strategy (default: from run_config.json)")
     db.add_argument("--out", default=str(DEFAULT_STATE_DIR / "dashboard.html"))
+    db.add_argument("--rolling-json", default=None,
+                    help="`rolling --export-json` report to show (default: <state-dir>/rolling.json if present)")
     db.set_defaults(func=cmd_dashboard)
 
     ds = sub.add_parser("data-status", help="Show how much history the store holds")

@@ -113,3 +113,25 @@ def test_params_accept_json_or_shell_friendly_pairs():
     assert _parse_params('{"fast_window": 10}') == {"fast_window": 10}
     assert _parse_params("strategy=rsi_reversion,period=14,lower=25,upper=60.5") == {
         "strategy": "rsi_reversion", "period": 14, "lower": 25, "upper": 60.5}
+
+
+def test_dashboard_embeds_a_rolling_report_when_present(sample_ohlcv, tmp_path: Path):
+    from trading_bot.dashboard.build import build_dashboard
+    from trading_bot.data.store import OHLCVStore
+    from trading_bot.research.rolling import run_rolling
+
+    store = OHLCVStore(tmp_path / "cache", "kraken", "BTC/USD", "1h")
+    store.merge(sample_ohlcv, "exchange_ohlc")
+    grid = {"history_candles": [240, 360], "n_splits": [3], "min_trades": [2, 3], "score": ["sharpe"]}
+    report = run_rolling(sample_ohlcv, "sma_crossover_ls", window_days=5, min_selection_days=10, grid=grid, workers=2)
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "rolling.json").write_text(json.dumps(report.to_dict(), default=str))
+    html = build_dashboard(store, tmp_path / "d.html", state).read_text(encoding="utf-8")
+    roll = _embedded(html, "rolling-data")
+    assert len(roll["windows"]) == len(report.windows)
+    assert roll["chained"]["vote_all"]["total_return"] == report.chained["vote_all"]["total_return"]
+    assert len(roll["equity"]["vote_all"]) == len(report.equity["vote_all"])
+    # Without a report the panel is simply absent.
+    assert _embedded(build_dashboard(store, tmp_path / "e.html", tmp_path / "none").read_text(encoding="utf-8"),
+                     "rolling-data") is None

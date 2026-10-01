@@ -323,6 +323,30 @@
         </div>
       </section>
 
+      <section class="panel" id="rollPanel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">期間をずらした検証(rolling・事前計算)</div>
+            <div class="panel-sub" id="rollSub">-</div>
+          </div>
+          <div class="legend">
+            <span class="lg"><span class="sw" style="background:var(--good);height:3px"></span>全設定の多数決</span>
+            <span class="lg"><span class="sw" style="background:var(--warn)"></span>1設定を選ぶ</span>
+            <span class="lg"><span class="sw" style="background:var(--blue)"></span>固定</span>
+            <span class="lg" style="color:var(--violet)"><span class="sw dash"></span><span style="color:var(--text-dim)">バイ&amp;ホールド</span></span>
+          </div>
+        </div>
+        <div class="chart-wrap" id="rollWrap">
+          <canvas id="rollCanvas" aria-label="期間ごとに選び直した場合の、未使用期間を連結した評価額"></canvas>
+        </div>
+        <div class="table-scroll" style="margin-top:12px;">
+          <table class="data">
+            <thead><tr><th>確認期間 (UTC)</th><th>直前の期間で選んだ設定</th><th class="num">全設定の多数決</th><th class="num">1設定</th><th class="num">固定</th><th class="num">B&amp;H</th></tr></thead>
+            <tbody id="rollBody"></tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="panel">
         <div class="panel-head">
           <div>
@@ -566,6 +590,7 @@
 <script id="candle-data" type="application/json">__CANDLE_JSON__</script>
 <script id="live-data" type="application/json">__LIVE_JSON__</script>
 <script id="config-data" type="application/json">__CONFIG_JSON__</script>
+<script id="rolling-data" type="application/json">__ROLLING_JSON__</script>
 <script id="engine-src">
 __ENGINE_JS__
 </script>
@@ -576,6 +601,7 @@ __ENGINE_JS__
   const RAW = JSON.parse($("candle-data").textContent);   // [t, o, h, l, c, v, source]
   const LIVE = JSON.parse($("live-data").textContent);    // null or live paper-trading state
   const CONF = JSON.parse($("config-data").textContent);  // {defaults, built_at, exchange, symbol}
+  const ROLL = JSON.parse($("rolling-data").textContent);  // null or a trimmed `rolling` report
   const N = RAW.length;
   const BARS = { t: RAW.map(r => r[0]), h: RAW.map(r => r[2]), l: RAW.map(r => r[3]), c: RAW.map(r => r[4]) };
   const TIMES = BARS.t, CLOSES = BARS.c;
@@ -684,7 +710,7 @@ __ENGINE_JS__
       try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
     });
     let rt = null;
-    window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (R) { drawPrice(); drawEquity(); drawLive(); } }, 80); });
+    window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (R) { drawPrice(); drawEquity(); drawLive(); } drawRolling(); }, 80); });
   }
 
   // ---------- compute (in a worker, so the page stays responsive) ----------
@@ -1140,7 +1166,57 @@ __ENGINE_JS__
     wrap.addEventListener("mouseleave", () => { tip.style.display = "none"; });
   }
 
+  // ---------- rolling validation (precomputed by `rolling --export-json`) ----------
+  const RSER = [
+    { key: "buy_hold", label: "B&H", color: () => C.violet, width: 1.5, dash: [5, 4] },
+    { key: "static", label: "固定", color: () => C.blue, width: 1.4, dash: [] },
+    { key: "single", label: "1設定を選ぶ", color: () => C.warn, width: 1.6, dash: [] },
+    { key: "vote_all", label: "全設定の多数決", color: () => C.good, width: 2.2, dash: [] },
+  ];
+  function renderRolling() {
+    if (!ROLL) { $("rollPanel").hidden = true; return; }
+    const ch = ROLL.chained, v = ch.vote_all, bh = ch.buy_hold;
+    $("rollSub").textContent = fmtDate(ROLL.start) + " 以降、" + ROLL.windows.length + " 期間(各 " + Math.round(ROLL.window_bars / 24) +
+      " 日)。各期間の直前までのデータだけで選び、選択に使っていない期間を連結。全設定の多数決 " + fmtPct(v.total_return, 1) +
+      "(Sharpe " + v.sharpe.toFixed(2) + "、最大DD " + fmtPct(v.max_drawdown, 1) + ")/ B&H " + fmtPct(bh.total_return, 1);
+    const cell = x => '<td class="num"><span class="' + sign(x) + '">' + fmtPct(x, 1) + "</span></td>";
+    $("rollBody").innerHTML = ROLL.windows.map(w => '<tr><td class="mono">' + fmtDate(w.start).slice(0, 10) + " 〜 " + fmtDate(w.end).slice(0, 10) +
+      '</td><td class="mono">' + esc(w.chosen) + "</td>" + ["vote_all", "single", "static", "buy_hold"].map(k => cell(w.returns[k])).join("") + "</tr>").join("") +
+      '<tr><td class="mono">連結</td><td></td>' + ["vote_all", "single", "static", "buy_hold"].map(k => cell(ch[k].total_return)).join("") + "</tr>";
+    drawRolling();
+  }
+  function drawRolling() {
+    if (!ROLL) return;
+    const n = ROLL.equity.vote_all.length;
+    let i0 = barIndexOf(ROLL.start);
+    if (i0 < 0 || i0 + n > N) return;  // the page's candles don't cover the report
+    const { ctx, w, h } = setup($("rollCanvas"), window.innerWidth < 640 ? 200 : 230);
+    const l = 8, r = 70, t = 10, b = 24, pw = w - l - r, ph = h - t - b;
+    const pct = RSER.map(s => { const eq = ROLL.equity[s.key]; return eq.map(x => x / eq[0] - 1); });
+    let lo = 0, hi = 0;
+    pct.forEach(a => a.forEach(x => { lo = Math.min(lo, x); hi = Math.max(hi, x); }));
+    const padv = (hi - lo) * 0.08 || 0.01; lo -= padv; hi += padv;
+    const g = { l, t, pw, ph, v: { i0, n }, x: i => l + (pw * (i - i0)) / Math.max(1, n - 1), y: x => t + ph * (1 - (x - lo) / (hi - lo)) };
+    const ends = RSER.map((s, k) => ({ s, v: pct[k][n - 1], y: g.y(pct[k][n - 1]) })).sort((a, b) => a.y - b.y);
+    for (let k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 13) ends[k].y = ends[k - 1].y + 13;
+    axes(ctx, g, niceTicks(lo, hi, 4), x => fmtPct(x, 0), ends.map(e => e.y));
+    ROLL.windows.slice(1).forEach(wd => {
+      const i = barIndexOf(wd.start); if (i < 0) return;
+      const x = Math.round(g.x(i)) + 0.5;
+      ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(x, t); ctx.lineTo(x, t + ph); ctx.stroke(); ctx.setLineDash([]);
+    });
+    RSER.forEach((s, k) => {
+      ctx.strokeStyle = s.color(); ctx.lineWidth = s.width; ctx.setLineDash(s.dash); ctx.beginPath();
+      pct[k].forEach((x, j) => (j ? ctx.lineTo : ctx.moveTo).call(ctx, g.x(i0 + j), g.y(x)));
+      ctx.stroke(); ctx.setLineDash([]);
+    });
+    ctx.font = "600 10.5px " + MONO; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    ends.forEach(e => { ctx.fillStyle = e.s.color(); ctx.fillRect(l + pw + 6, e.y - 1, 6, 2); ctx.fillStyle = C.text; ctx.fillText(fmtPct(e.v, 1), l + pw + 15, e.y); });
+  }
+
   function init() {
+    renderRolling();
     renderHeader();
     bindControls();
     writeControls();
