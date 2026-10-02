@@ -234,6 +234,7 @@ def cmd_rolling(args) -> None:
     print(f"{'Sharpe':>42} | " + " ".join(f"{report.chained[k]['sharpe']:>9.2f}" for k in keys))
     print(f"{'max DD':>42} | " + " ".join(f"{pct(report.chained[k]['max_drawdown']):>9}" for k in keys))
     print(f"{'trades':>42} | " + " ".join(f"{report.chained[k]['num_trades']:>9}" for k in keys))
+    print(f"{'win rate':>42} | " + " ".join(f"{report.chained[k]['win_rate']:>9.1%}" for k in keys))
     if args.export_json:
         Path(args.export_json).parent.mkdir(parents=True, exist_ok=True)
         Path(args.export_json).write_text(json.dumps(report.to_dict(), default=str), encoding="utf-8")

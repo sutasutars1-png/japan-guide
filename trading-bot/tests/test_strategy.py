@@ -87,12 +87,14 @@ def test_gate_margin_grows_with_candidate_count():
 
 from trading_bot.optimize.optimizer import WalkForwardOptimizer, default_score  # noqa: E402
 
-LS = ["sma_crossover_ls", "donchian_breakout_ls", "rsi_reversion_ls", "multi_ls"]
+LS = ["sma_crossover_ls", "donchian_breakout_ls", "rsi_reversion_ls", "multi_ls",
+      "momentum_ls", "trend_strength_ls", "shock_reversion_ls"]
 
 
 @pytest.mark.parametrize("name", LS)
 def test_long_short_strategies_go_both_ways_without_lookahead(name, sample_ohlcv):
-    strategy = STRATEGIES[name]()
+    # shocks are rare in the short synthetic series; a lower threshold makes both sides occur
+    strategy = STRATEGIES[name](k=1.5) if name == "shock_reversion_ls" else STRATEGIES[name]()
     full = strategy.generate_positions(sample_ohlcv)
     assert set(full.unique().tolist()) <= {-1.0, 0.0, 1.0}
     assert (full == -1).any() and (full == 1).any()
@@ -122,3 +124,41 @@ def test_return_score_uses_annualized_mean_return():
     assert default_score(m, 10, "return") == float("-inf")
     with pytest.raises(ValueError):
         WalkForwardOptimizer(score="profit")
+
+
+def test_momentum_follows_the_lookback_return_with_a_flat_band(sample_ohlcv):
+    s = STRATEGIES["momentum_ls"](lookback_days=3, band=0.02)
+    pos = s.generate_positions(sample_ohlcv).to_numpy()
+    ret = (sample_ohlcv["close"] / sample_ohlcv["close"].shift(72) - 1).to_numpy()
+    assert (pos[:72] == 0).all()
+    assert ((pos == 1) == (ret > 0.02)).all() and ((pos == -1) == (ret < -0.02)).all()
+
+
+def test_trend_strength_enters_beyond_k_sigma_and_exits_at_the_average(sample_ohlcv):
+    s = STRATEGIES["trend_strength_ls"](window_days=3, k=1.5)
+    pos = s.generate_positions(sample_ohlcv).to_numpy()
+    c = sample_ohlcv["close"]
+    z = ((c - c.rolling(72).mean()) / c.rolling(72).std()).to_numpy()
+    for t in range(1, len(pos)):
+        if pos[t] == 1 and pos[t - 1] != 1:
+            assert z[t] > 1.5            # a new long needs a strong move up
+        if pos[t] == 1:
+            assert z[t] >= 0             # and is closed once back under the average
+        if pos[t] == -1:
+            assert z[t] <= 0
+    assert (pos == 0).mean() > 0.2       # flat a meaningful share of the time
+
+
+def test_shock_reversion_fades_a_large_move_for_hold_hours():
+    import pandas as pd
+
+    close = [100.0] * 800
+    close = [c * (1 + 0.001 * ((i % 7) - 3)) for i, c in enumerate(close)]  # small noise
+    close[760:] = [c * 0.85 for c in close[760:]]                             # a 15% drop at bar 760
+    df = pd.DataFrame({"timestamp": pd.date_range("2024-01-01", periods=800, freq="h", tz="UTC"),
+                       "open": close, "high": close, "low": close, "close": close, "volume": 1.0})
+    pos = STRATEGIES["shock_reversion_ls"](k=2.0, hold_hours=6).generate_positions(df).to_numpy()
+    assert (pos[:760] == 0).all()
+    assert pos[760] == 1                          # buy the drop
+    # the 24h return stays shocked until bar 783; the long is held 6 bars past the last trigger
+    assert (pos[760:789] == 1).all() and (pos[789:] == 0).all()

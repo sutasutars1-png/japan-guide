@@ -9,12 +9,14 @@ from .more import (
     SMACrossoverLongShort,
 )
 from .moving_average import SMACrossoverStrategy
+from .signals import MomentumLongShort, ShockReversionLongShort, TrendStrengthLongShort
 
 STRATEGIES = {
     s.name: s
     for s in (
         SMACrossoverStrategy, DonchianBreakoutStrategy, RSIReversionStrategy, MultiStrategy,
         SMACrossoverLongShort, DonchianBreakoutLongShort, RSIReversionLongShort, MultiLongShort,
+        MomentumLongShort, TrendStrengthLongShort, ShockReversionLongShort,
     )
 }
 
