@@ -1,0 +1,131 @@
+"""Paper trading loop.
+
+Simulates order execution against a virtual `Portfolio`; it never calls any
+exchange endpoint that could place, modify, or cancel a real order. Live
+market data comes from a caller-supplied `data_provider` callable — decoupled
+from any specific fetcher so this loop is trivially testable without network
+access, and so a future live-trading executor is a separate, explicit class
+rather than a flag on this one.
+"""
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+from typing import Callable, Iterator, Optional
+
+import pandas as pd
+
+from ..backtest.engine import periods_per_year_for
+from ..strategy.base import Strategy
+from .portfolio import Portfolio
+
+DataProvider = Callable[[], pd.DataFrame]
+
+
+def _iso(ts) -> str:
+    return ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
+
+
+class PaperTrader:
+    def __init__(
+        self,
+        symbol: str,
+        strategy_cls: type[Strategy],
+        params: dict,
+        data_provider: DataProvider,
+        state_dir: Path,
+        timeframe: str = "1h",
+        initial_cash: float = 10_000.0,
+        fee_rate: float = 0.001,
+        slippage_rate: float = 0.0,
+        order_type: str = "market",
+        carry_rate_per_day: float = 0.0,
+    ):
+        self.symbol = symbol
+        self.strategy_cls = strategy_cls
+        self.timeframe = timeframe
+        self.data_provider = data_provider
+        self.state_dir = Path(state_dir)
+
+        safe_symbol = symbol.replace("/", "-")
+        self.portfolio_path = self.state_dir / f"portfolio_{safe_symbol}.json"
+        self.decisions_log_path = self.state_dir / f"decisions_{safe_symbol}.jsonl"
+
+        self.portfolio = Portfolio.load_or_create(
+            self.portfolio_path, symbol, initial_cash, fee_rate, slippage_rate, carry_rate_per_day, order_type
+        )
+        self.carry_per_bar = self.portfolio.carry_rate_per_day * 365 / periods_per_year_for(timeframe)
+        self.strategy = strategy_cls(**params)
+        self.last_decided_bar = self._last_logged_bar()
+
+    def _last_logged_bar(self) -> Optional[str]:
+        if not self.decisions_log_path.exists():
+            return None
+        last = None
+        with open(self.decisions_log_path, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    last = line
+        return json.loads(last)["timestamp"] if last else None
+
+    def set_params(self, params: dict) -> None:
+        """Swap the active strategy's parameters (used by the self-improve loop)."""
+        self.strategy = self.strategy_cls(**params)
+
+    def step(self) -> dict:
+        """Fetch the latest data, decide, and simulate at most one trade."""
+        df = self.data_provider()
+        if df.empty:
+            raise ValueError("data_provider returned an empty OHLCV DataFrame")
+
+        latest_ts = df["timestamp"].iloc[-1]
+        ts_str = _iso(latest_ts)
+        if ts_str == self.last_decided_bar:
+            # No new closed bar since the last decision (early wake-up, restart,
+            # or the exchange hasn't published the bar yet): never act twice on one bar.
+            return {"timestamp": ts_str, "action": "no_new_bar", "params": self.strategy.params}
+
+        # Every bar closed since the last decision: fill a resting limit if a bar
+        # traded through it, and charge carry for each bar held (also catches up
+        # after downtime, one bar at a time).
+        fills: list[str] = []
+        new_bars = df
+        if self.last_decided_bar is not None:
+            new_bars = df[df["timestamp"] > pd.Timestamp(self.last_decided_bar)]
+        for bar in new_bars.itertuples():
+            fills += self.portfolio.on_bar(bar.high, bar.low, bar.close, _iso(bar.timestamp), self.carry_per_bar)
+
+        positions = self.strategy.generate_positions(df)
+        desired_position = float(positions.iloc[-1])
+        latest_price = float(df["close"].iloc[-1])
+        orders = self.portfolio.submit(int(desired_position), latest_price, ts_str)
+        actions = fills + orders
+        self.portfolio.save(self.portfolio_path)
+
+        record = {
+            "timestamp": ts_str,
+            "price": latest_price,
+            "desired_position": desired_position,
+            "position": self.portfolio.side(),
+            "action": "+".join(actions) if actions else "hold",
+            "equity": self.portfolio.equity(latest_price),
+            "params": self.strategy.params,
+        }
+        self._append_decision(record)
+        self.last_decided_bar = ts_str
+        return record
+
+    def _append_decision(self, record: dict) -> None:
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        with open(self.decisions_log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+
+    def run_loop(self, iterations: Optional[int] = None, sleep_seconds: float = 60.0) -> Iterator[dict]:
+        """Yield one decision record per step; sleeps between steps (not after the last)."""
+        count = 0
+        while iterations is None or count < iterations:
+            yield self.step()
+            count += 1
+            if iterations is None or count < iterations:
+                time.sleep(sleep_seconds)
