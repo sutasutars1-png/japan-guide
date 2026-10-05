@@ -1,0 +1,1232 @@
+<title>SMA Cross Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #08090b;
+    --surface: #101317;
+    --surface-2: #161a20;
+    --surface-3: #1d222a;
+    --border: rgba(255,255,255,0.09);
+    --border-strong: rgba(255,255,255,0.18);
+    --text: #eef1f5;
+    --text-dim: #9aa3ad;
+    --text-mute: #6b7380;
+    --good: #0fae8a;
+    --good-tint: rgba(15,174,138,0.14);
+    --critical: #e5484d;
+    --critical-tint: rgba(229,72,77,0.14);
+    --warn: #c99a2e;
+    --warn-tint: rgba(201,154,46,0.16);
+    --violet: #9333ea;
+    --blue: #2f8fd8;
+    --accent: #0fae8a;
+    --font-ui: "IBM Plex Sans JP", system-ui, -apple-system, "Hiragino Sans", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }  /* the page is also opened as a local file, without a host reset */
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app {
+    max-width: 1480px;
+    margin: 0 auto;
+    padding-inline: 16px;
+    padding-block: 16px calc(40px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  ::selection { background: rgba(15,174,138,0.35); }
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .up { color: var(--good); }
+  .down { color: var(--critical); }
+  .dim { color: var(--text-dim); }
+  .mute { color: var(--text-mute); }
+
+  /* header */
+  .topbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 18px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    width: 26px; height: 26px; flex: none; display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; background: var(--good-tint); border: 1px solid rgba(15,174,138,0.35);
+  }
+  .brand-name { font-weight: 600; font-size: 14.5px; }
+  .brand-sub { font-size: 11px; color: var(--text-mute); font-family: var(--font-mono); }
+  .divider { width: 1px; align-self: stretch; min-height: 28px; background: var(--border); }
+  .ticker { display: flex; align-items: baseline; gap: 10px; font-family: var(--font-mono); flex-wrap: wrap; }
+  .ticker-symbol { font-size: 17px; font-weight: 600; }
+  .ticker-price { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chg { font-size: 13px; font-weight: 500; padding: 2px 7px; border-radius: 5px; font-variant-numeric: tabular-nums; }
+  .chg.up { background: var(--good-tint); }
+  .chg.down { background: var(--critical-tint); }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em;
+    padding: 4px 8px; border-radius: 5px; border: 1px solid var(--border-strong); color: var(--text-dim);
+  }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
+  .topbar-right { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill {
+    font-family: var(--font-mono); font-size: 12px; font-weight: 500; white-space: nowrap;
+    padding: 5px 11px; border-radius: 999px; border: 1px solid transparent;
+  }
+  .pill.long { color: var(--good); background: var(--good-tint); border-color: rgba(15,174,138,0.4); }
+  .pill.flat { color: var(--text-dim); background: var(--surface-3); border-color: var(--border-strong); }
+  .pill.short { color: var(--critical); background: var(--critical-tint); border-color: rgba(229,72,77,0.4); }
+  .pill.paper { color: var(--warn); background: var(--warn-tint); border-color: rgba(201,154,46,0.4); }
+
+  /* system status strip */
+  .status-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  .seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 7px; overflow: hidden; }
+  .seg button { font-family: var(--font-mono); font-size: 11.5px; padding: 5px 10px; background: transparent; color: var(--text-dim); border: none; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--good-tint); color: var(--good); }
+  .busy { font-size: 11px; color: var(--warn); font-family: var(--font-mono); }
+  .head-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .status-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; min-width: 0;
+  }
+  .status-label { font-size: 11px; color: var(--text-mute); letter-spacing: 0.04em; margin-bottom: 4px; }
+  .status-value { font-family: var(--font-mono); font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .status-note { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; overflow-wrap: anywhere; }
+
+  /* layout */
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px 16px; min-width: 0; }
+  .panel-head { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .panel-title { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--text-dim); }
+  .panel-sub { font-size: 11.5px; color: var(--text-mute); margin-top: 2px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11.5px; color: var(--text-dim); }
+  .lg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .sw { width: 14px; height: 2px; border-radius: 2px; flex: none; }
+  .sw.box { width: 8px; height: 8px; }
+  .sw.dash { background: none !important; border-top: 2px dashed currentColor; height: 0; }
+
+  .chart-wrap { position: relative; width: 100%; }
+  .chart-wrap canvas { display: block; width: 100%; cursor: crosshair; }
+  .tip {
+    position: absolute; pointer-events: none; display: none; z-index: 5;
+    background: #05070a; border: 1px solid var(--border-strong); border-radius: 7px;
+    padding: 8px 10px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6;
+    white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  }
+  .tip .t-date { color: var(--text-dim); margin-bottom: 3px; }
+  .tip .t-row { display: flex; justify-content: space-between; gap: 14px; align-items: center; }
+  .tip .t-k { color: var(--text-mute); display: inline-flex; align-items: center; gap: 6px; }
+  #floatTip { position: fixed; }
+
+  /* controls */
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .fields { display: flex; flex-direction: column; gap: 14px; }
+  .field-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .field-label { font-size: 12.5px; color: var(--text); font-weight: 500; }
+  .field-value { font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; color: var(--good); white-space: nowrap; }
+  .field-help { font-size: 11px; color: var(--text-mute); line-height: 1.45; }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+    border-radius: 999px; background: var(--surface-3); outline: none; margin: 6px 0;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; cursor: pointer;
+    background: var(--accent); border: 2px solid #04150f; box-shadow: 0 0 0 3px rgba(15,174,138,0.18);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 15px; height: 15px; border-radius: 50%; cursor: pointer;
+    background: var(--accent); border: 2px solid #04150f; box-shadow: 0 0 0 3px rgba(15,174,138,0.18);
+  }
+  input[type="range"]:focus-visible, select:focus-visible, button:focus-visible, tr[tabindex]:focus-visible {
+    outline: 2px solid rgba(15,174,138,0.6); outline-offset: 2px;
+  }
+  select {
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong);
+    border-radius: 6px; padding: 6px 8px; font-family: var(--font-mono); font-size: 12.5px; width: 100%;
+  }
+  .group-label {
+    font-size: 10.5px; color: var(--text-mute); letter-spacing: 0.08em; text-transform: uppercase;
+    border-top: 1px solid var(--border); padding-top: 12px;
+  }
+  .group-label:first-child { border-top: none; padding-top: 0; }
+  .btn {
+    font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; cursor: pointer;
+    padding: 8px 12px; border-radius: 7px; border: 1px solid var(--border-strong);
+    background: var(--surface-2); color: var(--text);
+  }
+  .btn:hover { background: var(--surface-3); }
+  .btn.primary { background: var(--good-tint); border-color: rgba(15,174,138,0.45); color: var(--good); }
+  .cmd {
+    margin-top: 6px; background: #05070a; border: 1px solid var(--border); border-radius: 7px;
+    padding: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+    white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; user-select: all;
+  }
+  .row-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .copied { font-size: 11px; color: var(--good); }
+
+  /* tables */
+  .table-scroll { overflow-x: auto; }
+  table.data { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.data th {
+    text-align: left; font-weight: 500; color: var(--text-mute); font-size: 10.5px; letter-spacing: 0.04em;
+    padding: 6px 10px; border-bottom: 1px solid var(--border-strong); white-space: nowrap;
+  }
+  table.data td { padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table.data td.num, table.data th.num { text-align: right; }
+  table.data td.mono, table.data td.num { font-family: var(--font-mono); }
+  table.data td.reason { white-space: normal; min-width: 240px; color: var(--text-dim); font-size: 12px; }
+  table.data tbody tr:hover { background: var(--surface-2); }
+  table.cycles tbody tr { cursor: pointer; }
+  table.cycles tbody tr.selected { background: rgba(15,174,138,0.08); box-shadow: inset 2px 0 0 var(--accent); }
+  .chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .chip.win, .chip.promo { color: var(--good); background: var(--good-tint); }
+  .chip.loss { color: var(--critical); background: var(--critical-tint); }
+  .chip.open { color: var(--warn); background: var(--warn-tint); }
+  .chip.keep { color: var(--text-dim); background: var(--surface-3); }
+  .empty td { color: var(--text-mute); text-align: center; padding: 22px 10px; white-space: normal; }
+  .scroll-y { max-height: 420px; overflow-y: auto; }
+
+  /* comparison */
+  table.compare { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.compare th { font-size: 10.5px; color: var(--text-mute); font-weight: 500; text-align: right; padding: 4px 6px 8px; vertical-align: bottom; }
+  table.compare th:first-child { text-align: left; }
+  table.compare td { padding: 7px 6px; border-top: 1px solid var(--border); text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  table.compare td:first-child { text-align: left; font-family: var(--font-ui); color: var(--text-dim); font-size: 12px; }
+  .col-head { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; color: var(--text-dim); }
+  .col-head .sw { width: 16px; }
+
+  /* heatmap */
+  table.rank td { padding: 6px 8px; }
+  table.rank tr.is-candidate td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+  .heat { width: 100%; border-collapse: separate; border-spacing: 4px; font-family: var(--font-mono); }
+  .heat th { font-size: 10px; font-weight: 500; color: var(--text-mute); }
+  .heat td { text-align: center; font-size: 12px; padding: 8px 2px; border-radius: 6px; border: 1px solid var(--border); }
+  .heat td.invalid { color: var(--text-mute); border-style: dashed; }
+  .heat td.none { color: var(--text-mute); }
+  .heat td.is-candidate { box-shadow: inset 0 0 0 2px var(--accent); }
+  .heat td.is-incumbent { outline: 1px dashed var(--text-dim); outline-offset: 1px; }
+  .heat .rowlab { text-align: right; color: var(--text-mute); font-size: 11px; border: none; padding-right: 6px; }
+
+  .footer { display: flex; flex-wrap: wrap; gap: 6px 20px; justify-content: space-between; font-size: 11.5px; color: var(--text-mute); padding: 0 4px; }
+  .footer strong { color: var(--text-dim); font-weight: 600; }
+
+  @media (max-width: 1080px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 520px) {
+    .head-right { align-items: flex-start; }
+    .ticker-price { font-size: 19px; }
+    .divider { display: none; }
+    .topbar-right { margin-left: 0; }
+  }
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <rect x="1" y="6" width="2.4" height="6" rx="0.6" fill="#0fae8a"/>
+          <line x1="2.2" y1="2" x2="2.2" y2="6" stroke="#0fae8a" stroke-width="1.2"/>
+          <rect x="5.8" y="2" width="2.4" height="7" rx="0.6" fill="#e5484d"/>
+          <line x1="7" y1="9" x2="7" y2="12" stroke="#e5484d" stroke-width="1.2"/>
+          <rect x="10.6" y="4.5" width="2.4" height="5.5" rx="0.6" fill="#0fae8a"/>
+          <line x1="11.8" y1="2.5" x2="11.8" y2="4.5" stroke="#0fae8a" stroke-width="1.2"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">SMA Cross Lab</div>
+        <div class="brand-sub">self-improving-trading-bot · replay</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="ticker">
+      <span class="ticker-symbol">BTC/USD</span>
+      <span class="ticker-price" id="lastPrice">-</span>
+      <span class="chg" id="dayChange">-</span>
+    </div>
+    <span class="badge"><span class="dot"></span>KRAKEN</span>
+    <span class="badge" id="barsBadge">1H</span>
+    <div class="topbar-right">
+      <span class="pill" id="signalPill">-</span>
+      <span class="pill paper">● ペーパートレードのみ・実発注なし</span>
+    </div>
+  </header>
+
+  <section class="status-strip" aria-label="自己改善システムの状態">
+    <div class="status-card">
+      <div class="status-label">保存データ(1h足)</div>
+      <div class="status-value" id="stData">-</div>
+      <div class="status-note" id="stDataNote">-</div>
+    </div>
+    <div class="status-card">
+      <div class="status-label">稼働中の戦略・パラメータ</div>
+      <div class="status-value" id="stActive">-</div>
+      <div class="status-note" id="stActiveNote">-</div>
+    </div>
+    <div class="status-card">
+      <div class="status-label">最新サイクルの判定</div>
+      <div class="status-value" id="stLast">-</div>
+      <div class="status-note" id="stLastNote">-</div>
+    </div>
+    <div class="status-card">
+      <div class="status-label">昇格 / 再最適化サイクル <span class="busy" id="busy" hidden>計算中…</span></div>
+      <div class="status-value" id="stPromos">-</div>
+      <div class="status-note" id="stPromosNote">-</div>
+    </div>
+    <div class="status-card">
+      <div class="status-label">次の再最適化</div>
+      <div class="status-value" id="stNext">-</div>
+      <div class="status-note" id="stNextNote">-</div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <div class="col">
+      <section class="panel" id="livePanel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">実運用(ペーパートレード)</div>
+            <div class="panel-sub" id="liveSub">-</div>
+          </div>
+          <div class="legend" id="liveLegend">
+            <span class="lg"><span class="sw" style="background:var(--good);height:3px"></span>実運用</span>
+            <span class="lg"><span class="sw" style="background:var(--blue)"></span>同期間のリプレイ</span>
+            <span class="lg" style="color:var(--violet)"><span class="sw dash"></span><span style="color:var(--text-dim)">バイ&amp;ホールド</span></span>
+          </div>
+        </div>
+        <div id="liveEmpty" class="field-help" hidden></div>
+        <div id="liveBody">
+          <div class="status-note" id="liveStatus" style="margin-bottom:10px;"></div>
+          <div class="chart-wrap" id="liveWrap">
+            <canvas id="liveCanvas" aria-label="実運用の評価額と、同じ期間のリプレイ・バイアンドホールドの比較"></canvas>
+            <div class="tip" id="liveTip"></div>
+          </div>
+          <div class="table-scroll" style="margin-top:12px;">
+            <table class="data">
+              <thead><tr><th>日時 (UTC)</th><th>判定</th><th>候補</th><th class="num">候補スコア</th><th class="num">現行スコア</th></tr></thead>
+              <tbody id="liveCycleBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="rollPanel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">期間をずらした検証(rolling・事前計算)</div>
+            <div class="panel-sub" id="rollSub">-</div>
+          </div>
+          <div class="legend">
+            <span class="lg"><span class="sw" style="background:var(--good);height:3px"></span>全設定の多数決</span>
+            <span class="lg"><span class="sw" style="background:var(--warn)"></span>1設定を選ぶ</span>
+            <span class="lg"><span class="sw" style="background:var(--blue)"></span>固定</span>
+            <span class="lg" style="color:var(--violet)"><span class="sw dash"></span><span style="color:var(--text-dim)">バイ&amp;ホールド</span></span>
+          </div>
+        </div>
+        <div class="chart-wrap" id="rollWrap">
+          <canvas id="rollCanvas" aria-label="期間ごとに選び直した場合の、未使用期間を連結した評価額"></canvas>
+        </div>
+        <div class="table-scroll" style="margin-top:12px;">
+          <table class="data">
+            <thead><tr><th>確認期間 (UTC)</th><th>直前の期間で選んだ設定</th><th class="num">全設定の多数決</th><th class="num">1設定</th><th class="num">固定</th><th class="num">B&amp;H</th></tr></thead>
+            <tbody id="rollBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">価格チャートと稼働パラメータ</div>
+            <div class="panel-sub" id="rangeLabel">-</div>
+          </div>
+          <div class="head-right">
+          <div class="seg" id="rangeSeg" role="group" aria-label="表示期間">
+            <button type="button" data-days="7" aria-pressed="false">7日</button>
+            <button type="button" data-days="30" aria-pressed="false">30日</button>
+            <button type="button" data-days="90" aria-pressed="false">90日</button>
+            <button type="button" data-days="0" aria-pressed="true">全期間</button>
+          </div>
+          <div class="legend">
+            <span class="lg"><span class="sw box" style="background:var(--good)"></span>上昇</span>
+            <span class="lg"><span class="sw box" style="background:var(--critical)"></span>下落</span>
+            <span class="lg" id="ov1Legend"><span class="sw" style="background:var(--violet)"></span><span id="ov1Label">-</span></span>
+            <span class="lg" id="ov2Legend"><span class="sw" style="background:var(--blue)"></span><span id="ov2Label">-</span></span>
+            <span class="lg" style="color:var(--good)"><span class="sw dash"></span><span style="color:var(--text-dim)">昇格</span></span>
+            <span class="lg"><span class="sw" style="background:rgba(201,154,46,0.8)"></span>約定から再構成した足</span>
+          </div>
+          </div>
+        </div>
+        <div class="chart-wrap" id="priceWrap">
+          <canvas id="priceCanvas" aria-label="BTC/USD 1時間足のチャート。システムが採用中の戦略の指標線と売買、パラメータ昇格の時点を表示"></canvas>
+          <div class="tip" id="priceTip"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">エクイティ比較</div>
+            <div class="panel-sub">同じ期間・同じ手数料での評価額</div>
+          </div>
+          <div class="legend">
+            <span class="lg"><span class="sw" style="background:var(--good);height:3px"></span>自己改善システム</span>
+            <span class="lg"><span class="sw" style="background:var(--blue)"></span>開始パラメータ固定</span>
+            <span class="lg" style="color:var(--violet)"><span class="sw dash"></span><span style="color:var(--text-dim)">バイ&amp;ホールド</span></span>
+          </div>
+        </div>
+        <div class="chart-wrap" id="equityWrap">
+          <canvas id="equityCanvas" aria-label="自己改善システム、固定パラメータ、バイアンドホールドの評価額推移"></canvas>
+          <div class="tip" id="equityTip"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">自己改善ログ</div>
+            <div class="panel-sub">再最適化サイクルごとの判定。行を選ぶと右の候補ランキングに表示します。</div>
+          </div>
+        </div>
+        <div class="table-scroll scroll-y">
+          <table class="data cycles">
+            <thead>
+              <tr>
+                <th>日時 (UTC)</th>
+                <th>現行</th>
+                <th>候補</th>
+                <th class="num">候補スコア</th>
+                <th class="num">現行スコア</th>
+                <th>判定</th>
+                <th>理由</th>
+              </tr>
+            </thead>
+            <tbody id="cycleBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">取引ログ(自己改善システム)</div>
+            <div class="panel-sub" id="tradeLabel">-</div>
+          </div>
+        </div>
+        <div class="table-scroll scroll-y">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>パラメータ</th>
+                <th>方向</th>
+                <th>エントリー (UTC)</th>
+                <th class="num">価格</th>
+                <th>エグジット (UTC)</th>
+                <th class="num">価格</th>
+                <th class="num">損益</th>
+                <th>状態</th>
+              </tr>
+            </thead>
+            <tbody id="tradeBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel">
+        <div class="panel-title" style="margin-bottom:4px;">システム設定</div>
+        <div class="panel-sub" style="margin-bottom:14px;">パラメータはシステムが自動で選びます。ここで決めるのは、その選び方のルールです。</div>
+        <div class="fields">
+          <div class="group-label">戦略</div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="strategy">候補にする戦略</label></div>
+            <select id="strategy">
+              <optgroup label="信用(買い・売り)">
+                <option value="sma_crossover_ls">SMAクロス 買い/売り(45候補)</option>
+                <option value="multi_ls">全戦略 買い/売り(65候補)</option>
+                <option value="donchian_breakout_ls">ブレイクアウト 買い/売り(11候補)</option>
+                <option value="rsi_reversion_ls">RSI逆張り 買い/売り(9候補)</option>
+              </optgroup>
+              <optgroup label="買いのみ">
+                <option value="sma_crossover">SMAクロスのみ(15候補)</option>
+                <option value="multi">全戦略から選ぶ(35候補)</option>
+                <option value="donchian_breakout">ブレイクアウトのみ(11候補)</option>
+                <option value="rsi_reversion">RSI逆張りのみ(9候補)</option>
+              </optgroup>
+            </select>
+            <div class="field-help">買い/売りは下落局面で空売りします(証拠金取引、1倍)。候補が多いほど偶然の当たりを拾いやすいため、昇格に必要な改善幅は候補数に応じて自動で大きくなります。</div>
+          </div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="score">候補の採点基準</label></div>
+            <select id="score">
+              <option value="return">年率リターン</option>
+              <option value="sharpe">Sharpe(リスク調整後)</option>
+            </select>
+            <div class="field-help">最適化が候補を比べる物差し。下限・改善幅もこの単位で判定します。</div>
+          </div>
+
+          <div class="group-label">スケジュール</div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="every">再最適化の間隔</label><span class="field-value" id="everyV"></span></div>
+            <input type="range" id="every" min="6" max="168" step="6" value="24">
+          </div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="history">学習に使う直近データ</label><span class="field-value" id="historyV"></span></div>
+            <input type="range" id="history" min="240" max="2160" step="24" value="360">
+            <div class="field-help">最初の再最適化は、この本数のデータがそろった時点で行います。</div>
+          </div>
+
+          <div class="group-label">検証</div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="nSplits">ウォークフォワード分割数</label><span class="field-value" id="nSplitsV"></span></div>
+            <input type="range" id="nSplits" min="2" max="5" step="1" value="3">
+          </div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="minTrades">検証区間ごとの最低取引数</label><span class="field-value" id="minTradesV"></span></div>
+            <input type="range" id="minTrades" min="1" max="8" step="1" value="3">
+            <div class="field-help">これより取引が少ない区間は評価に使いません。下げるほど判定は緩くなり、偶然の成績を拾いやすくなります。</div>
+          </div>
+
+          <div class="group-label">昇格ゲート</div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="minWf">候補スコアの下限</label><span class="field-value" id="minWfV"></span></div>
+            <input type="range" id="minWf" min="-3" max="3" step="0.25" value="0">
+            <div class="field-help">検証区間での採点基準(年率換算)の平均。0なら「検証でプラス」が条件です。</div>
+          </div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="margin">現行に対する必要改善幅</label><span class="field-value" id="marginV"></span></div>
+            <input type="range" id="margin" min="0" max="1" step="0.05" value="0.05">
+            <div class="field-help">現行パラメータも毎回同じ区間で採点し直し、この差以上で上回ったときだけ切り替えます。</div>
+          </div>
+
+          <div class="group-label">取引条件</div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="fee">手数料率(片道)</label><span class="field-value" id="feeV"></span></div>
+            <input type="range" id="fee" min="0" max="0.5" step="0.01" value="0.1">
+          </div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="slip">スリッページ(片道)</label><span class="field-value" id="slipV"></span></div>
+            <input type="range" id="slip" min="0" max="0.3" step="0.01" value="0.05">
+            <div class="field-help">終値より不利に約定する分。指値なら0で、代わりに約定しない回があります。</div>
+          </div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="orderType">注文方法</label></div>
+            <select id="orderType">
+              <option value="limit">指値(判断した足の終値)</option>
+              <option value="market">成行</option>
+            </select>
+            <div class="field-help">指値は次の足がその価格を突き抜けたときだけ約定し、約定しなければ次の終値で出し直します。</div>
+          </div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="carry">建玉の金利(1日あたり)</label><span class="field-value" id="carryV"></span></div>
+            <input type="range" id="carry" min="0" max="0.1" step="0.01" value="0.04">
+            <div class="field-help">信用で建玉を持っている間、毎時かかる費用。買い持ちの比較対象(現物)にはかかりません。</div>
+          </div>
+          <div class="field">
+            <div class="field-head"><label class="field-label" for="startParams">開始パラメータ</label></div>
+            <select id="startParams"></select>
+          </div>
+
+          <div class="row-actions">
+            <button class="btn" id="resetBtn" type="button">既定値に戻す</button>
+          </div>
+
+          <div class="group-label">この設定で実運用する</div>
+          <div class="field">
+            <div class="cmd" id="cmdText"></div>
+            <div class="row-actions">
+              <button class="btn primary" id="copyBtn" type="button">コマンドをコピー</button>
+              <span class="copied" id="copiedMsg" hidden>コピーしました</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title" style="margin-bottom:10px;">成績比較</div>
+        <table class="compare" id="compareTable">
+          <thead>
+            <tr>
+              <th></th>
+              <th><span class="col-head"><span class="sw" style="background:var(--good);height:3px"></span>自己改善</span></th>
+              <th><span class="col-head"><span class="sw" style="background:var(--blue)"></span>固定</span></th>
+              <th><span class="col-head" style="color:var(--violet)"><span class="sw dash"></span><span style="color:var(--text-dim)">B&amp;H</span></span></th>
+            </tr>
+          </thead>
+          <tbody id="compareBody"></tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">候補ランキング</div>
+        <div class="panel-sub" id="rankSub" style="margin-bottom:10px;">-</div>
+        <div class="table-scroll"><table class="data rank"><thead><tr><th>#</th><th>候補</th><th class="num" id="rankScoreHead">スコア(学習窓)</th><th></th></tr></thead><tbody id="rankBody"></tbody></table></div>
+      </section>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div><strong>データ:</strong> Kraken 公開API 1h足 <span id="footerRange">-</span>。直近は公式足、それ以前は公開約定履歴から再構成。計算は <span class="mono">trading_bot</span> の <span class="mono">replay</span> と同じロジックです。<span id="builtAt"></span></div>
+    <div><strong>免責:</strong> 実際の注文は一切発注しません。過去データでのシミュレーションは将来の利益を保証せず、投資助言ではありません。</div>
+  </footer>
+</div>
+<div class="tip" id="floatTip"></div>
+
+<script id="candle-data" type="application/json">__CANDLE_JSON__</script>
+<script id="live-data" type="application/json">__LIVE_JSON__</script>
+<script id="config-data" type="application/json">__CONFIG_JSON__</script>
+<script id="rolling-data" type="application/json">__ROLLING_JSON__</script>
+<script id="engine-src">
+__ENGINE_JS__
+</script>
+<script>
+(function () {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const RAW = JSON.parse($("candle-data").textContent);   // [t, o, h, l, c, v, source]
+  const LIVE = JSON.parse($("live-data").textContent);    // null or live paper-trading state
+  const CONF = JSON.parse($("config-data").textContent);  // {defaults, built_at, exchange, symbol}
+  const ROLL = JSON.parse($("rolling-data").textContent);  // null or a trimmed `rolling` report
+  const N = RAW.length;
+  const BARS = { t: RAW.map(r => r[0]), h: RAW.map(r => r[2]), l: RAW.map(r => r[3]), c: RAW.map(r => r[4]) };
+  const TIMES = BARS.t, CLOSES = BARS.c;
+  const SRC_LABEL = ["Kraken 公式足", "約定から再構成", "約定なし(前の終値)"];
+  const css = getComputedStyle(document.documentElement);
+  const C = {};
+  ["text", "text-dim", "text-mute", "good", "critical", "warn", "violet", "blue", "surface-2"].forEach(k => { C[k] = css.getPropertyValue("--" + k).trim(); });
+  const MONO = "'IBM Plex Mono', ui-monospace, Menlo, monospace";
+
+  const BASE_DEFAULTS = { strategy: "sma_crossover_ls", score: "sharpe", orderType: "limit", every: 24, history: 720, nSplits: 3, minTrades: 5, minWf: 0, margin: 0.05, fee: 0.02, slip: 0, carry: 0.04, start: null };
+  const DEFAULTS = Object.assign({}, BASE_DEFAULTS, CONF.defaults || {});
+  const cfg = Object.assign({}, DEFAULTS);
+  let R = null, ovCache = null, selectedCycle = -1;
+  const strat = () => SIL.STRATEGIES[cfg.strategy];
+
+  // ---------- formatting ----------
+  const nf0 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+  const pad = n => String(n).padStart(2, "0");
+  const fmtPrice = v => nf0.format(v);
+  const fmtUsd = v => "$" + nf0.format(Math.round(v));
+  const fmtPct = (v, d) => (v > 0 ? "+" : "") + (v * 100).toFixed(d == null ? 2 : d) + "%";
+  const fmtRate = v => (v * 100).toFixed(1) + "%";
+  const fmtScore = v => (Number.isFinite(v) ? v.toFixed(2) : "—");
+  function fmtP(p) {
+    if (!p) return "—";
+    const name = p.strategy || ("band" in p ? "sma_crossover_ls" : "fast_window" in p ? "sma_crossover" : "entry_window" in p ? "donchian_breakout" : "period" in p ? "rsi_reversion" : null);
+    return name ? SIL.STRATEGIES[name].label(p) : JSON.stringify(p);
+  }
+  const fmtDate = ts => { const d = new Date(ts); return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()) + " " + pad(d.getUTCHours()) + ":00"; };
+  const fmtDateShort = ts => { const d = new Date(ts); return pad(d.getUTCMonth() + 1) + "/" + pad(d.getUTCDate()); };
+  const sign = v => (v > 0 ? "up" : v < 0 ? "down" : "");
+  const esc = s => String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+  const codeLabel = { no_viable: "候補なし", below_floor: "下限未満", same_as_active: "現行と同じ", insufficient_margin: "改善幅不足", promoted: "昇格" };
+  function reasonText(c) {
+    const wf = fmtScore(c.candidateWf), inc = fmtScore(c.incumbentScore), m = (c.margin || cfg.margin).toFixed(2);
+    switch (c.code) {
+      case "no_viable": return "有効な候補なし。どの候補も検証区間の取引数が " + cfg.minTrades + " 件に届きませんでした。";
+      case "below_floor": return "候補スコア " + wf + " が下限 " + cfg.minWf.toFixed(2) + " 未満のため見送り。";
+      case "same_as_active": return "候補が現行と同じため変更なし。";
+      case "insufficient_margin": return "候補 " + wf + " は現行 " + inc + " を " + m + " 以上上回らず見送り。";
+      case "promoted": return Number.isFinite(c.incumbentScore)
+        ? "候補 " + wf + " が現行 " + inc + " を " + m + " 以上上回ったため昇格。"
+        : "現行は検証区間の取引数不足で採点できず、下限を超えた候補 " + wf + " を採用。";
+    }
+    return c.code;
+  }
+
+  // ---------- controls ----------
+  const sliders = ["every", "history", "nSplits", "minTrades", "minWf", "margin", "fee", "slip", "carry"];
+  const selects = ["score", "orderType"];
+  function fillStartOptions() {
+    const sel = $("startParams");
+    sel.innerHTML = "";
+    strat().grid().forEach((p, i) => {
+      const o = document.createElement("option");
+      o.value = String(i);
+      o.textContent = fmtP(p);
+      sel.appendChild(o);
+    });
+    const grid = strat().grid();
+    let idx = cfg.start ? grid.findIndex(p => SIL.sameParams(p, cfg.start)) : -1;
+    if (idx < 0) idx = Math.max(0, grid.findIndex(p => SIL.sameParams(p, strat().defaults)));
+    sel.value = String(idx);
+    cfg.start = grid[idx];
+  }
+  function paramArg(p) { return Object.entries(p).map(([k, v]) => k + "=" + v).join(","); }
+  function syncLabels() {
+    $("everyV").textContent = cfg.every + "本ごと(" + (cfg.every % 24 === 0 ? (cfg.every === 24 ? "1日1回" : cfg.every / 24 + "日に1回") : cfg.every + "時間ごと") + ")";
+    $("historyV").textContent = cfg.history + "本(" + (cfg.history / 24).toFixed(0) + "日)";
+    $("nSplitsV").textContent = cfg.nSplits + "分割(区間 " + Math.floor(cfg.history / cfg.nSplits) + "本)";
+    $("minTradesV").textContent = cfg.minTrades + "件";
+    $("minWfV").textContent = cfg.minWf.toFixed(2);
+    $("marginV").textContent = cfg.margin.toFixed(2) + " × 候補数補正";
+    $("feeV").textContent = cfg.fee.toFixed(2) + "%";
+    $("slipV").textContent = cfg.slip.toFixed(2) + "%";
+    $("carryV").textContent = cfg.carry.toFixed(2) + "%";
+    $("rankScoreHead").textContent = (cfg.score === "return" ? "年率リターン" : "Sharpe") + "(学習窓)";
+    $("cmdText").textContent =
+      "python -m trading_bot.cli self-improve --exchange " + (CONF.exchange || "kraken") + " --symbol " + (CONF.symbol || "BTC/USD") +
+      " --timeframe 1h --strategy " + cfg.strategy + " --params " + paramArg(cfg.start) +
+      " --steps 0 --reoptimize-every " + cfg.every + " --history-candles " + cfg.history +
+      " --n-splits " + cfg.nSplits + " --min-trades " + cfg.minTrades + " --score " + cfg.score +
+      " --min-walk-forward-score " + cfg.minWf + " --min-improvement-margin " + cfg.margin +
+      " --fee-rate " + +(cfg.fee / 100).toFixed(6) + " --slippage-rate " + +(cfg.slip / 100).toFixed(6) +
+      " --order-type " + cfg.orderType + " --carry-rate-per-day " + +(cfg.carry / 100).toFixed(6) +
+      " --dashboard-out state/dashboard.html";
+  }
+  function writeControls() {
+    sliders.forEach(k => { $(k).value = cfg[k]; });
+    selects.forEach(k => { $(k).value = cfg[k]; });
+    $("strategy").value = cfg.strategy;
+    fillStartOptions();
+  }
+  let timer = null;
+  function schedule() { clearTimeout(timer); timer = setTimeout(recompute, 90); }
+  function bindControls() {
+    sliders.forEach(k => $(k).addEventListener("input", e => { cfg[k] = parseFloat(e.target.value); syncLabels(); schedule(); }));
+    selects.forEach(k => $(k).addEventListener("change", e => { cfg[k] = e.target.value; syncLabels(); schedule(); }));
+    $("strategy").addEventListener("change", e => { cfg.strategy = e.target.value; cfg.start = null; fillStartOptions(); syncLabels(); schedule(); });
+    $("startParams").addEventListener("change", e => { cfg.start = strat().grid()[+e.target.value]; syncLabels(); schedule(); });
+    $("resetBtn").addEventListener("click", () => { Object.assign(cfg, DEFAULTS); writeControls(); syncLabels(); recompute(); });
+    $("copyBtn").addEventListener("click", () => {
+      const text = $("cmdText").textContent;
+      const done = () => { $("copiedMsg").hidden = false; setTimeout(() => { $("copiedMsg").hidden = true; }, 1600); };
+      const fallback = () => { const r = document.createRange(); r.selectNodeContents($("cmdText")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+      try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
+    });
+    let rt = null;
+    window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (R) { drawPrice(); drawEquity(); drawLive(); } drawRolling(); }, 80); });
+  }
+
+  // ---------- compute (in a worker, so the page stays responsive) ----------
+  let worker = null, reqId = 0;
+  try {
+    const src = $("engine-src").textContent +
+      "\nlet B=null;onmessage=e=>{if(e.data.init){B=e.data.init;return;}postMessage({id:e.data.id,r:SIL.replay(B,e.data.cfg)});};";
+    worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+    worker.postMessage({ init: BARS });
+    worker.onmessage = e => { if (e.data.id === reqId) apply(e.data.r); };
+    worker.onerror = () => { worker = null; recompute(); };
+  } catch (e) { worker = null; }
+  function currentCfg() {
+    return { strategy: cfg.strategy, initialParams: cfg.start, history: cfg.history, every: cfg.every, nSplits: cfg.nSplits,
+      minTrades: cfg.minTrades, score: cfg.score, minWf: cfg.minWf, margin: cfg.margin, cost: (cfg.fee + cfg.slip) / 100, cash: 10000,
+      orderType: cfg.orderType, carryPerDay: cfg.carry / 100 };
+  }
+  function recompute() {
+    $("busy").hidden = false;
+    if (worker) { worker.postMessage({ id: ++reqId, cfg: currentCfg() }); return; }
+    setTimeout(() => apply(SIL.replay(BARS, currentCfg())), 0);
+  }
+  function apply(result) {
+    $("busy").hidden = true;
+    R = result;
+    ovCache = R.paramsList.map(p => strat().overlays(BARS, p));
+    selectedCycle = R.cycles.length - 1;
+    renderStatus(); drawPrice(); drawEquity(); renderCycles(); renderTrades(); renderCompare(); renderRank(); renderLive();
+  }
+
+  // ---------- header + status ----------
+  function renderHeader() {
+    const last = CLOSES[N - 1], prev = CLOSES[Math.max(0, N - 25)], chg = last / prev - 1;
+    $("lastPrice").textContent = "$" + fmtPrice(last);
+    $("dayChange").textContent = fmtPct(chg) + " 24h";
+    $("dayChange").className = "chg " + sign(chg);
+    $("barsBadge").textContent = "1H · " + N + "本";
+    $("footerRange").textContent = N + "本(" + fmtDate(TIMES[0]).slice(0, 10) + " 〜 " + fmtDate(TIMES[N - 1]).slice(0, 10) + ")";
+    $("builtAt").textContent = CONF.built_at ? " 作成: " + CONF.built_at.slice(0, 16).replace("T", " ") + " UTC" : "";
+    const counts = [0, 0, 0];
+    RAW.forEach(r => { counts[r[6]]++; });
+    $("stData").textContent = (N / 24).toFixed(0) + " 日分";
+    $("stDataNote").textContent = "公式足 " + counts[0] + " · 約定から再構成 " + counts[1] + (counts[2] ? " · 無約定補完 " + counts[2] : "") + " 本";
+    $("history").max = Math.max(240, Math.min(4320, Math.floor((N - 24 * 7) / 24) * 24));
+  }
+  function renderStatus() {
+    const active = R.paramsList[R.activeByBar[N - 1]];
+    $("stActive").textContent = fmtP(active);
+    const lastPromo = [...R.cycles].reverse().find(c => c.promoted);
+    $("stActiveNote").textContent = lastPromo ? fmtDate(lastPromo.time) + " に昇格" : "開始パラメータのまま(昇格なし)";
+    const sp = R.systemPos[N - 1];
+    $("signalPill").textContent = sp > 0 ? "● シグナル: 買い" : sp < 0 ? "● シグナル: 売り" : "○ シグナル: ノーポジ";
+    $("signalPill").className = "pill " + (sp > 0 ? "long" : sp < 0 ? "short" : "flat");
+    const lc = R.cycles[R.cycles.length - 1];
+    if (lc) {
+      $("stLast").innerHTML = '<span class="' + (lc.promoted ? "up" : "") + '">' + esc(codeLabel[lc.code]) + "</span>";
+      $("stLastNote").textContent = fmtDate(lc.time) + " · 候補 " + fmtP(lc.candidate);
+    } else {
+      $("stLast").textContent = "未実行";
+      $("stLastNote").textContent = "学習データが " + cfg.history + " 本そろっていません";
+    }
+    const promos = R.cycles.filter(c => c.promoted).length;
+    $("stPromos").textContent = promos + " / " + R.cycles.length;
+    $("stPromosNote").textContent = R.cycles.length ? "見送り " + (R.cycles.length - promos) + " 回" : "サイクルなし";
+    const first = cfg.history - 1;
+    let next = first;
+    if (N - 1 >= first) next = first + (Math.floor((N - 1 - first) / cfg.every) + 1) * cfg.every;
+    const left = next - (N - 1);
+    $("stNext").textContent = "あと " + left + " 本";
+    $("stNextNote").textContent = "約 " + left + " 時間後(" + fmtDate(TIMES[N - 1] + left * 3600000) + ")";
+    const ovs = ovCache[R.activeByBar[N - 1]];
+    [1, 2].forEach(k => {
+      const o = ovs[k - 1];
+      $("ov" + k + "Legend").hidden = !o;
+      if (o) $("ov" + k + "Label").textContent = o.label;
+    });
+  }
+
+  // ---------- canvas helpers ----------
+  function setup(canvas, cssH) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(canvas.parentElement.getBoundingClientRect().width));
+    canvas.style.height = cssH + "px";
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, cssH);
+    return { ctx, w, h: cssH };
+  }
+  function niceTicks(min, max, count) {
+    const rough = (max - min) / count, mag = Math.pow(10, Math.floor(Math.log10(rough))), n = rough / mag;
+    const step = (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * mag;
+    const out = [];
+    for (let v = Math.ceil(min / step) * step; v <= max; v += step) out.push(v);
+    return out;
+  }
+  let viewDays = 0;
+  function view() { const i0 = viewDays ? Math.max(0, N - viewDays * 24) : 0; return { i0, n: N - i0 }; }
+  function bindRange() {
+    document.querySelectorAll("#rangeSeg button").forEach(btn => btn.addEventListener("click", () => {
+      viewDays = +btn.dataset.days;
+      document.querySelectorAll("#rangeSeg button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+      drawPrice(); drawEquity();
+    }));
+  }
+  function axes(ctx, g, ticks, fmt, reservedYs) {
+    ctx.font = "10.5px " + MONO; ctx.textBaseline = "middle"; ctx.lineWidth = 1;
+    ticks.forEach(t => {
+      const y = g.y(t);
+      if (y < g.t - 1 || y > g.t + g.ph + 1) return;
+      ctx.strokeStyle = "rgba(255,255,255,0.06)";
+      ctx.beginPath(); ctx.moveTo(g.l, Math.round(y) + 0.5); ctx.lineTo(g.l + g.pw, Math.round(y) + 0.5); ctx.stroke();
+      if ((reservedYs || []).some(ry => Math.abs(ry - y) < 12)) return;
+      ctx.fillStyle = C["text-mute"]; ctx.textAlign = "left";
+      ctx.fillText(fmt(t), g.l + g.pw + 8, y);
+    });
+    ctx.textAlign = "center"; ctx.fillStyle = C["text-mute"];
+    const labels = Math.max(2, Math.floor(g.pw / 110));
+    let step = Math.max(1, Math.floor(g.v.n / labels)), start = g.v.i0;
+    if (g.v.n >= 48) { step = Math.ceil(step / 24) * 24; while (start < N && new Date(TIMES[start]).getUTCHours() !== 0) start++; }
+    for (let i = start; i < g.v.i0 + g.v.n; i += step) ctx.fillText(fmtDateShort(TIMES[i]), g.x(i), g.t + g.ph + 14);
+  }
+
+  // ---------- price chart ----------
+  let priceGeom = null;
+  function drawPrice() {
+    const { ctx, w, h } = setup($("priceCanvas"), window.innerWidth < 640 ? 300 : 380);
+    const v = view(), l = 8, r = 64, t = 22, b = 26, pw = w - l - r, ph = h - t - b;
+    let lo = Infinity, hi = -Infinity;
+    for (let i = v.i0; i < N; i++) { lo = Math.min(lo, BARS.l[i]); hi = Math.max(hi, BARS.h[i]); }
+    const padv = (hi - lo) * 0.06; lo -= padv; hi += padv;
+    const slot = pw / v.n;
+    const g = { l, t, pw, ph, v, x: i => l + slot * (i - v.i0 + 0.5), y: p => t + ph * (1 - (p - lo) / (hi - lo)) };
+    axes(ctx, g, niceTicks(lo, hi, 5), fmtPrice);
+    ctx.save(); ctx.beginPath(); ctx.rect(l, 0, pw, h); ctx.clip();
+    ctx.fillStyle = "rgba(201,154,46,0.55)";
+    for (let i = v.i0; i < N; i++) if (RAW[i][6] !== 0) ctx.fillRect(g.x(i) - slot / 2, t + ph + 2, Math.max(1, slot), 2);
+    if (R.cycles.length && cfg.history - 1 >= v.i0) {
+      const x0 = g.x(v.i0) - slot / 2, x1 = g.x(cfg.history - 1);
+      ctx.fillStyle = "rgba(255,255,255,0.025)"; ctx.fillRect(x0, t, x1 - x0, ph);
+      ctx.fillStyle = C["text-mute"]; ctx.font = "10px " + MONO; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      ctx.fillText("初回の学習期間", x0 + 4, t + 11);
+    }
+    if (slot >= 2.5) {
+      const cw = Math.max(1, slot * 0.62);
+      for (let i = v.i0; i < N; i++) {
+        const [, o, hh, ll, c] = RAW[i];
+        const x = g.x(i), col = c >= o ? C.good : C.critical;
+        ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, g.y(hh)); ctx.lineTo(x, g.y(ll)); ctx.stroke();
+        const y0 = g.y(o), y1 = g.y(c);
+        ctx.fillRect(x - cw / 2, Math.min(y0, y1), cw, Math.max(1, Math.abs(y1 - y0)));
+      }
+    } else {
+      ctx.fillStyle = "rgba(238,241,245,0.10)"; ctx.beginPath();
+      for (let i = v.i0; i < N; i++) ctx.lineTo(g.x(i), g.y(BARS.h[i]));
+      for (let i = N - 1; i >= v.i0; i--) ctx.lineTo(g.x(i), g.y(BARS.l[i]));
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "rgba(238,241,245,0.75)"; ctx.lineWidth = 1; ctx.beginPath();
+      for (let i = v.i0; i < N; i++) (i === v.i0 ? ctx.moveTo : ctx.lineTo).call(ctx, g.x(i), g.y(CLOSES[i]));
+      ctx.stroke();
+    }
+    [0, 1].forEach(k => { // the active strategy's indicator lines, broken at every switch
+      ctx.strokeStyle = k === 0 ? C.violet : C.blue; ctx.lineWidth = 1.7; ctx.beginPath();
+      let prev = -1, started = false;
+      for (let i = v.i0; i < N; i++) {
+        const a = R.activeByBar[i], line = ovCache[a][k], val = line ? line.values[i] : null;
+        if (val == null || a !== prev) started = false;
+        prev = a;
+        if (val == null) continue;
+        if (!started) { ctx.moveTo(g.x(i), g.y(val)); started = true; } else ctx.lineTo(g.x(i), g.y(val));
+      }
+      ctx.stroke();
+    });
+    let lastLabelX = -Infinity;
+    R.cycles.forEach(c => {
+      if (c.barIndex < v.i0) return;
+      const x = Math.round(g.x(c.barIndex)) + 0.5;
+      if (c.promoted) {
+        ctx.strokeStyle = C.good; ctx.setLineDash([4, 3]); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, t); ctx.lineTo(x, t + ph); ctx.stroke(); ctx.setLineDash([]);
+        ctx.font = "600 10.5px " + MONO; ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+        const label = "→ " + fmtP(c.candidate), tw = ctx.measureText(label).width, lx = Math.min(x + 4, l + pw - tw - 2);
+        if (lx > lastLabelX + 6) { ctx.fillStyle = C.text; ctx.fillText(label, lx, t - 7); lastLabelX = lx + tw; }
+      } else if (slot * cfg.every >= 4) {
+        ctx.strokeStyle = "rgba(255,255,255,0.28)"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, t + ph - 5); ctx.lineTo(x, t + ph); ctx.stroke();
+      }
+    });
+    if (slot >= 1.2) R.runs.self_improving.trades.forEach(tr => {
+      if (tr.exitIdx < v.i0) return;
+      // Entry: ▲ under the bar for a long, ▼ over it for a short. Exit: the opposite, coloured by result.
+      const up = (tr.side || 1) > 0;
+      let x = g.x(tr.entryIdx), y = up ? g.y(BARS.l[tr.entryIdx]) + 9 : g.y(BARS.h[tr.entryIdx]) - 9, d = up ? 1 : -1;
+      ctx.fillStyle = up ? C.good : C.critical;
+      ctx.beginPath(); ctx.moveTo(x, y - 4 * d); ctx.lineTo(x - 4.5, y + 4 * d); ctx.lineTo(x + 4.5, y + 4 * d); ctx.closePath(); ctx.fill();
+      x = g.x(tr.exitIdx); y = up ? g.y(BARS.h[tr.exitIdx]) - 9 : g.y(BARS.l[tr.exitIdx]) + 9;
+      ctx.fillStyle = tr.pnl == null ? C.warn : tr.pnl > 0 ? C.good : C.critical;
+      ctx.beginPath(); ctx.moveTo(x, y + 4 * d); ctx.lineTo(x - 4.5, y - 4 * d); ctx.lineTo(x + 4.5, y - 4 * d); ctx.closePath(); ctx.fill();
+    });
+    ctx.restore();
+    $("rangeLabel").textContent = fmtDate(TIMES[v.i0]) + " 〜 " + fmtDate(TIMES[N - 1]) + " UTC · " + v.n + "本" + (slot < 2.5 ? "(終値と高安レンジで表示)" : "");
+    priceGeom = g;
+  }
+  function bindPriceHover() {
+    const wrap = $("priceWrap"), tip = $("priceTip");
+    wrap.addEventListener("mousemove", e => {
+      if (!priceGeom || !R) return;
+      const rect = wrap.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top, g = priceGeom;
+      if (mx < g.l || mx > g.l + g.pw) { tip.style.display = "none"; return; }
+      const i = Math.max(g.v.i0, Math.min(N - 1, g.v.i0 + Math.floor(((mx - g.l) / g.pw) * g.v.n)));
+      const r = RAW[i], a = R.activeByBar[i], pos = R.systemPos[i];
+      let html = '<div class="t-date">' + fmtDate(r[0]) + " UTC</div>" +
+        '<div class="t-row"><span class="t-k">O / C</span><span>' + fmtPrice(r[1]) + " / " + fmtPrice(r[4]) + "</span></div>" +
+        '<div class="t-row"><span class="t-k">H / L</span><span>' + fmtPrice(r[2]) + " / " + fmtPrice(r[3]) + "</span></div>" +
+        '<div class="t-row"><span class="t-k">データ</span><span>' + SRC_LABEL[r[6]] + "</span></div>" +
+        '<div class="t-row"><span class="t-k">稼働パラメータ</span><span>' + esc(fmtP(R.paramsList[a])) + "</span></div>";
+      ovCache[a].forEach((o, k) => {
+        html += '<div class="t-row"><span class="t-k"><span class="sw" style="background:' + (k ? C.blue : C.violet) + '"></span>' + esc(o.label) + "</span><span>" + (o.values[i] == null ? "—" : fmtPrice(o.values[i])) + "</span></div>";
+      });
+      html += '<div class="t-row"><span class="t-k">シグナル</span><span class="' + (pos > 0 ? "up" : pos < 0 ? "down" : "mute") + '">' + (pos > 0 ? "LONG" : pos < 0 ? "SHORT" : "FLAT") + "</span></div>";
+      tip.innerHTML = html; tip.style.display = "block";
+      const tw = tip.offsetWidth;
+      tip.style.left = (mx + 14 + tw > rect.width ? mx - tw - 14 : mx + 14) + "px";
+      tip.style.top = Math.max(0, Math.min(my - 20, rect.height - tip.offsetHeight)) + "px";
+    });
+    wrap.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+  }
+
+  // ---------- equity chart ----------
+  const SERIES = [
+    { key: "buy_hold", label: "B&H", color: () => C.violet, width: 1.5, dash: [5, 4] },
+    { key: "static", label: "固定", color: () => C.blue, width: 1.6, dash: [] },
+    { key: "self_improving", label: "自己改善", color: () => C.good, width: 2.2, dash: [] },
+  ];
+  let eqGeom = null;
+  function drawEquity() {
+    const { ctx, w, h } = setup($("equityCanvas"), window.innerWidth < 640 ? 200 : 230);
+    const v = view(), l = 8, r = 78, t = 12, b = 24, pw = w - l - r, ph = h - t - b;
+    let lo = Infinity, hi = -Infinity;
+    SERIES.forEach(s => { const eq = R.runs[s.key].equity; for (let i = v.i0; i < N; i++) { lo = Math.min(lo, eq[i]); hi = Math.max(hi, eq[i]); } });
+    if (v.i0 === 0) { lo = Math.min(lo, 10000); hi = Math.max(hi, 10000); }
+    const padv = (hi - lo) * 0.08 || 50; lo -= padv; hi += padv;
+    const g = { l, t, pw, ph, v, x: i => l + (pw * (i - v.i0)) / Math.max(1, v.n - 1), y: val => t + ph * (1 - (val - lo) / (hi - lo)) };
+    const ends = SERIES.map(s => ({ s, v: R.runs[s.key].equity[N - 1], y: g.y(R.runs[s.key].equity[N - 1]) })).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+    axes(ctx, g, niceTicks(lo, hi, 4), fmtUsd, ends.map(e => e.y));
+    const yb = g.y(10000);
+    if (yb >= t && yb <= t + ph) {
+      ctx.strokeStyle = "rgba(255,255,255,0.22)"; ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(l, Math.round(yb) + 0.5); ctx.lineTo(l + pw, Math.round(yb) + 0.5); ctx.stroke(); ctx.setLineDash([]);
+    }
+    R.cycles.filter(c => c.promoted && c.barIndex >= v.i0).forEach(c => {
+      const x = Math.round(g.x(c.barIndex)) + 0.5;
+      ctx.strokeStyle = "rgba(15,174,138,0.35)"; ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(x, t); ctx.lineTo(x, t + ph); ctx.stroke(); ctx.setLineDash([]);
+    });
+    SERIES.forEach(s => {
+      const eq = R.runs[s.key].equity;
+      ctx.strokeStyle = s.color(); ctx.lineWidth = s.width; ctx.setLineDash(s.dash);
+      ctx.beginPath(); ctx.moveTo(g.x(v.i0), g.y(eq[v.i0]));
+      for (let i = v.i0 + 1; i < N; i++) ctx.lineTo(g.x(i), g.y(eq[i]));
+      ctx.stroke(); ctx.setLineDash([]);
+    });
+    ctx.font = "600 10.5px " + MONO; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    ends.forEach(e => {
+      ctx.fillStyle = e.s.color(); ctx.fillRect(l + pw + 6, e.y - 1, 6, 2);
+      ctx.fillStyle = C.text; ctx.fillText(fmtPct(e.v / 10000 - 1, 1), l + pw + 15, e.y);
+    });
+    eqGeom = g;
+  }
+  function bindEquityHover() {
+    const wrap = $("equityWrap"), tip = $("equityTip");
+    wrap.addEventListener("mousemove", e => {
+      if (!eqGeom || !R) return;
+      const rect = wrap.getBoundingClientRect(), mx = e.clientX - rect.left, g = eqGeom;
+      if (mx < g.l || mx > g.l + g.pw) { tip.style.display = "none"; return; }
+      const i = Math.max(g.v.i0, Math.min(N - 1, g.v.i0 + Math.round(((mx - g.l) / g.pw) * (g.v.n - 1))));
+      let html = '<div class="t-date">' + fmtDate(TIMES[i]) + " UTC</div>";
+      SERIES.slice().reverse().forEach(s => {
+        const val = R.runs[s.key].equity[i];
+        html += '<div class="t-row"><span class="t-k"><span class="sw" style="background:' + s.color() + '"></span>' + s.label + "</span><span>" + fmtUsd(val) + ' <span class="' + sign(val - 10000) + '">' + fmtPct(val / 10000 - 1, 1) + "</span></span></div>";
+      });
+      tip.innerHTML = html; tip.style.display = "block";
+      const tw = tip.offsetWidth;
+      tip.style.left = (mx + 14 + tw > rect.width ? mx - tw - 14 : mx + 14) + "px";
+      tip.style.top = "8px";
+    });
+    wrap.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+  }
+
+  // ---------- tables ----------
+  function renderCycles() {
+    const body = $("cycleBody");
+    body.innerHTML = "";
+    if (!R.cycles.length) {
+      body.innerHTML = '<tr class="empty"><td colspan="7">学習データ ' + cfg.history + " 本がそろわず、再最適化は一度も実行されていません。学習に使う直近データを短くしてください。</td></tr>";
+      return;
+    }
+    R.cycles.map((c, i) => [c, i]).reverse().forEach(([c, i]) => {
+      const tr = document.createElement("tr");
+      tr.tabIndex = 0;
+      if (i === selectedCycle) tr.className = "selected";
+      tr.innerHTML = '<td class="mono">' + fmtDate(c.time) + '</td><td class="mono">' + esc(fmtP(c.incumbent)) + '</td><td class="mono">' + esc(fmtP(c.candidate)) +
+        '</td><td class="num">' + fmtScore(c.candidateWf) + '</td><td class="num">' + fmtScore(c.incumbentScore) + "</td><td>" +
+        (c.promoted ? '<span class="chip promo">昇格</span>' : '<span class="chip keep">' + esc(codeLabel[c.code]) + "</span>") +
+        '</td><td class="reason">' + esc(reasonText(c)) + "</td>";
+      const pick = () => { selectedCycle = i; renderCycles(); renderRank(); };
+      tr.addEventListener("click", pick);
+      tr.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+      body.appendChild(tr);
+    });
+  }
+  function renderTrades() {
+    const run = R.runs.self_improving, body = $("tradeBody");
+    body.innerHTML = "";
+    const closed = run.metrics.num_trades, open = run.trades.length - closed;
+    $("tradeLabel").textContent = closed + " 件の決済済み取引" + (open ? " + 保有中 " + open + " 件" : "");
+    if (!run.trades.length) { body.innerHTML = '<tr class="empty"><td colspan="9">この期間では取引が発生しませんでした</td></tr>'; return; }
+    run.trades.slice().reverse().slice(0, 300).forEach((t, k) => {
+      const p = R.paramsList[R.activeByBar[t.entryIdx]];
+      const side = t.side < 0 ? '<span class="down">売り</span>' : '<span class="up">買い</span>';
+      let chip, pnl;
+      if (t.pnl == null) { chip = '<span class="chip open">保有中</span>'; pnl = '<span class="dim">' + fmtPct(t.side * (t.exitPrice / t.entryPrice - 1)) + "</span>"; }
+      else if (t.pnl > 0) { chip = '<span class="chip win">勝ち</span>'; pnl = '<span class="up">' + fmtPct(t.pnl) + "</span>"; }
+      else { chip = '<span class="chip loss">負け</span>'; pnl = '<span class="down">' + fmtPct(t.pnl) + "</span>"; }
+      const tr = document.createElement("tr");
+      tr.innerHTML = '<td class="mono">' + (run.trades.length - k) + '</td><td class="mono">' + esc(fmtP(p)) + "</td><td>" + side + '</td><td class="mono">' + fmtDate(TIMES[t.entryIdx]) +
+        '</td><td class="num">' + fmtPrice(t.entryPrice) + '</td><td class="mono">' + (t.pnl == null ? "—" : fmtDate(TIMES[t.exitIdx])) +
+        '</td><td class="num">' + (t.pnl == null ? "—" : fmtPrice(t.exitPrice)) + '</td><td class="num">' + pnl + "</td><td>" + chip + "</td>";
+      body.appendChild(tr);
+    });
+  }
+  function renderCompare() {
+    const keys = ["self_improving", "static", "buy_hold"];
+    const rows = [
+      ["Total Return", m => '<span class="' + sign(m.total_return) + '">' + fmtPct(m.total_return) + "</span>"],
+      ["Sharpe", m => '<span class="' + sign(m.sharpe) + '">' + m.sharpe.toFixed(2) + "</span>"],
+      ["Max Drawdown", m => '<span class="' + (m.max_drawdown < 0 ? "down" : "") + '">' + fmtPct(m.max_drawdown) + "</span>"],
+      ["勝率", (m, k) => (k === "buy_hold" ? '<span class="mute">—</span>' : fmtRate(m.win_rate))],
+      ["取引数", (m, k) => (k === "buy_hold" ? '<span class="mute">—</span>' : m.num_trades)],
+      ["最終残高", m => fmtUsd(m.final_equity)],
+    ];
+    $("compareBody").innerHTML = rows.map(([label, f]) => "<tr><td>" + label + "</td>" + keys.map(k => "<td>" + f(R.runs[k].metrics, k) + "</td>").join("") + "</tr>").join("");
+  }
+  function renderRank() {
+    const body = $("rankBody"), c = R.cycles[selectedCycle];
+    if (!c) { $("rankSub").textContent = "再最適化サイクルがまだありません"; body.innerHTML = ""; return; }
+    $("rankSub").textContent = fmtDate(c.time) + " のサイクル。学習窓 " + cfg.history + " 本全体での上位12候補(取引 " + cfg.minTrades + " 件未満は —)。昇格に必要な改善幅 " + (c.margin || cfg.margin).toFixed(3);
+    body.innerHTML = c.leaderboard.slice(0, 12).map((r, i) => {
+      const tags = [];
+      if (c.candidate && SIL.sameParams(r.params, c.candidate)) tags.push('<span class="chip promo">候補</span>');
+      if (SIL.sameParams(r.params, c.incumbent)) tags.push('<span class="chip keep">当時の現行</span>');
+      return '<tr class="' + (tags.length && c.candidate && SIL.sameParams(r.params, c.candidate) ? "is-candidate" : "") + '"><td class="mono">' + (i + 1) +
+        '</td><td class="mono">' + esc(fmtP(r.params)) + '</td><td class="num"><span class="' + (Number.isFinite(r.score) ? sign(r.score) : "mute") + '">' + fmtScore(r.score) +
+        "</span></td><td>" + tags.join(" ") + "</td></tr>";
+    }).join("");
+  }
+
+  // ---------- live paper-trading panel ----------
+  let liveGeom = null, liveSeries = null;
+  function barIndexOf(ts) { // exact match on bar open time, else -1
+    let lo = 0, hi = N - 1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (TIMES[mid] === ts) return mid; if (TIMES[mid] < ts) lo = mid + 1; else hi = mid - 1; }
+    return -1;
+  }
+  function renderLive() {
+    const has = LIVE && LIVE.decisions && LIVE.decisions.length;
+    $("liveEmpty").hidden = !!has;
+    $("liveBody").hidden = !has;
+    $("liveLegend").hidden = !has;
+    if (!has) {
+      $("liveSub").textContent = "state/ に稼働記録がありません";
+      $("liveEmpty").textContent = "botを self-improve で稼働させると、仮想ポートフォリオの推移・売買判断・自己改善の判定がここに表示されます(--dashboard-out を付けると毎日自動で更新)。";
+      return;
+    }
+    const d = LIVE.decisions, first = d[0], last = d[d.length - 1];
+    const built = CONF.built_at ? Date.parse(CONF.built_at) : last[0];
+    const lagH = (built - (last[0] + 3600000)) / 3600000;
+    const eq0 = first[2], eqN = last[2];
+    const q = LIVE.portfolio ? (LIVE.portfolio.qty != null ? LIVE.portfolio.qty : LIVE.portfolio.position_qty) || 0 : 0;
+    $("liveSub").textContent = fmtDate(first[0]) + " 〜 " + fmtDate(last[0]) + " UTC · " + d.length + " 回の判断 · 戦略 " + LIVE.strategy;
+    $("liveStatus").innerHTML =
+      (lagH > 2 ? '<span class="chip loss">判断が ' + lagH.toFixed(0) + " 時間止まっています</span> " : '<span class="chip win">稼働中</span> ') +
+      "最終判断 " + fmtDate(last[0]) + " · 稼働パラメータ " + esc(LIVE.active ? fmtP(LIVE.active) : "—") + " · 保有 " + (q > 0 ? "買い" : q < 0 ? "売り" : "なし") +
+      " · 評価額 " + fmtUsd(eqN) + ' <span class="' + sign(eqN - eq0) + '">(開始比 ' + fmtPct(eqN / eq0 - 1) + ")</span>" +
+      (LIVE.strategy !== cfg.strategy ? ' · <span class="mute">比較用リプレイは設定の戦略(' + cfg.strategy + ")で計算しています</span>" : "");
+    // Align live decisions to bars and build % paths from the live start.
+    const idx = d.map(r => barIndexOf(r[0]));
+    const i0 = idx.find(i => i >= 0);
+    liveSeries = null;
+    if (i0 != null && i0 >= 0) {
+      const iN = Math.max(...idx);
+      const si = R.runs.self_improving.equity, bh = R.runs.buy_hold.equity;
+      const live = new Array(iN - i0 + 1).fill(null);
+      d.forEach((r, k) => { if (idx[k] >= 0) live[idx[k] - i0] = r[2] / eq0 - 1; });
+      for (let k = 1; k < live.length; k++) if (live[k] == null) live[k] = live[k - 1];
+      liveSeries = {
+        i0, iN,
+        lines: [
+          { label: "B&H", color: C.violet, dash: [5, 4], width: 1.5, values: bh.slice(i0, iN + 1).map(v => v / bh[i0] - 1) },
+          { label: "リプレイ", color: C.blue, dash: [], width: 1.6, values: si.slice(i0, iN + 1).map(v => v / si[i0] - 1) },
+          { label: "実運用", color: C.good, dash: [], width: 2.2, values: live },
+        ],
+      };
+    }
+    drawLive();
+    const body = $("liveCycleBody");
+    const cyc = (LIVE.cycles || []).slice(-10).reverse();
+    body.innerHTML = cyc.length ? cyc.map(c => '<tr><td class="mono">' + fmtDate(c.t) + "</td><td>" +
+      (c.promoted ? '<span class="chip promo">昇格</span>' : '<span class="chip keep">' + esc(codeLabel[c.code] || c.code) + "</span>") +
+      '</td><td class="mono">' + esc(fmtP(c.candidate)) + '</td><td class="num">' + fmtScore(c.wf) + '</td><td class="num">' + fmtScore(c.inc) + "</td></tr>").join("")
+      : '<tr class="empty"><td colspan="5">再最適化の記録はまだありません</td></tr>';
+  }
+  function drawLive() {
+    if (!liveSeries || $("liveBody").hidden) return;
+    const { ctx, w, h } = setup($("liveCanvas"), 190);
+    const S = liveSeries, n = S.iN - S.i0 + 1, l = 8, r = 70, t = 10, b = 24, pw = w - l - r, ph = h - t - b;
+    let lo = 0, hi = 0;
+    S.lines.forEach(L => L.values.forEach(v => { if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }));
+    const padv = (hi - lo) * 0.1 || 0.01; lo -= padv; hi += padv;
+    const g = { l, t, pw, ph, v: { i0: S.i0, n }, x: i => l + (pw * (i - S.i0)) / Math.max(1, n - 1), y: v => t + ph * (1 - (v - lo) / (hi - lo)) };
+    const ends = S.lines.map(L => ({ L, v: L.values[n - 1], y: g.y(L.values[n - 1]) })).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+    axes(ctx, g, niceTicks(lo, hi, 4), v => fmtPct(v, 1), ends.map(e => e.y));
+    S.lines.forEach(L => {
+      ctx.strokeStyle = L.color; ctx.lineWidth = L.width; ctx.setLineDash(L.dash); ctx.beginPath();
+      L.values.forEach((v, k) => { if (v != null) (k === 0 ? ctx.moveTo : ctx.lineTo).call(ctx, g.x(S.i0 + k), g.y(v)); });
+      ctx.stroke(); ctx.setLineDash([]);
+    });
+    ctx.font = "600 10.5px " + MONO; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    ends.forEach(e => { ctx.fillStyle = e.L.color; ctx.fillRect(l + pw + 6, e.y - 1, 6, 2); ctx.fillStyle = C.text; ctx.fillText(fmtPct(e.v, 1), l + pw + 15, e.y); });
+    liveGeom = g;
+  }
+  function bindLiveHover() {
+    const wrap = $("liveWrap"), tip = $("liveTip");
+    wrap.addEventListener("mousemove", e => {
+      if (!liveGeom || !liveSeries) return;
+      const rect = wrap.getBoundingClientRect(), mx = e.clientX - rect.left, g = liveGeom;
+      if (mx < g.l || mx > g.l + g.pw) { tip.style.display = "none"; return; }
+      const k = Math.max(0, Math.min(g.v.n - 1, Math.round(((mx - g.l) / g.pw) * (g.v.n - 1))));
+      let html = '<div class="t-date">' + fmtDate(TIMES[liveSeries.i0 + k]) + " UTC</div>";
+      liveSeries.lines.slice().reverse().forEach(L => {
+        const v = L.values[k];
+        html += '<div class="t-row"><span class="t-k"><span class="sw" style="background:' + L.color + '"></span>' + L.label + '</span><span class="' + sign(v) + '">' + (v == null ? "—" : fmtPct(v, 2)) + "</span></div>";
+      });
+      tip.innerHTML = html; tip.style.display = "block";
+      const tw = tip.offsetWidth;
+      tip.style.left = (mx + 14 + tw > rect.width ? mx - tw - 14 : mx + 14) + "px";
+      tip.style.top = "8px";
+    });
+    wrap.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+  }
+
+  // ---------- rolling validation (precomputed by `rolling --export-json`) ----------
+  const RSER = [
+    { key: "buy_hold", label: "B&H", color: () => C.violet, width: 1.5, dash: [5, 4] },
+    { key: "static", label: "固定", color: () => C.blue, width: 1.4, dash: [] },
+    { key: "single", label: "1設定を選ぶ", color: () => C.warn, width: 1.6, dash: [] },
+    { key: "vote_all", label: "全設定の多数決", color: () => C.good, width: 2.2, dash: [] },
+  ];
+  function renderRolling() {
+    if (!ROLL) { $("rollPanel").hidden = true; return; }
+    const ch = ROLL.chained, v = ch.vote_all, bh = ch.buy_hold;
+    $("rollSub").textContent = fmtDate(ROLL.start) + " 以降、" + ROLL.windows.length + " 期間(各 " + Math.round(ROLL.window_bars / 24) +
+      " 日)。各期間の直前までのデータだけで選び、選択に使っていない期間を連結。全設定の多数決 " + fmtPct(v.total_return, 1) +
+      "(Sharpe " + v.sharpe.toFixed(2) + "、最大DD " + fmtPct(v.max_drawdown, 1) + ")/ B&H " + fmtPct(bh.total_return, 1);
+    const cell = x => '<td class="num"><span class="' + sign(x) + '">' + fmtPct(x, 1) + "</span></td>";
+    $("rollBody").innerHTML = ROLL.windows.map(w => '<tr><td class="mono">' + fmtDate(w.start).slice(0, 10) + " 〜 " + fmtDate(w.end).slice(0, 10) +
+      '</td><td class="mono">' + esc(w.chosen) + "</td>" + ["vote_all", "single", "static", "buy_hold"].map(k => cell(w.returns[k])).join("") + "</tr>").join("") +
+      '<tr><td class="mono">連結</td><td></td>' + ["vote_all", "single", "static", "buy_hold"].map(k => cell(ch[k].total_return)).join("") + "</tr>";
+    drawRolling();
+  }
+  function drawRolling() {
+    if (!ROLL) return;
+    const n = ROLL.equity.vote_all.length;
+    let i0 = barIndexOf(ROLL.start);
+    if (i0 < 0 || i0 + n > N) return;  // the page's candles don't cover the report
+    const { ctx, w, h } = setup($("rollCanvas"), window.innerWidth < 640 ? 200 : 230);
+    const l = 8, r = 70, t = 10, b = 24, pw = w - l - r, ph = h - t - b;
+    const pct = RSER.map(s => { const eq = ROLL.equity[s.key]; return eq.map(x => x / eq[0] - 1); });
+    let lo = 0, hi = 0;
+    pct.forEach(a => a.forEach(x => { lo = Math.min(lo, x); hi = Math.max(hi, x); }));
+    const padv = (hi - lo) * 0.08 || 0.01; lo -= padv; hi += padv;
+    const g = { l, t, pw, ph, v: { i0, n }, x: i => l + (pw * (i - i0)) / Math.max(1, n - 1), y: x => t + ph * (1 - (x - lo) / (hi - lo)) };
+    const ends = RSER.map((s, k) => ({ s, v: pct[k][n - 1], y: g.y(pct[k][n - 1]) })).sort((a, b) => a.y - b.y);
+    for (let k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 13) ends[k].y = ends[k - 1].y + 13;
+    axes(ctx, g, niceTicks(lo, hi, 4), x => fmtPct(x, 0), ends.map(e => e.y));
+    ROLL.windows.slice(1).forEach(wd => {
+      const i = barIndexOf(wd.start); if (i < 0) return;
+      const x = Math.round(g.x(i)) + 0.5;
+      ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(x, t); ctx.lineTo(x, t + ph); ctx.stroke(); ctx.setLineDash([]);
+    });
+    RSER.forEach((s, k) => {
+      ctx.strokeStyle = s.color(); ctx.lineWidth = s.width; ctx.setLineDash(s.dash); ctx.beginPath();
+      pct[k].forEach((x, j) => (j ? ctx.lineTo : ctx.moveTo).call(ctx, g.x(i0 + j), g.y(x)));
+      ctx.stroke(); ctx.setLineDash([]);
+    });
+    ctx.font = "600 10.5px " + MONO; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    ends.forEach(e => { ctx.fillStyle = e.s.color(); ctx.fillRect(l + pw + 6, e.y - 1, 6, 2); ctx.fillStyle = C.text; ctx.fillText(fmtPct(e.v, 1), l + pw + 15, e.y); });
+  }
+
+  function init() {
+    renderRolling();
+    renderHeader();
+    bindControls();
+    writeControls();
+    syncLabels();
+    recompute();
+    bindRange();
+    bindPriceHover();
+    bindEquityHover();
+    bindLiveHover();
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
+})();
+</script>
