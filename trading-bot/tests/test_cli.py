@@ -53,3 +53,31 @@ def test_holdout_and_rolling_commands_run_end_to_end(tmp_path: Path, sample_ohlc
           "--workers", "2", "--cache-positions", str(cache), "--export-json", str(tmp_path / "r.json")])
     assert len(list(cache.glob("*.npy"))) == 4  # positions are reused by the next run
     assert "chained" in capsys.readouterr().out
+
+
+def test_health_alerts_once_when_decisions_stop_and_once_when_they_resume(tmp_path: Path, capsys):
+    import argparse
+
+    import pandas as pd
+
+    from trading_bot.cli import cmd_health
+
+    state = tmp_path / "state"
+    state.mkdir()
+    log = state / "decisions_BTC-USD.jsonl"
+    sent = []
+    args = argparse.Namespace(symbol="BTC-USD", state_dir=str(state), max_silence_hours=2.0, webhook_url="https://hook")
+    t0 = pd.Timestamp("2026-10-01T00:00:00Z").timestamp()
+
+    def check(hours_after_bar_open):
+        return cmd_health(args, now=t0 + hours_after_bar_open * 3600, notify=lambda url, msg: sent.append(msg))
+
+    assert check(1) == 1 and len(sent) == 1 and "止まって" in sent[0]  # no log at all yet
+    log.write_text(json.dumps({"timestamp": "2026-10-01T00:00:00+00:00", "action": "hold"}) + "\n")
+    assert check(2.5) == 0 and len(sent) == 2 and "再開" in sent[1]    # decided; 1.5h since the bar closed
+    assert check(3.5) == 1 and len(sent) == 3                           # 2.5h silent: alert
+    assert check(5) == 1 and len(sent) == 3                             # still down: no repeat
+    with open(log, "a") as f:                                           # no_new_bar wake-ups don't count
+        f.write(json.dumps({"timestamp": "2026-10-01T00:00:00+00:00", "action": "no_new_bar"}) + "\n")
+    assert check(5.5) == 1 and len(sent) == 3
+    capsys.readouterr()

@@ -5,7 +5,7 @@
 - **本ソフトウェアは現時点でペーパートレード専用です。** どのコマンドを実行しても、
   実際の取引所に注文を発注するコードパスは一切存在しません(`PaperTrader` /
   `Portfolio` は仮想の現金・ポジションを管理するのみで、`ccxt` は
-  `fetch_ohlcv`(公開の相場データ取得)以外のAPI呼び出しを行いません)。
+  `fetch_ohlcv`(公開の相場データ取得)以外のAPI呼び出しを行わず、SoDEX へは鍵なしの公開データ取得(GET)だけを行います)。
 - バックテスト・最適化結果は過去データに基づくシミュレーションであり、**将来の
   利益を保証するものではありません**。手数料・スリッページ・約定拒否・取引所障害
   など実運用特有のリスクは簡略化されたモデルでしか考慮していません。
@@ -362,6 +362,22 @@ python -m trading_bot.cli dashboard --out state/dashboard.html
 bot の稼働記録(`state/`)があれば「実運用」パネルに仮想ポートフォリオの推移・同じ期間のリプレイ・
 B&H を並べ、判断が2時間以上止まっていれば警告します。ブラウザ側の計算は Python と一致することを
 テストで確認しています(Node.js がある環境のみ)。
+
+### 9. VPS で24時間動かす(ConoHa VPS + SoDEX のデータ)
+
+手順は [`deploy/README.md`](deploy/README.md)。Ubuntu 24.04 の VPS で `deploy/setup_vps.sh` を1回実行すると、
+bot 本体・死活監視(Webhook 通知)・毎時の取引所記録・毎日のバックアップが systemd で動きます。
+
+データ源は `--exchange sodex --symbol BTC-USD`(SoDEX の BTC 無期限先物)。SoDEX は ccxt に無いため、
+公式SDKと同じ公開エンドポイントを読む読み取り専用クライアント(`trading_bot/data/sodex.py`)を使います。
+鍵は持たず、GET 以外の通信をしません。
+
+```bash
+python -m trading_bot.cli exchange-check --exchange sodex --symbol BTC-USD   # 手数料・資金調達率・最新足
+python -m trading_bot.cli fetch-data --exchange sodex --symbol BTC-USD --max-candles 3000
+python -m trading_bot.cli self-improve --exchange sodex --symbol BTC-USD --steps 0 --dashboard-out state/dashboard.html
+python -m trading_bot.cli health --symbol BTC-USD --webhook-url <Discord/Slack の Webhook>
+```
 
 ## テスト
 

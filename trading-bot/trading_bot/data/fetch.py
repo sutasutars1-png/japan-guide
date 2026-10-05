@@ -63,6 +63,10 @@ class OHLCVFetcher:
         self._exchange = None
 
     def _get_exchange(self):
+        if self._exchange is None and self.exchange_id in ("sodex", "sodex-testnet"):
+            from .sodex import SodexPublic  # not in ccxt: SoDEX's own public gateway
+
+            self._exchange = SodexPublic("testnet" if self.exchange_id.endswith("testnet") else "mainnet")
         if self._exchange is None:
             import os
 
@@ -125,7 +129,13 @@ class OHLCVFetcher:
         exchange = self._get_exchange()
         all_rows: list[list] = []
         cursor = since_ms
-        while len(all_rows) < max_candles:
+        to_present = False
+        if cursor is None and getattr(exchange, "needs_since_for_depth", False) and max_candles > limit_per_call:
+            # this gateway serves only the newest page without a start time: page forward from far
+            # enough back, all the way to the present (tail() below keeps the newest max_candles)
+            cursor = int(self.clock() * 1000) - (max_candles + 2) * TIMEFRAME_MS[timeframe]
+            to_present = True
+        while to_present or len(all_rows) < max_candles:
             batch = exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=cursor, limit=limit_per_call)
             if not batch:
                 break

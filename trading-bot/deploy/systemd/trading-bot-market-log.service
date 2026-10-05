@@ -1,0 +1,16 @@
+[Unit]
+Description=Record the exchange's fees, funding rate and spread (read-only)
+
+[Service]
+Type=oneshot
+User=bot
+Group=bot
+EnvironmentFile=/etc/trading-bot.env
+WorkingDirectory=/opt/trading-bot/japan-guide/trading-bot
+ExecStart=/bin/sh -c 'exec /opt/trading-bot/venv/bin/python -m trading_bot.cli exchange-check \
+  --exchange "$EXCHANGE" --symbol "$SYMBOL" --cache-dir /var/lib/trading-bot/data_cache \
+  --log /var/lib/trading-bot/state/market_log.jsonl'
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/trading-bot

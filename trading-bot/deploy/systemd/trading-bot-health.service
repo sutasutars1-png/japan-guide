@@ -1,0 +1,15 @@
+[Unit]
+Description=Alert when the trading bot stops logging decisions
+
+[Service]
+Type=oneshot
+User=bot
+Group=bot
+EnvironmentFile=/etc/trading-bot.env
+WorkingDirectory=/opt/trading-bot/japan-guide/trading-bot
+ExecStart=/bin/sh -c 'exec /opt/trading-bot/venv/bin/python -m trading_bot.cli health \
+  --symbol "$SYMBOL" --state-dir /var/lib/trading-bot/state --max-silence-hours 2'
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/trading-bot

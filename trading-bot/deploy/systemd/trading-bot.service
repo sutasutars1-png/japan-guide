@@ -1,0 +1,26 @@
+[Unit]
+Description=Self-improving BTC paper-trading bot (no real orders)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=bot
+Group=bot
+EnvironmentFile=/etc/trading-bot.env
+WorkingDirectory=/opt/trading-bot/japan-guide/trading-bot
+ExecStart=/bin/sh -c 'exec /opt/trading-bot/venv/bin/python -m trading_bot.cli self-improve \
+  --exchange "$EXCHANGE" --symbol "$SYMBOL" --steps 0 \
+  --state-dir /var/lib/trading-bot/state --cache-dir /var/lib/trading-bot/data_cache \
+  --dashboard-out /var/lib/trading-bot/state/dashboard.html $BOT_EXTRA_ARGS'
+Restart=always
+RestartSec=30
+# The process holds nothing worth protecting beyond its own data directory.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/trading-bot
+
+[Install]
+WantedBy=multi-user.target

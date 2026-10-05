@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -250,6 +251,76 @@ def cmd_dashboard(args) -> None:
     out = build_dashboard(store, Path(args.out), Path(args.state_dir), args.exchange, args.symbol, args.strategy,
                           rolling_path=Path(args.rolling_json) if args.rolling_json else None)
     print(f"wrote {out} ({out.stat().st_size // 1024} KB)")
+
+
+def cmd_exchange_check(args) -> None:
+    """Read-only connectivity check: market rules, fees, funding and the newest
+    closed bar. With --log, also appends the snapshot to a JSONL file (run it
+    hourly to build a record of the exchange's funding rates and spreads)."""
+    from datetime import datetime, timezone
+
+    fetcher = OHLCVFetcher(exchange_id=args.exchange, cache_dir=Path(args.cache_dir))
+    exchange = fetcher._get_exchange()
+    snapshot = {"checked_at": datetime.now(timezone.utc).isoformat(), "exchange": args.exchange, "symbol": args.symbol}
+    if hasattr(exchange, "market"):
+        snapshot["market"] = exchange.market(args.symbol)
+        snapshot["ticker"] = exchange.ticker(args.symbol)
+    bars = fetcher._download(args.symbol, args.timeframe, None, 50, 50)
+    last = bars.iloc[-1]
+    snapshot["last_closed_bar"] = {"timestamp": last["timestamp"].isoformat(), "close": float(last["close"]),
+                                   "bars_returned": len(bars)}
+    print(json.dumps(snapshot, indent=None if args.log else 2))
+    if args.log:
+        Path(args.log).parent.mkdir(parents=True, exist_ok=True)
+        with open(args.log, "a", encoding="utf-8") as f:
+            f.write(json.dumps(snapshot) + "\n")
+
+
+def _post_webhook(url: str, message: str) -> None:
+    """Discord ("content") and Slack ("text") incoming webhooks both accept this body."""
+    import requests
+
+    requests.post(url, json={"content": message, "text": message}, timeout=10).raise_for_status()
+
+
+def cmd_health(args, now=None, notify=_post_webhook) -> int:
+    """Dead-man check for the running bot: alert once when no decision has been
+    logged for --max-silence-hours, and once more when decisions resume.
+    Exits 1 while unhealthy so a systemd timer marks the run as failed."""
+    import time as _time
+    from datetime import datetime, timezone
+
+    state_dir = Path(args.state_dir)
+    log = state_dir / f"decisions_{args.symbol.replace('/', '-')}.jsonl"
+    flag = state_dir / "health.json"
+    now = now if now is not None else _time.time()
+    last = None
+    if log.exists():
+        lines = [l for l in log.read_text(encoding="utf-8").splitlines() if l.strip()]
+        decided = [json.loads(l) for l in lines if json.loads(l).get("action") != "no_new_bar"]
+        if decided:
+            last = decided[-1]["timestamp"]
+    # a bar is decided about an hour after it opens, so silence counts from its close
+    silent_h = None if last is None else (now - pd.Timestamp(last).timestamp()) / 3600 - 1
+    healthy = silent_h is not None and silent_h <= args.max_silence_hours
+    was_alerting = json.loads(flag.read_text())["alerting"] if flag.exists() else False
+    status = {"checked_at": datetime.fromtimestamp(now, timezone.utc).isoformat(), "last_decision_bar": last,
+              "silent_hours": None if silent_h is None else round(silent_h, 2), "healthy": healthy}
+    print(json.dumps(status))
+    message = None
+    if not healthy and not was_alerting:
+        message = (f"[trading-bot] {args.symbol}: 売買判断が止まっています(最後の判断対象の足 {last or 'なし'}、"
+                   f"{status['silent_hours']} 時間記録なし)。`journalctl -u trading-bot` を確認してください。")
+    elif healthy and was_alerting:
+        message = f"[trading-bot] {args.symbol}: 売買判断が再開しました(最後の判断対象の足 {last})。"
+    if message and args.webhook_url:
+        try:
+            notify(args.webhook_url, message)
+        except Exception as exc:  # report, but still record the state change
+            print(json.dumps({"event": "webhook_error", "error": str(exc)}))
+    state_dir.mkdir(parents=True, exist_ok=True)
+    flag.write_text(json.dumps({"alerting": not healthy, **status}), encoding="utf-8")
+    return 0 if healthy else 1
 
 
 def cmd_data_status(args) -> None:
@@ -574,6 +645,19 @@ def build_parser() -> argparse.ArgumentParser:
                     help="`rolling --export-json` report to show (default: <state-dir>/rolling.json if present)")
     db.set_defaults(func=cmd_dashboard)
 
+    hc = sub.add_parser("health", help="Alert (webhook) when the running bot stops logging decisions")
+    hc.add_argument("--symbol", default="BTC/USD")
+    hc.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
+    hc.add_argument("--max-silence-hours", type=float, default=2.0)
+    hc.add_argument("--webhook-url", default=os.environ.get("TRADING_BOT_WEBHOOK_URL"),
+                    help="Discord/Slack incoming webhook (default: $TRADING_BOT_WEBHOOK_URL)")
+    hc.set_defaults(func=cmd_health)
+
+    ec = sub.add_parser("exchange-check", help="Read-only check of the exchange: fees, funding, newest closed bar")
+    add_data_args(ec)
+    ec.add_argument("--log", default=None, help="also append the snapshot to this JSONL file")
+    ec.set_defaults(func=cmd_exchange_check)
+
     ds = sub.add_parser("data-status", help="Show how much history the store holds")
     add_data_args(ds)
     ds.set_defaults(func=cmd_data_status)
@@ -668,8 +752,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    args.func(args)
-    return 0
+    return args.func(args) or 0
 
 
 if __name__ == "__main__":
